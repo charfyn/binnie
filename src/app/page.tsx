@@ -1,5 +1,5 @@
-import CommandApp from "./app";
+import LumaApp from "./app";
 
 export default function Home() {
-  return <CommandApp />;
+  return <LumaApp />;
 }
