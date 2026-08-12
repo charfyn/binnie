@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b0d14;
+  --foreground: #dde1ed;
+  --card: #12151e;
+  --card-foreground: #dde1ed;
+  --popover: #12151e;
+  --popover-foreground: #dde1ed;
+  --primary: #818cf8;
+  --primary-foreground: #0b0d14;
+  --secondary: #1a1d2a;
+  --secondary-foreground: #a0a8c0;
+  --muted: #181b27;
+  --muted-foreground: #5e6680;
+  --accent: #fbbf24;
+  --accent-foreground: #0b0d14;
+  --destructive: #f87171;
+  --destructive-foreground: #0b0d14;
+  --border: rgb(255 255 255 / 6.5%);
+  --input: transparent;
+  --input-background: #181b27;
+  --ring: #818cf8;
+  --sidebar: #080a10;
+  --sidebar-foreground: #b0b8d0;
+  --sidebar-primary: #818cf8;
+  --sidebar-primary-foreground: #0b0d14;
+  --sidebar-accent: #13161f;
+  --sidebar-accent-foreground: #dde1ed;
+  --sidebar-border: rgb(255 255 255 / 5%);
+  --sidebar-ring: #818cf8;
+  --radius: 0.5rem;
+  --font-display: var(--font-geist-sans);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply min-h-full;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
