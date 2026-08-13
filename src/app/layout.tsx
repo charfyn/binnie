@@ -13,13 +13,13 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "binnie | Less to remember. More room to think.",
+  title: "Binnie | Less to remember. More room to think.",
   description: "Binnie is a calm AI-powered work companion for everything you need to remember and manage.",
   applicationName: "Binnie",
   icons: {
-    icon: "/binnie-brandmark.svg",
-    shortcut: "/binnie-brandmark.svg",
-    apple: "/binnie-brandmark.svg",
+    icon: "/binnie-brandmark.png",
+    shortcut: "/binnie-brandmark.png",
+    apple: "/binnie-brandmark.png",
   },
 };
 

@@ -1,5 +1,5 @@
 
-  # binnie
+  # Binnie
 
   Less to remember. More room to think.
 
