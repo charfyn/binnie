@@ -1,11 +1,12 @@
 
-  # AI-Powered Work Management System
+  # binnie
 
-  This is a code bundle for AI-Powered Work Management System. The original project is available at https://www.figma.com/design/4BcovUO6CeIPAWhwECh1se/AI-Powered-Work-Management-System.
+  Less to remember. More room to think.
+
+  Binnie is a calm AI-powered work companion for tasks, reminders, delegated work, and everything else taking up mental space.
 
   ## Running the code
 
   Run `npm i` to install the dependencies.
 
   Run `npm run dev` to start the development server.
-  

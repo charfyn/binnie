@@ -1,5 +1,5 @@
-import LumaApp from "./app";
+import BinnieApp from "./app";
 
 export default function Home() {
-  return <LumaApp />;
+  return <BinnieApp />;
 }

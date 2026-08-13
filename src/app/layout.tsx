@@ -13,8 +13,14 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Luma | Make space for what matters",
-  description: "A calm personal work operating system for everything you manage.",
+  title: "binnie | Less to remember. More room to think.",
+  description: "Binnie is a calm AI-powered work companion for everything you need to remember and manage.",
+  applicationName: "Binnie",
+  icons: {
+    icon: "/binnie-brandmark.svg",
+    shortcut: "/binnie-brandmark.svg",
+    apple: "/binnie-brandmark.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,34 +1,64 @@
 @import "tailwindcss";
 
 :root {
-  --background: #faf8f4;
-  --foreground: #23293d;
-  --card: #ffffff;
-  --card-foreground: #23293d;
-  --popover: #ffffff;
-  --popover-foreground: #23293d;
-  --primary: #8e94f2;
+  /* Soft workspace theme — Binnie's warm, expressive default. */
+  --theme-text: #23293d;
+  --theme-background: #faf8f4;
+  --theme-surface: #ffffff;
+  --theme-primary: #eae6ff;
+  --theme-secondary: #dcede7;
+  --theme-accent: #8e94f2;
+  --theme-ui-secondary: #eae6ff;
+  --theme-elevated: #ffffff;
+  --theme-peach: #f8e3d3;
+  --theme-butter: #f5e7b8;
+  --theme-powder-blue: #ddebfa;
+  --theme-blush: #f7dde6;
+  --theme-shadow: rgb(35 41 61 / 0.045);
+  --theme-raw-lavender: #eae6ff;
+  --theme-raw-mint: #dcede7;
+  --theme-raw-blue: #ddebfa;
+  --theme-raw-peach: #f8e3d3;
+  --theme-raw-butter: #f5e7b8;
+  --theme-raw-blush: #f7dde6;
+  --theme-raw-surface: #ffffff;
+  --theme-hero: #fffdf9;
+  --theme-hero-glow: #eae6ff;
+  --theme-hero-accent: #dcede7;
+  --theme-capture: #eae6ff;
+  --theme-capture-border: #d9d6f6;
+  --theme-capture-input: #ffffff;
+  --theme-capture-secondary-border: #ddd9f3;
+  --theme-capture-divider: #e2e0ef;
+
+  --background: var(--theme-background);
+  --foreground: var(--theme-text);
+  --card: var(--theme-surface);
+  --card-foreground: var(--theme-text);
+  --popover: var(--theme-surface);
+  --popover-foreground: var(--theme-text);
+  --primary: var(--theme-accent);
   --primary-foreground: #ffffff;
-  --secondary: #eae6ff;
+  --secondary: var(--theme-ui-secondary);
   --secondary-foreground: #4e5178;
   --muted: #f4f1eb;
   --muted-foreground: #73788b;
-  --accent: #f5e7b8;
+  --accent: var(--theme-butter);
   --accent-foreground: #766435;
   --destructive: #c98287;
   --destructive-foreground: #ffffff;
   --border: #e7e5e0;
   --input: #ffffff;
   --input-background: #ffffff;
-  --ring: #8e94f2;
+  --ring: var(--theme-accent);
   --sidebar: #fffdf9;
   --sidebar-foreground: #6f7487;
-  --sidebar-primary: #8e94f2;
+  --sidebar-primary: var(--theme-accent);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f1efff;
   --sidebar-accent-foreground: #484d77;
   --sidebar-border: #e7e5e0;
-  --sidebar-ring: #8e94f2;
+  --sidebar-ring: var(--theme-accent);
   --success: #719d87;
   --info: #789cc2;
   --review: #9c8bc6;
@@ -57,6 +87,238 @@
   --color-slate-300: #9ba2b0;
   --color-slate-400: #8c94a5;
   --color-slate-500: #8991a1;
+
+  --org-villa-bg: #eae6ff;
+  --org-villa-text: #6269b6;
+  --org-villa-dot: #8e94f2;
+  --org-villa-border: #d9d6f6;
+  --org-villa-card: #fdfcff;
+  --org-apotik-bg: #dcede7;
+  --org-apotik-text: #5d8970;
+  --org-apotik-dot: #88b69a;
+  --org-apotik-border: #cbe1d6;
+  --org-apotik-card: #fcfffd;
+  --org-personal-bg: #f8e3d3;
+  --org-personal-text: #ac765a;
+  --org-personal-dot: #e3aa8e;
+  --org-personal-border: #f0d2be;
+  --org-personal-card: #fffdfb;
+
+  --area-system: #766fae;
+  --area-operations: #6488a9;
+  --area-marketing: #ac778d;
+  --area-finance: #548c88;
+  --area-hr: #a67e48;
+  --person-slate: #9991cc;
+  --person-sage: #84ae91;
+  --person-clay: #d39a7f;
+  --person-rose: #bb8ba0;
+  --person-blue: #86a6c6;
+  --person-violet: #a48fc5;
+  --person-stone: #c7a55f;
+}
+
+[data-theme="grounded"] {
+  /* Grounded workspace theme — cool, neutral, and understated. */
+  --theme-text: #202831;
+  --theme-background: #f3f5f4;
+  --theme-surface: #fafbfa;
+  --theme-primary: #dce8f0;
+  --theme-secondary: #829a8d;
+  --theme-accent: #6f8fa8;
+  --theme-ui-secondary: #dce8f0;
+  --theme-elevated: #fafbfa;
+  --theme-peach: #d6d0c6;
+  --theme-butter: #d6d0c6;
+  --theme-powder-blue: #dce8f0;
+  --theme-blush: #eae5e2;
+  --theme-shadow: rgb(31 43 49 / 0.06);
+  --theme-raw-lavender: #dce8f0;
+  --theme-raw-mint: #e1e8e4;
+  --theme-raw-blue: #e2ecf2;
+  --theme-raw-peach: #e7dfd6;
+  --theme-raw-butter: #d6d0c6;
+  --theme-raw-blush: #eae5e2;
+  --theme-raw-surface: #fafbfa;
+  --theme-hero: #f7f9f9;
+  --theme-hero-glow: #edf3f5;
+  --theme-hero-accent: #e5eef2;
+  --theme-capture: #e9f0f3;
+  --theme-capture-border: #cfdae0;
+  --theme-capture-input: #ffffff;
+  --theme-capture-secondary-border: #cfdbe1;
+  --theme-capture-divider: #d6dddb;
+
+  --secondary-foreground: #486476;
+  --muted: #e8eceb;
+  --muted-foreground: #687681;
+  --accent-foreground: #486476;
+  --destructive: #b66f73;
+  --border: #d6dddb;
+  --input: #fafbfa;
+  --input-background: #fafbfa;
+  --sidebar: #f7f8f7;
+  --sidebar-foreground: #74808a;
+  --sidebar-accent: #dce8f0;
+  --sidebar-accent-foreground: #486476;
+  --sidebar-border: #dde2e0;
+  --success: #6f9681;
+  --info: #6f8fa8;
+  --review: #85859f;
+  --warning: #b59458;
+  --overdue: #b66f73;
+
+  --color-red-400: #b66f73;
+  --color-red-500: #b66f73;
+  --color-orange-400: #b5886f;
+  --color-amber-400: #b59458;
+  --color-amber-500: #b59458;
+  --color-yellow-400: #b59458;
+  --color-emerald-400: #6f9681;
+  --color-emerald-500: #6f9681;
+  --color-teal-400: #829a8d;
+  --color-sky-400: #6f8fa8;
+  --color-blue-400: #6f8fa8;
+  --color-indigo-400: #6f8fa8;
+  --color-indigo-500: #6f8fa8;
+  --color-violet-400: #85859f;
+  --color-pink-400: #b66f73;
+  --color-pink-500: #b66f73;
+  --color-slate-300: #aab6bc;
+  --color-slate-400: #85919b;
+  --color-slate-500: #74808a;
+
+  --org-villa-bg: #dce8f0;
+  --org-villa-text: #486476;
+  --org-villa-dot: #486476;
+  --org-villa-border: #c5d6df;
+  --org-villa-card: #fafbfa;
+  --org-apotik-bg: #dde8e2;
+  --org-apotik-text: #6f8e7d;
+  --org-apotik-dot: #6f8e7d;
+  --org-apotik-border: #c9dad1;
+  --org-apotik-card: #fafbfa;
+  --org-personal-bg: #e7dfd6;
+  --org-personal-text: #8a7566;
+  --org-personal-dot: #8a7566;
+  --org-personal-border: #d9cfc5;
+  --org-personal-card: #fafbfa;
+
+  --area-system: #486476;
+  --area-operations: #6f9681;
+  --area-marketing: #8a7566;
+  --area-finance: #6f9681;
+  --area-hr: #b59458;
+  --person-slate: #617985;
+  --person-sage: #6f8e7d;
+  --person-clay: #8a7566;
+  --person-rose: #b66f73;
+  --person-blue: #6f8fa8;
+  --person-violet: #829a8d;
+  --person-stone: #b59458;
+}
+
+[data-theme="dark"] {
+  /* Dark workspace theme — layered, low-light, and quietly premium. */
+  color-scheme: dark;
+  --theme-text: #f4f6f8;
+  --theme-background: #15191f;
+  --theme-surface: #1d232b;
+  --theme-primary: #8f96d9;
+  --theme-secondary: #739889;
+  --theme-accent: #a8aef2;
+  --theme-ui-secondary: #252c35;
+  --theme-elevated: #252c35;
+  --theme-peach: #a8957e;
+  --theme-butter: #a8957e;
+  --theme-powder-blue: #6f8fa8;
+  --theme-blush: #a77a82;
+  --theme-shadow: rgb(0 0 0 / 0.24);
+  --theme-raw-lavender: #2b304a;
+  --theme-raw-mint: #27382f;
+  --theme-raw-blue: #283743;
+  --theme-raw-peach: #382f29;
+  --theme-raw-butter: #3b342b;
+  --theme-raw-blush: #3b2c31;
+  --theme-raw-surface: #252c35;
+  --theme-hero: #1d232b;
+  --theme-hero-glow: #252c35;
+  --theme-hero-accent: #27382f;
+  --theme-capture: #252c35;
+  --theme-capture-border: #343c47;
+  --theme-capture-input: #1d232b;
+  --theme-capture-secondary-border: #343c47;
+  --theme-capture-divider: #343c47;
+
+  --primary-foreground: #15191f;
+  --secondary-foreground: #d7dde3;
+  --muted: #252c35;
+  --muted-foreground: #aeb7c2;
+  --accent: #a8957e;
+  --accent-foreground: #1d232b;
+  --destructive: #c77c84;
+  --border: #343c47;
+  --input: #252c35;
+  --input-background: #252c35;
+  --sidebar: #1a2027;
+  --sidebar-foreground: #aeb7c2;
+  --sidebar-accent: #252c35;
+  --sidebar-accent-foreground: #f4f6f8;
+  --sidebar-border: #343c47;
+  --success: #79a98f;
+  --info: #7599bd;
+  --review: #9d8ed1;
+  --warning: #c3a15f;
+  --overdue: #c77c84;
+
+  --color-red-400: #c77c84;
+  --color-red-500: #c77c84;
+  --color-orange-400: #b88a6f;
+  --color-amber-400: #c3a15f;
+  --color-amber-500: #c3a15f;
+  --color-yellow-400: #c3a15f;
+  --color-emerald-400: #79a98f;
+  --color-emerald-500: #79a98f;
+  --color-teal-400: #719889;
+  --color-sky-400: #7599bd;
+  --color-blue-400: #7599bd;
+  --color-indigo-400: #8f96d9;
+  --color-indigo-500: #8f96d9;
+  --color-violet-400: #9d8ed1;
+  --color-pink-400: #a77a82;
+  --color-pink-500: #a77a82;
+  --color-slate-300: #c3cad2;
+  --color-slate-400: #aeb7c2;
+  --color-slate-500: #929daa;
+
+  --org-villa-bg: #343a61;
+  --org-villa-text: #c3c8f5;
+  --org-villa-dot: #8f96d9;
+  --org-villa-border: #555d90;
+  --org-villa-card: #202630;
+  --org-apotik-bg: #31463c;
+  --org-apotik-text: #bdd9c5;
+  --org-apotik-dot: #718f80;
+  --org-apotik-border: #4b6657;
+  --org-apotik-card: #1e2725;
+  --org-personal-bg: #473d34;
+  --org-personal-text: #dac7b0;
+  --org-personal-dot: #a8957e;
+  --org-personal-border: #695a4e;
+  --org-personal-card: #292522;
+
+  --area-system: #8f96d9;
+  --area-operations: #79a98f;
+  --area-marketing: #c77c84;
+  --area-finance: #719889;
+  --area-hr: #c3a15f;
+  --person-slate: #8f96d9;
+  --person-sage: #718f80;
+  --person-clay: #a8957e;
+  --person-rose: #a77a82;
+  --person-blue: #6f8fa8;
+  --person-violet: #9d8ed1;
+  --person-stone: #c3a15f;
 }
 
 @theme inline {
@@ -131,36 +393,117 @@
   }
 
   ::selection {
-    background: rgb(142 148 242 / 26%);
+    background: color-mix(in srgb, var(--primary) 26%, transparent);
   }
 }
 
+/* Existing soft surface helpers inherit the selected atmosphere as the workspace evolves. */
+[data-theme="grounded"] [class*="bg-[#eae6ff"],
+[data-theme="dark"] [class*="bg-[#eae6ff"] { background-color: var(--theme-raw-lavender) !important; }
+
+[data-theme="grounded"] [class*="bg-[#dcede7"],
+[data-theme="dark"] [class*="bg-[#dcede7"] { background-color: var(--theme-raw-mint) !important; }
+
+[data-theme="grounded"] [class*="bg-[#ddebfa"],
+[data-theme="dark"] [class*="bg-[#ddebfa"] { background-color: var(--theme-raw-blue) !important; }
+
+[data-theme="grounded"] [class*="bg-[#f8e3d3"],
+[data-theme="dark"] [class*="bg-[#f8e3d3"] { background-color: var(--theme-raw-peach) !important; }
+
+[data-theme="grounded"] [class*="bg-[#f5e7b8"],
+[data-theme="dark"] [class*="bg-[#f5e7b8"] { background-color: var(--theme-raw-butter) !important; }
+
+[data-theme="grounded"] [class*="bg-[#f7dde6"],
+[data-theme="dark"] [class*="bg-[#f7dde6"] { background-color: var(--theme-raw-blush) !important; }
+
+[data-theme="grounded"] [class*="bg-[#fdf"],
+[data-theme="grounded"] [class*="bg-[#fff"],
+[data-theme="grounded"] [class*="bg-[#fc"],
+[data-theme="dark"] [class*="bg-[#fdf"],
+[data-theme="dark"] [class*="bg-[#fff"],
+[data-theme="dark"] [class*="bg-[#fc"] { background-color: var(--theme-raw-surface) !important; }
+
+[data-theme="grounded"] [class*="bg-white"],
+[data-theme="dark"] [class*="bg-white"] { background-color: var(--theme-raw-surface) !important; }
+
+[data-theme="grounded"] [class*="bg-[#edf4fb"] { background-color: var(--theme-raw-blue) !important; }
+[data-theme="grounded"] [class*="bg-[#edf7f0"] { background-color: var(--theme-raw-mint) !important; }
+[data-theme="grounded"] [class*="bg-[#f4effa"] { background-color: var(--theme-raw-lavender) !important; }
+[data-theme="grounded"] [class*="bg-[#fff1e7"],
+[data-theme="grounded"] [class*="bg-[#fff9e4"] { background-color: var(--theme-raw-butter) !important; }
+[data-theme="grounded"] [class*="bg-[#f7fb"],
+[data-theme="grounded"] [class*="bg-[#fb"] { background-color: var(--theme-raw-surface) !important; }
+
+[data-theme="dark"] [class*="bg-[#edf4fb"] { background-color: var(--theme-raw-blue) !important; }
+[data-theme="dark"] [class*="bg-[#edf7f0"] { background-color: var(--theme-raw-mint) !important; }
+[data-theme="dark"] [class*="bg-[#f4effa"] { background-color: var(--theme-raw-lavender) !important; }
+[data-theme="dark"] [class*="bg-[#fff1e7"] { background-color: var(--theme-raw-peach) !important; }
+[data-theme="dark"] [class*="bg-[#fff9e4"] { background-color: var(--theme-raw-butter) !important; }
+[data-theme="dark"] [class*="bg-[#f7fb"],
+[data-theme="dark"] [class*="bg-[#fb"] { background-color: var(--theme-raw-surface) !important; }
+
+[data-theme="grounded"] [class*="border-[#"],
+[data-theme="dark"] [class*="border-[#"] { border-color: var(--border) !important; }
+
+[data-theme="dark"] [class*="border-white"] { border-color: var(--border) !important; }
+
+[data-theme="dark"] [class*="text-[#a87955"],
+[data-theme="dark"] [class*="text-[#a67e48"] { color: var(--warning) !important; }
+
+/* Keep legacy statuses and elevation neutral in Grounded, without Soft's lavender cues. */
+[data-theme="grounded"] [class*="text-[#a87955"],
+[data-theme="grounded"] [class*="text-[#a67e48"] { color: var(--warning) !important; }
+
+[data-theme="grounded"] [class*="bg-[#dfa17c"],
+[data-theme="grounded"] [class*="bg-[#e2c66d"] { background-color: var(--warning) !important; }
+
+[data-theme="grounded"] [class*="bg-[#a8afbd"] { background-color: var(--muted-foreground) !important; }
+
+[data-theme="grounded"] [class*="shadow-[0_8px_22px_rgb(142_148_242"],
+[data-theme="grounded"] [class*="shadow-[0_2px_8px_rgb(92_85_153"] {
+  box-shadow: 0 6px 20px rgb(31 43 49 / 0.06) !important;
+}
+
+[data-theme="grounded"] [class*="shadow-[0_10px_28px_rgb(35_41_61"] {
+  box-shadow: 0 6px 20px rgb(31 43 49 / 0.06) !important;
+}
+
+[data-theme="grounded"] .luma-board-column {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.42);
+}
+
+[data-theme="dark"] .luma-board-column {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
 @utility luma-card {
-  @apply rounded-[1.35rem] border border-border bg-card shadow-[0_3px_16px_rgb(35_41_61_/_0.045)];
+  @apply rounded-[1.35rem] border border-border bg-card;
+  box-shadow: 0 3px 16px var(--theme-shadow);
 }
 
 @utility luma-card-hover {
-  @apply transition-all duration-200 hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_12px_28px_rgb(35_41_61_/_0.075)];
+  @apply transition-all duration-200 hover:-translate-y-px hover:border-primary/30;
+  &:hover { box-shadow: 0 12px 28px color-mix(in srgb, var(--foreground) 8%, transparent); }
 }
 
 @utility luma-tint-lavender {
-  @apply bg-[#eae6ff]/60;
+  background-color: color-mix(in srgb, var(--theme-primary) 60%, transparent);
 }
 
 @utility luma-tint-mint {
-  @apply bg-[#dcede7]/70;
+  background-color: color-mix(in srgb, var(--theme-secondary) 70%, transparent);
 }
 
 @utility luma-tint-blue {
-  @apply bg-[#ddebfa]/65;
+  background-color: color-mix(in srgb, var(--theme-powder-blue) 65%, transparent);
 }
 
 @utility luma-tint-peach {
-  @apply bg-[#f8e3d3]/65;
+  background-color: color-mix(in srgb, var(--theme-peach) 65%, transparent);
 }
 
 @utility luma-tint-butter {
-  @apply bg-[#f5e7b8]/55;
+  background-color: color-mix(in srgb, var(--theme-butter) 55%, transparent);
 }
 
 @utility luma-board-column {
@@ -170,4 +513,28 @@
 @utility luma-heading {
   font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   letter-spacing: -0.035em;
+}
+
+@utility luma-theme-preview-soft {
+  --preview-background: #faf8f4;
+  --preview-surface: #ffffff;
+  --preview-primary: #eae6ff;
+  --preview-secondary: #dcede7;
+  --preview-accent: #8e94f2;
+}
+
+@utility luma-theme-preview-grounded {
+  --preview-background: #f3f5f4;
+  --preview-surface: #fafbfa;
+  --preview-primary: #dce8f0;
+  --preview-secondary: #829a8d;
+  --preview-accent: #6f8fa8;
+}
+
+@utility luma-theme-preview-dark {
+  --preview-background: #15191f;
+  --preview-surface: #1d232b;
+  --preview-primary: #8f96d9;
+  --preview-secondary: #739889;
+  --preview-accent: #a8aef2;
 }

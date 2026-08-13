@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import Image from "next/image";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
   Building2, FolderKanban, Search, Sparkles, Paperclip,
   Link2, FileText, CheckCircle2, X, RotateCcw, MoreHorizontal,
   Settings, ExternalLink,
   ChevronRight, Plus, Globe, GitBranch, RefreshCw,
-  ChevronDown, ChevronUp, Check, Calendar, Download, Send,
+  ChevronDown, ChevronUp, Check, Calendar, Send,
   Hourglass, Eye, BarChart2, Layers, Timer,
   SlidersHorizontal, ArrowUpDown, Copy, ChevronLeft,
   MessageSquare, ListTodo, Target, UserCheck, Menu, ImagePlus,
@@ -16,18 +17,38 @@ import {
 const cn = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
+const WORKSPACE_TIME_ZONE = "Asia/Jakarta";
+
+function getWorkspaceCalendarDate() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: WORKSPACE_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
+
+function formatWorkspaceDate(date: Date, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...options }).format(date);
+}
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type OrgName = "Villa Khayangan" | "Apotik" | "Personal";
-type AreaName = "System Development" | "Operations" | "Marketing" | "Finance" | "HR";
+type OrgName = "Villa Khayangan" | "Apotik" | "Personal" | (string & {});
+type AreaName = "System Development" | "Operations" | "Marketing" | "Finance" | "HR" | (string & {});
 type Priority = "urgent" | "high" | "medium" | "low";
 type TaskStatus = "todo" | "in_progress" | "waiting" | "review" | "done";
+type WorkspaceTheme = "soft" | "grounded" | "dark";
 type NavView =
   | "home" | "today" | "this-week" | "inbox" | "delegated"
   | "waiting" | "review" | "overdue" | "organizations" | "projects" | "search"
   | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup";
 
-interface TaskLink { label: string; url: string; type: "website" | "sheet" | "figma" | "github" | "drive" }
+type ResourceType = "website" | "sheet" | "figma" | "github" | "drive" | "doc" | "dashboard" | "notion" | "other";
+interface TaskLink { label: string; url: string; type: ResourceType }
+interface OrganizationResource extends TaskLink { area?: AreaName; project?: string; description?: string }
 interface TaskFile { name: string; type: "pdf" | "excel" | "screenshot" | "doc" }
 interface Activity { type: "assigned" | "updated" | "submitted" | "commented" | "revision" | "approved"; actor: string; text: string; time: string }
 
@@ -38,6 +59,7 @@ interface Task {
   deadline?: string; waitingSince?: string; responseDue?: string;
   lastUpdate?: string; isDelegated: boolean; isWaiting: boolean;
   isOverdue?: boolean; isToday?: boolean; estimatedHours?: number;
+  carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; staleDays?: number;
   links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; activity?: Activity[];
 }
 
@@ -45,6 +67,14 @@ interface PersonRecord {
   name: string; role: string; org: OrgName;
   active: number; waitingOnThem: number; waitingOnMe: number;
   overdue: number; lastUpdate: string; oldestUnanswered: string; needsFollowUp: boolean;
+}
+
+interface UserProfile {
+  displayName: string;
+  role: string;
+  email: string;
+  timezone: string;
+  dateFormat: string;
 }
 
 interface FollowUpItem {
@@ -101,7 +131,7 @@ const TASKS: Task[] = [
     org: "Villa Khayangan", area: "Operations", project: "Ops Manual 2024",
     priority: "medium", status: "waiting", assignee: "Bu Desti", nextActionBy: "Bu Desti",
     deadline: "Fri, 16 Aug", waitingSince: "Sat, 9 Aug", lastUpdate: "5 days ago",
-    isDelegated: true, isWaiting: true,
+    isDelegated: true, isWaiting: true, carriedOver: true, staleDays: 35,
     files: [{ name: "SOP_Draft_v2.docx", type: "doc" }],
     activity: [{ type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "5 days ago" }]
   },
@@ -146,7 +176,7 @@ const TASKS: Task[] = [
     id: "t9", title: "Follow up with bank on credit facility renewal",
     org: "Personal", area: "Finance", priority: "high", status: "waiting",
     nextActionBy: "Bank Officer", deadline: "Fri, 16 Aug", waitingSince: "Wed, 7 Aug", lastUpdate: "4 days ago",
-    isDelegated: false, isWaiting: true,
+    isDelegated: false, isWaiting: true, carriedOver: true, staleDays: 41,
     activity: [{ type: "assigned", actor: "You", text: "Called bank, waiting for callback", time: "4 days ago" }]
   },
   {
@@ -174,7 +204,7 @@ const TASKS: Task[] = [
     id: "t13", title: "Finalize annual revenue report",
     org: "Villa Khayangan", area: "Finance", project: "Finance Automation",
     priority: "high", status: "done", nextActionBy: "me",
-    isDelegated: false, isWaiting: false,
+    isDelegated: false, isWaiting: false, completedInCurrentMonth: true,
     activity: [{ type: "approved", actor: "You", text: "Marked as complete", time: "Last week" }]
   },
   {
@@ -183,6 +213,21 @@ const TASKS: Task[] = [
     assignee: "Bu Desti", nextActionBy: "Bu Desti",
     deadline: "Mon, 19 Aug", isDelegated: true, isWaiting: true, waitingSince: "Today",
     activity: [{ type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "Today" }]
+  },
+];
+
+const ARCHIVED_TASKS: Task[] = [
+  {
+    id: "archive-1", title: "Compare accommodation supplier terms",
+    org: "Villa Khayangan", area: "Operations", project: "Ops Manual 2024", priority: "medium", status: "done", nextActionBy: "me",
+    deadline: "Jul 2026", isDelegated: false, isWaiting: false, archived: true,
+    activity: [{ type: "approved", actor: "You", text: "Completed in July", time: "Last month" }],
+  },
+  {
+    id: "archive-2", title: "Refresh pharmacy inventory labels",
+    org: "Apotik", area: "Operations", priority: "low", status: "done", nextActionBy: "me",
+    deadline: "Jun 2026", isDelegated: false, isWaiting: false, archived: true,
+    activity: [{ type: "approved", actor: "You", text: "Completed in June", time: "2 months ago" }],
   },
 ];
 
@@ -227,20 +272,20 @@ const FOLLOWUP_DATA: FollowUpPerson[] = [
   },
 ];
 
-const ORG_RESOURCES: Record<OrgName, TaskLink[]> = {
+const ORG_RESOURCES: Record<string, OrganizationResource[]> = {
   "Villa Khayangan": [
-    { label: "Google Drive", url: "#", type: "drive" },
-    { label: "Main Website", url: "#", type: "website" },
-    { label: "Finance Dashboard", url: "#", type: "sheet" },
-    { label: "Design System", url: "#", type: "figma" },
+    { label: "Google Drive", url: "https://drive.google.com/", type: "drive" },
+    { label: "Main Website", url: "https://example.com/", type: "website", area: "Marketing" },
+    { label: "Finance Dashboard", url: "", type: "dashboard", area: "Finance" },
+    { label: "Design System", url: "", type: "figma", project: "Villa Website Revamp" },
   ],
   "Apotik": [
-    { label: "Inventory Sheet", url: "#", type: "sheet" },
-    { label: "Operations Drive", url: "#", type: "drive" },
+    { label: "Inventory Sheet", url: "https://docs.google.com/spreadsheets/", type: "sheet" },
+    { label: "Operations Drive", url: "https://drive.google.com/", type: "drive" },
   ],
   "Personal": [
-    { label: "Personal Drive", url: "#", type: "drive" },
-    { label: "Budget Tracker", url: "#", type: "sheet" },
+    { label: "Personal Drive", url: "https://drive.google.com/", type: "drive" },
+    { label: "Budget Tracker", url: "https://docs.google.com/spreadsheets/", type: "sheet" },
   ],
 };
 
@@ -294,10 +339,10 @@ const PROJECT_DETAILS: Record<string, ProjectDetail> = {
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 
-const ORG_COLORS: Record<OrgName, { bg: string; text: string; dot: string; border: string }> = {
-  "Villa Khayangan": { bg: "bg-[#eae6ff]", text: "text-[#6269b6]", dot: "bg-[#8e94f2]", border: "border-[#d9d6f6]" },
-  "Apotik": { bg: "bg-[#dcede7]", text: "text-[#5d8970]", dot: "bg-[#88b69a]", border: "border-[#cbe1d6]" },
-  "Personal": { bg: "bg-[#f8e3d3]", text: "text-[#ac765a]", dot: "bg-[#e3aa8e]", border: "border-[#f0d2be]" },
+const ORG_COLORS: Record<string, { bg: string; text: string; dot: string; border: string; card: string }> = {
+  "Villa Khayangan": { bg: "bg-[var(--org-villa-bg)]", text: "text-[var(--org-villa-text)]", dot: "bg-[var(--org-villa-dot)]", border: "border-[var(--org-villa-border)]", card: "bg-[var(--org-villa-card)]" },
+  "Apotik": { bg: "bg-[var(--org-apotik-bg)]", text: "text-[var(--org-apotik-text)]", dot: "bg-[var(--org-apotik-dot)]", border: "border-[var(--org-apotik-border)]", card: "bg-[var(--org-apotik-card)]" },
+  "Personal": { bg: "bg-[var(--org-personal-bg)]", text: "text-[var(--org-personal-text)]", dot: "bg-[var(--org-personal-dot)]", border: "border-[var(--org-personal-border)]", card: "bg-[var(--org-personal-card)]" },
 };
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; dot: string }> = {
@@ -307,22 +352,22 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: stri
   low: { label: "When there’s room", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-[#a8afbd]" },
 };
 
-const AREA_COLORS: Record<AreaName, string> = {
-  "System Development": "text-[#766fae]",
-  "Operations": "text-[#6488a9]",
-  "Marketing": "text-[#ac778d]",
-  "Finance": "text-[#548c88]",
-  "HR": "text-[#a67e48]",
+const AREA_COLORS: Record<string, string> = {
+  "System Development": "text-[var(--area-system)]",
+  "Operations": "text-[var(--area-operations)]",
+  "Marketing": "text-[var(--area-marketing)]",
+  "Finance": "text-[var(--area-finance)]",
+  "HR": "text-[var(--area-hr)]",
 };
 
 const PERSON_COLORS: Record<string, string> = {
-  "Bu Desti": "#9991cc",
-  "Purchasing Manager": "#84ae91",
-  "HR Manager": "#d39a7f",
-  "Design Team": "#bb8ba0",
-  "Bank Officer": "#86a6c6",
-  "Marketing Team": "#a48fc5",
-  "You": "#c7a55f",
+  "Bu Desti": "var(--person-slate)",
+  "Purchasing Manager": "var(--person-sage)",
+  "HR Manager": "var(--person-clay)",
+  "Design Team": "var(--person-rose)",
+  "Bank Officer": "var(--person-blue)",
+  "Marketing Team": "var(--person-violet)",
+  "You": "var(--person-stone)",
 };
 
 function getInitials(name: string) {
@@ -330,7 +375,15 @@ function getInitials(name: string) {
 }
 
 function getPersonColor(name: string) {
-  return PERSON_COLORS[name] || "#9991cc";
+  return PERSON_COLORS[name] || "var(--person-slate)";
+}
+
+function personColorStyle(color: string, borderWidth = 1) {
+  return {
+    backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
+    color,
+    border: `${borderWidth}px solid color-mix(in srgb, ${color} 27%, transparent)`,
+  };
 }
 
 // ─── SMALL COMPONENTS ─────────────────────────────────────────────────────────
@@ -346,7 +399,7 @@ function OrgBadge({ org }: { org: OrgName }) {
 }
 
 function AreaBadge({ area }: { area: AreaName }) {
-  return <span className={cn("text-[11px] font-medium", AREA_COLORS[area])}>{area}</span>;
+  return <span className={cn("text-[11px] font-medium", AREA_COLORS[area] || "text-muted-foreground")}>{area}</span>;
 }
 
 function PriorityDot({ priority }: { priority: Priority }) {
@@ -363,7 +416,7 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" | "md"
   const sz = size === "xs" ? "w-5 h-5 text-[9px]" : size === "md" ? "w-8 h-8 text-sm" : size === "lg" ? "w-10 h-10 text-sm" : "w-6 h-6 text-[10px]";
   return (
     <div className={cn("rounded-full flex items-center justify-center font-semibold flex-shrink-0", sz)}
-      style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+      style={personColorStyle(color)}>
       {getInitials(name)}
     </div>
   );
@@ -378,12 +431,16 @@ function StatusDot({ status }: { status: TaskStatus }) {
 }
 
 function LinkIcon({ type }: { type: TaskLink["type"] }) {
-  const configs: Record<TaskLink["type"], { icon: ReactNode; color: string; bg: string }> = {
+  const configs: Record<ResourceType, { icon: ReactNode; color: string; bg: string }> = {
     website: { icon: <Globe className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
     sheet: { icon: <BarChart2 className="w-3 h-3" />, color: "text-success", bg: "bg-[#edf7f0]" },
     figma: { icon: <Layers className="w-3 h-3" />, color: "text-review", bg: "bg-[#f4effa]" },
     github: { icon: <GitBranch className="w-3 h-3" />, color: "text-[#6e7485]", bg: "bg-muted" },
     drive: { icon: <FolderKanban className="w-3 h-3" />, color: "text-warning", bg: "bg-[#fff9e4]" },
+    doc: { icon: <FileText className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
+    dashboard: { icon: <BarChart2 className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
+    notion: { icon: <FileText className="w-3 h-3" />, color: "text-foreground", bg: "bg-muted" },
+    other: { icon: <Link2 className="w-3 h-3" />, color: "text-muted-foreground", bg: "bg-muted" },
   };
   const c = configs[type];
   return (
@@ -473,7 +530,7 @@ function TaskCard({ task, onClick, compact = false }: { task: Task; onClick: () 
   );
 }
 
-// ─── COMPACT TASK ROW (for All Tasks view) ────────────────────────────────────
+// ─── COMPACT TASK ROW ─────────────────────────────────────────────────────────
 
 function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
   const isMyAction = task.nextActionBy === "me";
@@ -520,6 +577,21 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  function markDone() {
+    Object.assign(task, { status: "done" as TaskStatus, isWaiting: false, isOverdue: false, nextActionBy: "me", lastUpdate: "Just now" });
+    onClose();
+  }
+
+  function requestRevision() {
+    Object.assign(task, { status: "todo" as TaskStatus, isWaiting: true, nextActionBy: task.assignee || "me", lastUpdate: "Revision requested just now" });
+    onClose();
+  }
+
+  function reschedule() {
+    Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
+    onClose();
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-end">
       <div className="absolute inset-0 bg-[#293047]/15 backdrop-blur-[2px]" onClick={onClose} />
@@ -562,13 +634,8 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</h3>
               <div className="space-y-1.5">
-                {task.links.map((link, i) => (
-                  <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
-                    className="group flex items-center gap-2.5 rounded-xl bg-muted/55 p-3 transition-colors hover:bg-secondary">
-                    <LinkIcon type={link.type} />
-                    <span className="text-sm text-foreground flex-1">{link.label}</span>
-                    <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </a>
+                {task.links.map((link, i) => link.url === "#" ? <div key={i} className="flex items-center gap-2.5 rounded-xl bg-muted/55 p-3"><LinkIcon type={link.type} /><span className="flex-1 text-sm text-foreground">{link.label}</span><span className="text-[10px] text-muted-foreground">Not connected</span></div> : (
+                  <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2.5 rounded-xl bg-muted/55 p-3 transition-colors hover:bg-secondary"><LinkIcon type={link.type} /><span className="flex-1 text-sm text-foreground">{link.label}</span><ExternalLink className="w-3 h-3 text-muted-foreground transition-colors group-hover:text-foreground" /></a>
                 ))}
               </div>
             </div>
@@ -580,10 +647,10 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
                 {task.files.map((file, i) => {
                   const colors: Record<TaskFile["type"], string> = { pdf: "text-overdue", excel: "text-success", screenshot: "text-info", doc: "text-primary" };
                   return (
-                    <div key={i} className="group flex cursor-pointer items-center gap-2.5 rounded-xl bg-muted/55 p-3 transition-colors hover:bg-secondary">
+                    <div key={i} className="flex items-center gap-2.5 rounded-xl bg-muted/55 p-3">
                       <FileText className={cn("w-4 h-4 flex-shrink-0", colors[file.type])} />
                       <span className="text-sm text-foreground flex-1 truncate">{file.name}</span>
-                      <Download className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      <span className="text-[10px] text-muted-foreground">Attached</span>
                     </div>
                   );
                 })}
@@ -608,7 +675,7 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
                     <div key={i} className="flex gap-2.5">
                       <div className="flex flex-col items-center">
                         <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
-                          style={{ backgroundColor: actorColor + "22", color: actorColor }}>
+                          style={personColorStyle(actorColor)}>
                           {getInitials(act.actor)}
                         </div>
                         {i < (task.activity?.length ?? 0) - 1 && <div className="w-px flex-1 bg-border mt-1" />}
@@ -625,16 +692,16 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
           )}
         </div>
         <div className="flex gap-2 border-t border-border p-4 sm:p-5">
-          <button className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">
+          <button onClick={markDone} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">
             {task.status === "review" ? "Approve" : "Mark Done"}
           </button>
           {task.status === "review" && (
-            <button className="flex-1 rounded-xl border border-border bg-secondary px-4 py-2.5 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">
+            <button onClick={requestRevision} className="flex-1 rounded-xl border border-border bg-secondary px-4 py-2.5 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">
               Request Revision
             </button>
           )}
-          <button aria-label="More task actions" className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-            <MoreHorizontal className="w-4 h-4" />
+          <button aria-label="Reschedule for tomorrow" onClick={reschedule} className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+            <Calendar className="w-4 h-4" />
           </button>
         </div>
         </div>
@@ -648,42 +715,86 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
 type CaptureField = "org" | "assignee" | "deadline";
 type InlineCapturePreview = ParsedTask & { uncertain: CaptureField[] };
 
-function createCapturePreviews(input: string): InlineCapturePreview[] {
+function createCapturePreviews(input: string, organization?: OrgName): InlineCapturePreview[] {
   const lines = input.split("\n").map(line => line.trim()).filter(Boolean).slice(0, 4);
 
-  return lines.map((line, index) => {
+  return lines.map(line => {
     const normalized = line.toLowerCase();
-    const template = normalized.includes("website") || normalized.includes("desti")
-      ? DEMO_PARSED[0]
-      : normalized.includes("receipt") || normalized.includes("settlement")
-        ? DEMO_PARSED[1]
-        : normalized.includes("medicine") || normalized.includes("apotik")
-          ? DEMO_PARSED[2]
-          : DEMO_PARSED[index % DEMO_PARSED.length];
-    const hasAssignee = normalized.includes("bu desti") || normalized.includes("manager") || normalized.includes("team");
-    const hasDate = /mon|tue|wed|thu|fri|sat|sun|today|tomorrow|monday|tuesday|wednesday|thursday|friday/i.test(line);
+    const assigneeMatch = line.match(/\b(?:ask|assign(?:\s+to)?|follow up with)\s+(.+?)\s+to\b/i);
+    const assignee = assigneeMatch?.[1]?.trim();
+    const dateMatch = line.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+    const deadline = dateMatch?.[1] ? dateMatch[1][0].toUpperCase() + dateMatch[1].slice(1).toLowerCase() : undefined;
+    const hasKnownOrg = /villa|khayangan|apotik|medicine|personal|bank/.test(normalized);
     const inferredOrg: OrgName = normalized.includes("apotik") || normalized.includes("medicine")
       ? "Apotik"
-      : normalized.includes("bank") || normalized.includes("personal")
+      : normalized.includes("villa") || normalized.includes("khayangan")
+        ? "Villa Khayangan"
+        : normalized.includes("bank") || normalized.includes("personal")
         ? "Personal"
-        : template.org;
+        : organization || "Personal";
+    const area: AreaName = /website|brand|marketing|social/.test(normalized)
+      ? "Marketing"
+      : /code|system|website|app|flow/.test(normalized)
+        ? "System Development"
+        : /invoice|cash|money|budget|finance/.test(normalized)
+          ? "Finance"
+          : /hiring|people|employee|team/.test(normalized)
+            ? "HR"
+            : "Operations";
+    const priority: Priority = /urgent|asap|critical/.test(normalized) ? "urgent" : /important|priority|soon/.test(normalized) ? "high" : "medium";
+    const title = line.replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim();
 
     return {
-      ...template,
       org: inferredOrg,
-      title: template.title,
+      area,
+      title: title ? title[0].toUpperCase() + title.slice(1) : "New task",
+      priority,
       originalText: line,
-      assignee: hasAssignee ? template.assignee : undefined,
-      deadline: hasDate ? template.deadline : undefined,
+      assignee,
+      deadline,
+      link: line.match(/https?:\/\/\S+/i)?.[0],
       uncertain: [
-        ...(hasAssignee ? [] : ["assignee" as const]),
-        ...(hasDate ? [] : ["deadline" as const]),
+        ...(hasKnownOrg || organization ? [] : ["org" as const]),
+        ...(assignee ? [] : ["assignee" as const]),
+        ...(deadline ? [] : ["deadline" as const]),
       ],
     };
   });
 }
 
-function QuickCapture() {
+function filesFromCapture(names: string[]): TaskFile[] | undefined {
+  if (!names.length) return undefined;
+  return names.map(name => ({
+    name,
+    type: /\.(xlsx?|csv)$/i.test(name) ? "excel" : /\.(png|jpe?g|webp|gif)$/i.test(name) ? "screenshot" : /\.pdf$/i.test(name) ? "pdf" : "doc",
+  }));
+}
+
+function saveCapturedTask(capture: ParsedTask, attachments: string[] = []) {
+  const now = Date.now();
+  const isDelegated = Boolean(capture.assignee);
+  TASKS.push({
+    id: `capture-${now}-${TASKS.length}`,
+    title: capture.title,
+    org: capture.org,
+    area: capture.area,
+    priority: capture.priority,
+    status: "todo",
+    assignee: capture.assignee,
+    nextActionBy: capture.assignee || "me",
+    deadline: capture.deadline,
+    isDelegated,
+    isWaiting: false,
+    isToday: capture.deadline === "Today",
+    files: filesFromCapture(attachments),
+    links: capture.link ? [{ label: "Captured link", url: capture.link, type: "website" }] : undefined,
+    originalCapture: capture.originalText,
+    lastUpdate: "Just now",
+    activity: [{ type: "assigned", actor: "You", text: "Created from Smart Inbox", time: "Just now" }],
+  });
+}
+
+function QuickCapture({ organization, onSaved }: { organization?: OrgName; onSaved?: () => void }) {
   const [input, setInput] = useState("");
   const [processing, setProcessing] = useState(false);
   const [previews, setPreviews] = useState<InlineCapturePreview[]>([]);
@@ -691,6 +802,9 @@ function QuickCapture() {
   const [saved, setSaved] = useState<Set<number>>(new Set());
   const [attachments, setAttachments] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [linkDraft, setLinkDraft] = useState("");
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const captureInputRef = useRef<HTMLTextAreaElement>(null);
 
   function resetCapture(messageText?: string) {
     setInput("");
@@ -698,6 +812,8 @@ function QuickCapture() {
     setEditing(null);
     setSaved(new Set());
     setAttachments([]);
+    setLinkDraft("");
+    setShowLinkInput(false);
     if (messageText) {
       setMessage(messageText);
       setTimeout(() => setMessage(""), 2600);
@@ -709,7 +825,7 @@ function QuickCapture() {
     setProcessing(true);
     setMessage("");
     setTimeout(() => {
-      setPreviews(createCapturePreviews(input));
+      setPreviews(createCapturePreviews(input, organization));
       setSaved(new Set());
       setProcessing(false);
     }, 700);
@@ -720,11 +836,20 @@ function QuickCapture() {
   }
 
   function save(index: number) {
+    if (saved.has(index)) return;
+    saveCapturedTask(previews[index], attachments);
+    onSaved?.();
     setSaved(current => new Set([...current, index]));
     setEditing(null);
   }
 
   function saveAll() {
+    previews.forEach((preview, index) => {
+      if (!saved.has(index)) {
+        saveCapturedTask(preview, attachments);
+        onSaved?.();
+      }
+    });
     setSaved(new Set(previews.map((_, index) => index)));
     setTimeout(() => resetCapture(previews.length === 1 ? "Saved to your workspace." : `${previews.length} items saved to your workspace.`), 650);
   }
@@ -734,51 +859,63 @@ function QuickCapture() {
     setAttachments(current => [...current, ...Array.from(files).map(file => file.name)].slice(0, 4));
   }
 
+  function addLink() {
+    const link = linkDraft.trim();
+    if (!link) return;
+    setInput(current => [current.trim(), link].filter(Boolean).join(" "));
+    setLinkDraft("");
+    setShowLinkInput(false);
+    captureInputRef.current?.focus();
+  }
+
   return (
-    <section className="relative overflow-hidden rounded-[1.5rem] border border-[#d9d6f6] bg-[#eae6ff]/60 p-4 shadow-[0_10px_28px_rgb(35_41_61_/_0.055)] sm:p-5">
-      <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-[#ffffff]/75 blur-2xl" />
-      <div aria-hidden="true" className="pointer-events-none absolute bottom-0 right-24 h-16 w-16 rounded-full bg-[#dcede7] blur-xl" />
+    <section className="relative overflow-hidden rounded-[1.5rem] border border-[var(--theme-capture-border)] bg-[var(--theme-capture)] p-4 shadow-[0_10px_28px_rgb(35_41_61_/_0.055)] sm:p-5">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-[var(--theme-capture-input)] opacity-75 blur-2xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute bottom-0 right-24 h-16 w-16 rounded-full bg-[var(--theme-hero-accent)] blur-xl" />
       <div className="relative">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/12 text-primary"><Sparkles className="h-3.5 w-3.5" /></span>
             <div>
               <h2 className="luma-heading text-[15px] font-bold text-foreground">Quick Capture</h2>
-              <p className="text-[11px] text-muted-foreground">A thought is enough. Luma handles the structure.</p>
+              <p className="text-[11px] text-muted-foreground">A thought is enough. Binnie handles the structure.</p>
             </div>
+            {organization && <OrgBadge org={organization} />}
           </div>
           {message && <span role="status" aria-live="polite" className="rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">{message}</span>}
         </div>
         <textarea
+          ref={captureInputRef}
           value={input}
           onChange={event => setInput(event.target.value)}
           rows={previews.length ? 2 : 3}
           placeholder="What do you need to remember or do?"
-          className="w-full resize-none rounded-2xl border border-[#ddd9f3] bg-white/90 px-3.5 py-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground/80 focus:border-primary/45"
+          className="w-full resize-none rounded-2xl border border-[var(--theme-capture-secondary-border)] bg-[var(--theme-capture-input)] px-3.5 py-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground/80 focus:border-primary/45"
         />
         {attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {attachments.map((attachment, index) => <span key={`${attachment}-${index}`} className="rounded-full bg-white px-2 py-1 text-[10px] text-muted-foreground shadow-sm">{attachment}</span>)}
+            {attachments.map((attachment, index) => <span key={`${attachment}-${index}`} className="rounded-full bg-[var(--theme-capture-input)] px-2 py-1 text-[10px] text-muted-foreground shadow-sm">{attachment}</span>)}
           </div>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white hover:text-foreground">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-[var(--theme-capture-input)] hover:text-foreground">
             <Paperclip className="h-3.5 w-3.5" /> Attach file
             <input className="sr-only" type="file" multiple onChange={event => addAttachments(event.target.files)} />
           </label>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white hover:text-foreground">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-[var(--theme-capture-input)] hover:text-foreground">
             <ImagePlus className="h-3.5 w-3.5" /> Screenshot
             <input className="sr-only" type="file" accept="image/*" multiple onChange={event => addAttachments(event.target.files)} />
           </label>
-          <span className="inline-flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground"><Link2 className="h-3.5 w-3.5" /> Paste a link anytime</span>
-          <button onClick={organize} disabled={!input.trim() || processing} className={cn("ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-medium transition-colors", input.trim() && !processing ? "bg-primary text-primary-foreground hover:bg-primary/85" : "cursor-not-allowed bg-white/65 text-muted-foreground") }>
-            <Sparkles className="h-3.5 w-3.5" /> {processing ? "Organizing…" : "Organize with AI"}
+          <button onClick={() => setShowLinkInput(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-[var(--theme-capture-input)] hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> Add link</button>
+          <button onClick={organize} disabled={!input.trim() || processing} className={cn("ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-medium transition-colors", input.trim() && !processing ? "bg-primary text-primary-foreground hover:bg-primary/85" : "cursor-not-allowed bg-[var(--theme-capture-input)] text-muted-foreground") }>
+            <Sparkles className="h-3.5 w-3.5" /> {processing ? "Organizing…" : "Organize with Binnie"}
           </button>
         </div>
+        {showLinkInput && <div className="mt-2 flex items-center gap-2 rounded-xl border border-[var(--theme-capture-secondary-border)] bg-[var(--theme-capture-input)] px-3 py-2"><Link2 className="h-3.5 w-3.5 flex-shrink-0 text-info" /><input autoFocus value={linkDraft} onChange={event => setLinkDraft(event.target.value)} onKeyDown={event => event.key === "Enter" && addLink()} placeholder="Paste a link" className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground" /><button onClick={addLink} disabled={!linkDraft.trim()} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary disabled:opacity-45">Add</button></div>}
         {previews.length > 0 && (
-          <div className="mt-4 space-y-2.5 border-t border-[#e2e0ef] pt-4">
+          <div className="mt-4 space-y-2.5 border-t border-[var(--theme-capture-divider)] pt-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-medium text-secondary-foreground">Here’s what Luma understood.</p>
+              <p className="text-[11px] font-medium text-secondary-foreground">Here’s what Binnie understood.</p>
               {previews.length > 1 && <button onClick={saveAll} className="text-[11px] font-medium text-primary hover:text-primary/80">Add All</button>}
             </div>
             {previews.map((preview, index) => {
@@ -795,7 +932,7 @@ function QuickCapture() {
                         {preview.assignee && <span>Assigned to {preview.assignee}</span>}
                         {preview.deadline && <span>{preview.assignee ? "·" : ""} Response due {preview.deadline}</span>}
                       </div>
-                      {preview.uncertain.length > 0 && !isSaved && <p className="mt-2 text-[10px] text-warning">Luma needs a little help with {preview.uncertain.map(field => field === "org" ? "the organization" : field === "assignee" ? "who owns it" : "the target date").join(" and ")}.</p>}
+                      {preview.uncertain.length > 0 && !isSaved && <p className="mt-2 text-[10px] text-warning">Binnie needs a little help with {preview.uncertain.map(field => field === "org" ? "the organization" : field === "assignee" ? "who owns it" : "the target date").join(" and ")}.</p>}
                       {editing === index && !isSaved && (
                         <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-3">
                           {visibleFields.includes("org") && <label className="text-[10px] font-medium text-muted-foreground">Organization<select value={preview.org} onChange={event => updatePreview(index, { org: event.target.value as OrgName, uncertain: preview.uncertain.filter(field => field !== "org") })} className="mt-1 w-full rounded-lg border border-border bg-white px-2 py-1.5 text-[11px] text-foreground"><option>Villa Khayangan</option><option>Apotik</option><option>Personal</option></select></label>}
@@ -882,13 +1019,14 @@ function HomeLayoutDrawer({
               const meta = HOME_CARD_META.find(item => item.id === card.id)!;
               return (
                 <div key={card.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5">
-                  <button onClick={() => onToggle(card.id)} aria-pressed={card.visible} className={cn("relative h-5 w-9 flex-shrink-0 rounded-full transition-colors", card.visible ? "bg-primary" : "bg-muted") }>
-                    <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform", card.visible ? "translate-x-4" : "translate-x-0.5")} />
-                  </button>
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
                     <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{meta.description}</p>
                   </div>
+                  <label className="flex flex-shrink-0 cursor-pointer items-center gap-2 rounded-lg px-1.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
+                    <span className="hidden sm:inline">Visible</span>
+                    <input type="checkbox" checked={card.visible} onChange={() => onToggle(card.id)} className="h-4 w-4 cursor-pointer rounded border-border accent-primary" aria-label={`Show ${meta.label} on Home`} />
+                  </label>
                   <div className="flex flex-col rounded-lg border border-border bg-muted/30">
                     <button onClick={() => onMove(card.id, -1)} disabled={index === 0} className="rounded-t-lg p-1 text-muted-foreground transition-colors hover:bg-white hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${meta.label} up`}><ChevronUp className="h-3.5 w-3.5" /></button>
                     <button onClick={() => onMove(card.id, 1)} disabled={index === cards.length - 1} className="rounded-b-lg border-t border-border p-1 text-muted-foreground transition-colors hover:bg-white hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${meta.label} down`}><ChevronDown className="h-3.5 w-3.5" /></button>
@@ -908,11 +1046,12 @@ function HomeLayoutDrawer({
 }
 
 function HomeView({
-  onTaskClick, onNavigate, onProjectClick, onOrgClick,
+  onTaskClick, onNavigate, onProjectClick, onOrgClick, userName,
 }: {
   onTaskClick: (task: Task) => void; onNavigate: (view: NavView) => void;
-  onProjectClick: (projectId: string) => void; onOrgClick: (org: OrgName) => void;
+  onProjectClick: (projectId: string) => void; onOrgClick: (org: OrgName) => void; userName: string;
 }) {
+  const workspaceDate = getWorkspaceCalendarDate();
   const todayTasks = TASKS.filter(t => t.isToday && t.nextActionBy === "me");
   const overdueTasks = TASKS.filter(t => t.isOverdue);
   const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
@@ -963,13 +1102,13 @@ function HomeView({
   });
   return (
     <div className="mx-auto max-w-[1400px] p-5 sm:p-8 lg:p-10">
-      <div className="relative mb-6 overflow-hidden rounded-[1.75rem] border border-[#e7e5e0] bg-[#fffdf9] px-5 py-6 shadow-[0_4px_18px_rgb(35_41_61_/_0.035)] sm:px-7">
-        <div aria-hidden="true" className="absolute -right-10 top-0 h-40 w-40 rounded-full bg-[#eae6ff] blur-3xl" />
-        <div aria-hidden="true" className="absolute bottom-0 right-32 h-20 w-20 rounded-full bg-[#dcede7] blur-2xl" />
+      <div className="relative mb-6 overflow-hidden rounded-[1.75rem] border border-border bg-[var(--theme-hero)] px-5 py-6 shadow-[0_4px_18px_rgb(35_41_61_/_0.035)] sm:px-7">
+        <div aria-hidden="true" className="absolute -right-10 top-0 h-40 w-40 rounded-full bg-[var(--theme-hero-glow)] blur-3xl" />
+        <div aria-hidden="true" className="absolute bottom-0 right-32 h-20 w-20 rounded-full bg-[var(--theme-hero-accent)] blur-2xl" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Monday, 12 August</p>
-            <h1 className="luma-heading text-3xl font-bold text-foreground sm:text-[2rem]">Good morning, Bos.</h1>
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{formatWorkspaceDate(workspaceDate, { weekday: "long", day: "numeric", month: "long" })}</p>
+            <h1 className="luma-heading text-3xl font-bold text-foreground sm:text-[2rem]">Welcome Back, {userName}</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">Here’s what needs your attention today. Everything else is safely organized for later.</p>
           </div>
           <button onClick={() => setIsCustomizing(true)} className="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl border border-primary/20 bg-white/80 px-3.5 py-2 text-[12px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/10">
@@ -980,19 +1119,19 @@ function HomeView({
       <QuickCapture />
       <div className="mb-8 mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {[
-          { label: "Today", value: todayTasks.length, sub: "~5h of focused work", color: "text-primary", surface: "bg-[#eae6ff]/55", icon: <CalendarDays className="w-4 h-4" /> },
-          { label: "Needs attention", value: overdueTasks.length, sub: "A gentle nudge", color: "text-overdue", surface: "bg-[#f7dde6]/45", icon: <AlertTriangle className="w-4 h-4" /> },
-          { label: "Delegated", value: TASKS.filter(t => t.isDelegated).length, sub: "Across your teams", color: "text-success", surface: "bg-[#dcede7]/55", icon: <Users className="w-4 h-4" /> },
-          { label: "Waiting", value: TASKS.filter(t => t.isWaiting).length, sub: "For a response", color: "text-info", surface: "bg-[#ddebfa]/55", icon: <Hourglass className="w-4 h-4" /> },
-        ].map(({ label, value, sub, color, surface, icon }) => (
-          <div key={label} className={cn("luma-card p-4 sm:p-5", surface)}>
+          { label: "Today", value: todayTasks.length, sub: "~5h of focused work", color: "text-primary", surface: "bg-[#eae6ff]/55", icon: <CalendarDays className="w-4 h-4" />, view: "today" as NavView },
+          { label: "Needs attention", value: overdueTasks.length, sub: "A gentle nudge", color: "text-overdue", surface: "bg-[#f7dde6]/45", icon: <AlertTriangle className="w-4 h-4" />, view: "overdue" as NavView },
+          { label: "Delegated", value: TASKS.filter(t => t.isDelegated).length, sub: "Across your teams", color: "text-success", surface: "bg-[#dcede7]/55", icon: <Users className="w-4 h-4" />, view: "delegated" as NavView },
+          { label: "Waiting", value: TASKS.filter(t => t.isWaiting).length, sub: "For a response", color: "text-info", surface: "bg-[#ddebfa]/55", icon: <Hourglass className="w-4 h-4" />, view: "waiting" as NavView },
+        ].map(({ label, value, sub, color, surface, icon, view }) => (
+          <button key={label} onClick={() => onNavigate(view)} className={cn("luma-card luma-card-hover p-4 text-left sm:p-5", surface)}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</span>
               <span className={cn(color, "opacity-60")}>{icon}</span>
             </div>
             <p className={cn("luma-heading text-3xl font-bold", color)}>{value}</p>
             <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>
-          </div>
+          </button>
         ))}
       </div>
       <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
@@ -1043,10 +1182,7 @@ function HomeView({
                           <p className="text-sm text-foreground">{t.title}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">{t.assignee} submitted · {t.org} · {t.area}</p>
                         </div>
-                        <div className="flex gap-1.5">
-                          <button onClick={() => onTaskClick(t)} className="rounded-lg bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success transition-colors hover:bg-success/15">Approve</button>
-                          <button onClick={() => onTaskClick(t)} className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-medium text-secondary-foreground shadow-sm transition-colors hover:bg-secondary">Review</button>
-                        </div>
+                        <button onClick={() => onTaskClick(t)} className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-medium text-secondary-foreground shadow-sm transition-colors hover:bg-secondary">Open review</button>
                       </div>
                     ))}
                   </div>
@@ -1088,7 +1224,7 @@ function HomeView({
                 return (
                   <button key={person.name} onClick={() => onNavigate("delegated")} className="flex w-full items-center gap-3 rounded-xl bg-muted/55 p-3 text-left transition-colors hover:bg-secondary">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                      style={personColorStyle(color)}>
                       {getInitials(person.name)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1199,17 +1335,15 @@ function HomeView({
 
 interface ParsedTask { title: string; org: OrgName; area: AreaName; assignee?: string; deadline?: string; priority: Priority; originalText: string; link?: string }
 
-const DEMO_PARSED: ParsedTask[] = [
-  { title: "Review website accommodation prices", org: "Villa Khayangan", area: "Marketing", assignee: "Bu Desti", deadline: "Wednesday", priority: "high", originalText: "ask Bu Desti to check website prices by Wednesday https://example.com", link: "https://example.com" },
-  { title: "Fix purchasing settlement receipt flow", org: "Villa Khayangan", area: "System Development", priority: "high", deadline: "Tomorrow", originalText: "fix purchasing receipt flow because finance needs to calculate money return" },
-  { title: "Check expired medicine inventory", org: "Apotik", area: "Operations", priority: "urgent", deadline: "Tomorrow", originalText: "tomorrow check apotik expired medicine issue" },
-];
-
 function InboxView() {
   const [input, setInput] = useState("");
   const [processing, setProcessing] = useState(false);
   const [parsed, setParsed] = useState<ParsedTask[]>([]);
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
 
   function handleProcess() {
     if (!input.trim()) return;
@@ -1217,32 +1351,64 @@ function InboxView() {
     setTimeout(() => { setProcessing(false); setParsed(createCapturePreviews(input)); }, 700);
   }
 
+  function addAttachments(files: FileList | null) {
+    if (!files?.length) return;
+    setAttachments(current => [...current, ...Array.from(files).map(file => file.name)].slice(0, 4));
+  }
+
+  function addLink() {
+    const link = linkDraft.trim();
+    if (!link) return;
+    setAttachments(current => [...current, link].slice(0, 4));
+    setLinkDraft("");
+    setShowLinkInput(false);
+  }
+
+  function updateParsed(index: number, patch: Partial<ParsedTask>) {
+    setParsed(current => current.map((task, taskIndex) => taskIndex === index ? { ...task, ...patch } : task));
+  }
+
+  function confirmTask(index: number) {
+    if (confirmed.has(index)) return;
+    saveCapturedTask(parsed[index], attachments);
+    setConfirmed(current => new Set([...current, index]));
+  }
+
+  function confirmAll() {
+    parsed.forEach((task, index) => {
+      if (!confirmed.has(index)) saveCapturedTask(task, attachments);
+    });
+    setConfirmed(new Set(parsed.map((_, index) => index)));
+  }
+
   return (
     <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
       <div className="mb-8">
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Smart Inbox</p>
         <h1 className="luma-heading text-3xl font-bold text-foreground">A place to set it down.</h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">Bring the whole brain dump. Luma will help organize the next step.</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Write whatever is on your mind. Tasks, reminders, ideas, follow-ups, or anything you want to remember. Binnie will turn it into clear next steps.</p>
       </div>
       <div className="luma-card mb-6 overflow-hidden focus-within:border-primary/40">
         <textarea value={input} onChange={e => setInput(e.target.value)}
-          placeholder={"Dump anything you need to remember or do…\n\nTry: \"ask Bu Desti to check website prices by Wednesday https://example.com\"\nOr: \"fix purchasing receipt flow because finance needs to calculate money return\""}
+          placeholder="Write whatever is on your mind…"
           className="min-h-[180px] w-full resize-none bg-transparent p-5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground sm:p-6" />
+        {attachments.length > 0 && <div className="flex flex-wrap gap-1.5 px-4 pb-3 sm:px-6">{attachments.map((attachment, index) => <span key={`${attachment}-${index}`} className="inline-flex max-w-full truncate rounded-full bg-secondary px-2.5 py-1 text-[10px] text-secondary-foreground">{attachment}</span>)}</div>}
         <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
           <div className="flex items-center gap-1">
-            {[{ icon: <Paperclip className="w-3.5 h-3.5" />, label: "File" }, { icon: <Link2 className="w-3.5 h-3.5" />, label: "Link" }, { icon: <FileText className="w-3.5 h-3.5" />, label: "Doc" }].map(({ icon, label }) => (
-              <button key={label} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">{icon} {label}</button>
-            ))}
+            <label className="flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Paperclip className="w-3.5 h-3.5" /> File<input className="sr-only" type="file" multiple onChange={event => addAttachments(event.target.files)} /></label>
+            <button onClick={() => setShowLinkInput(current => !current)} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Link2 className="w-3.5 h-3.5" /> Link</button>
+            <label className="flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><FileText className="w-3.5 h-3.5" /> Doc<input className="sr-only" type="file" accept=".pdf,.doc,.docx,.txt,.md" multiple onChange={event => addAttachments(event.target.files)} /></label>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {input && <span className="text-[11px] font-mono text-muted-foreground">{input.length} chars</span>}
             <button onClick={handleProcess} disabled={!input.trim() || processing}
               className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
                 input.trim() && !processing ? "bg-primary text-primary-foreground hover:bg-primary/85" : "cursor-not-allowed bg-muted text-muted-foreground")}>
-              {processing ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Organizing…</> : <><Sparkles className="w-3.5 h-3.5" />Organize with Luma</>}
+              {processing ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Organizing…</> : <><Sparkles className="w-3.5 h-3.5" />Organize with Binnie</>}
             </button>
           </div>
         </div>
+        {showLinkInput && <div className="flex items-center gap-2 border-t border-border bg-muted/25 px-4 py-3 sm:px-6"><Link2 className="h-3.5 w-3.5 flex-shrink-0 text-info" /><input autoFocus value={linkDraft} onChange={event => setLinkDraft(event.target.value)} onKeyDown={event => event.key === "Enter" && addLink()} placeholder="Paste a link" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" /><button onClick={addLink} disabled={!linkDraft.trim()} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary disabled:opacity-45">Add link</button></div>}
       </div>
       {processing && (
         <div className="luma-card mb-6 border-primary/20 p-6">
@@ -1251,7 +1417,7 @@ function InboxView() {
               <Sparkles className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">Luma is organizing your notes…</p>
+              <p className="text-sm font-medium text-foreground">Put it down. Binnie sorts it out.</p>
               <p className="text-[11px] text-muted-foreground">Looking for tasks, people, dates, and helpful context</p>
             </div>
           </div>
@@ -1268,8 +1434,8 @@ function InboxView() {
       {parsed.length > 0 && !processing && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Luma found {parsed.length} tasks</p>
-            <button onClick={() => setConfirmed(new Set(parsed.map((_, i) => i)))} className="text-[11px] text-primary hover:text-primary/80 transition-colors">Confirm All</button>
+            <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Binnie found {parsed.length} tasks</p>
+            <button onClick={confirmAll} className="text-[11px] text-primary hover:text-primary/80 transition-colors">Add All</button>
           </div>
           <div className="space-y-3">
             {parsed.map((pt, i) => {
@@ -1282,7 +1448,7 @@ function InboxView() {
                         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                           <OrgBadge org={pt.org} /><AreaBadge area={pt.area} /><PriorityBadge priority={pt.priority} />
                         </div>
-                        <p className="text-sm font-medium text-foreground">{pt.title}</p>
+                        {editing === i ? <div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={pt.title} onChange={event => updateParsed(i, { title: event.target.value })} className="rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /><select value={pt.org} onChange={event => updateParsed(i, { org: event.target.value as OrgName })} className="rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option>Villa Khayangan</option><option>Apotik</option><option>Personal</option></select><input value={pt.deadline || ""} onChange={event => updateParsed(i, { deadline: event.target.value })} placeholder="Target date" className="rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></div> : <p className="text-sm font-medium text-foreground">{pt.title}</p>}
                         <div className="flex items-center gap-4 mt-2 flex-wrap">
                           {pt.assignee && <div className="flex items-center gap-1.5"><Avatar name={pt.assignee} size="xs" /><span className="text-[11px] text-muted-foreground">Assigned to {pt.assignee}</span></div>}
                           {pt.deadline && <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" />Due {pt.deadline}</span>}
@@ -1296,8 +1462,8 @@ function InboxView() {
                         {isConfirmed
                           ? <div className="flex items-center gap-1.5 rounded-lg bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success"><Check className="w-3 h-3" /> Saved</div>
                           : <>
-                            <button onClick={() => setConfirmed(prev => new Set([...prev, i]))} className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/20 transition-colors">Confirm</button>
-                            <button className="px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-[11px] hover:text-foreground transition-colors">Edit</button>
+                            <button onClick={() => confirmTask(i)} className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/20 transition-colors">Confirm</button>
+                            <button onClick={() => setEditing(editing === i ? null : i)} className="px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-[11px] hover:text-foreground transition-colors">{editing === i ? "Done" : "Edit"}</button>
                           </>}
                       </div>
                     </div>
@@ -1314,7 +1480,7 @@ function InboxView() {
 
 // ─── DELEGATED VIEW ───────────────────────────────────────────────────────────
 
-function DelegatedView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPersonClick: (person: string) => void }) {
   const delegated = TASKS.filter(t => t.isDelegated && t.assignee);
   const byPerson: Record<string, Task[]> = {};
   delegated.forEach(t => { if (t.assignee) { byPerson[t.assignee] = [...(byPerson[t.assignee] || []), t]; } });
@@ -1334,17 +1500,17 @@ function DelegatedView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
             <div key={person} className="luma-card overflow-hidden">
               <div className="flex items-center gap-4 px-5 py-4 border-b border-border">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                  style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                  style={personColorStyle(color)}>
                   {getInitials(person)}
                 </div>
-                <div className="flex-1">
+                <button onClick={() => onPersonClick(person)} className="flex-1 text-left">
                   <h2 className="text-sm font-semibold text-foreground">{person}</h2>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{tasks.length} active · Last update: {tasks[0]?.lastUpdate || "Unknown"}</p>
-                </div>
+                </button>
                 <div className="flex items-center gap-2">
                   {overdue > 0 && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">{overdue} to revisit</span>}
                   <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{tasks.length} tasks</span>
-                  <button className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"><Send className="w-3.5 h-3.5" /></button>
+                  <button onClick={onFollowUp} aria-label={`Follow up with ${person}`} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"><Send className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
               <div className="p-3 space-y-1.5">
@@ -1375,7 +1541,16 @@ function DelegatedView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 // ─── NEEDS MY REVIEW VIEW ─────────────────────────────────────────────────────
 
 function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  const [, setRevision] = useState(0);
   const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
+  function approve(task: Task) {
+    Object.assign(task, { status: "done" as TaskStatus, isWaiting: false, isOverdue: false, nextActionBy: "me", lastUpdate: "Approved just now" });
+    setRevision(current => current + 1);
+  }
+  function requestRevision(task: Task) {
+    Object.assign(task, { status: "todo" as TaskStatus, isWaiting: true, nextActionBy: task.assignee || "me", lastUpdate: "Revision requested just now" });
+    setRevision(current => current + 1);
+  }
   return (
     <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
       <div className="mb-8">
@@ -1411,16 +1586,14 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 )}
                 {task.links && (
                   <div className="flex gap-2 mb-4">
-                    {task.links.map((l, i) => (
-                      <a key={i} href={l.url} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-muted/40 border border-border text-[11px] text-sky-400 hover:text-sky-300 transition-colors">
-                        <LinkIcon type={l.type} />{l.label}
-                      </a>
+                    {task.links.map((l, i) => l.url === "#" ? <span key={i} className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground"><LinkIcon type={l.type} />{l.label} · not connected</span> : (
+                      <a key={i} href={l.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] text-info transition-colors hover:text-foreground"><LinkIcon type={l.type} />{l.label}</a>
                     ))}
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button className="flex items-center gap-1.5 rounded-xl bg-success/10 px-4 py-2 text-[13px] font-medium text-success transition-colors hover:bg-success/15"><Check className="w-4 h-4" /> Approve</button>
-                  <button className="flex items-center gap-1.5 rounded-xl bg-warning/10 px-4 py-2 text-[13px] font-medium text-warning transition-colors hover:bg-warning/15"><RotateCcw className="w-4 h-4" /> Request Revision</button>
+                  <button onClick={() => approve(task)} className="flex items-center gap-1.5 rounded-xl bg-success/10 px-4 py-2 text-[13px] font-medium text-success transition-colors hover:bg-success/15"><Check className="w-4 h-4" /> Approve</button>
+                  <button onClick={() => requestRevision(task)} className="flex items-center gap-1.5 rounded-xl bg-warning/10 px-4 py-2 text-[13px] font-medium text-warning transition-colors hover:bg-warning/15"><RotateCcw className="w-4 h-4" /> Request Revision</button>
                   <button onClick={() => onTaskClick(task)} className="ml-auto flex items-center gap-1.5 rounded-xl bg-muted px-4 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Eye className="w-4 h-4" /> Open Details</button>
                 </div>
               </div>
@@ -1501,10 +1674,11 @@ function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const todayTasks = TASKS.filter(t => t.isToday && t.nextActionBy === "me");
+  const workspaceDate = getWorkspaceCalendarDate();
   return (
     <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
       <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Monday, 12 Aug</p>
+        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">{formatWorkspaceDate(workspaceDate, { weekday: "long", day: "numeric", month: "short" })}</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Today</h1>
         <p className="text-sm text-muted-foreground mt-1">{todayTasks.length} tasks · ~{todayTasks.reduce((a, t) => a + (t.estimatedHours || 0), 0)}h estimated</p>
       </div>
@@ -1541,32 +1715,39 @@ function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── THIS WEEK VIEW ───────────────────────────────────────────────────────────
 
-const DAYS = ["Mon 12", "Tue 13", "Wed 14", "Thu 15", "Fri 16"];
-const WEEK_TASKS: Record<string, Task[]> = {
-  "Mon 12": TASKS.filter(t => t.isToday),
-  "Tue 13": TASKS.filter(t => t.id === "t11"),
-  "Wed 14": TASKS.filter(t => t.id === "t1" || t.id === "t8"),
-  "Thu 15": TASKS.filter(t => t.id === "t6"),
-  "Fri 16": TASKS.filter(t => t.id === "t7"),
-};
-
 function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  const workspaceDate = getWorkspaceCalendarDate();
+  const weekdayIndex = (workspaceDate.getUTCDay() + 6) % 7;
+  const monday = new Date(workspaceDate);
+  monday.setUTCDate(workspaceDate.getUTCDate() - weekdayIndex);
+  const weekDays = Array.from({ length: 5 }, (_, index) => {
+    const date = new Date(monday);
+    date.setUTCDate(monday.getUTCDate() + index);
+    return { date, index, label: formatWorkspaceDate(date, { weekday: "short", day: "numeric" }) };
+  });
+  const plannedTasks: Record<number, Task[]> = {
+    0: TASKS.filter(task => task.id === "t11"),
+    1: TASKS.filter(task => task.id === "t1" || task.id === "t8"),
+    3: TASKS.filter(task => task.id === "t6"),
+    4: TASKS.filter(task => task.id === "t7"),
+  };
+  const todayTasks = TASKS.filter(task => task.isToday);
   return (
     <div className="h-full overflow-auto p-5 sm:p-8 lg:p-10">
       <div className="mb-6">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Week of 12 Aug</p>
+        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Week of {formatWorkspaceDate(monday, { day: "numeric", month: "short" })}</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>This Week</h1>
       </div>
       <div className="overflow-x-auto pb-2">
       <div className="grid min-h-[400px] min-w-[58rem] grid-cols-[repeat(5,minmax(10rem,1fr))] gap-4">
-        {DAYS.map((day, index) => {
-          const tasks = WEEK_TASKS[day] || [];
-          const isToday = day === "Mon 12";
+        {weekDays.map(({ date, index, label }) => {
+          const tasks = index === weekdayIndex ? todayTasks : plannedTasks[index] || [];
+          const isToday = index === weekdayIndex;
           const tint = ["bg-[#eae6ff]/60", "bg-[#dcede7]/60", "bg-[#ddebfa]/60", "bg-[#f8e3d3]/55", "bg-[#f5e7b8]/45"][index];
           return (
-            <div key={day} className={cn("luma-board-column flex flex-col", tint, isToday && "border-primary/45 shadow-[0_8px_22px_rgb(142_148_242_/_0.10)]")}>
+            <div key={date.toISOString()} className={cn("luma-board-column flex flex-col", tint, isToday && "border-primary/45 shadow-[0_8px_22px_rgb(142_148_242_/_0.10)]")}>
               <div className={cn("border-b px-2 pb-3", isToday ? "border-primary/25" : "border-border/75")}>
-                <p className={cn("text-[12px] font-semibold", isToday ? "text-primary" : "text-foreground")}>{day}</p>
+                <p className={cn("text-[12px] font-semibold", isToday ? "text-primary" : "text-foreground")}>{label}{isToday && <span className="ml-1.5 rounded-full bg-primary/12 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">Today</span>}</p>
                 <p className="text-[10px] text-muted-foreground font-mono">{tasks.length} tasks</p>
               </div>
               <div className="space-y-2.5 pt-3 flex-1">
@@ -1589,19 +1770,22 @@ function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── ALL TASKS VIEW (NEW) ─────────────────────────────────────────────────────
 
-type QuickFilter = "mine" | "delegated" | "no-deadline" | "due-soon" | "overdue" | "waiting" | "completed" | null;
+type QuickFilter = "no-deadline" | "due-soon" | "overdue" | "review" | "has-files" | "high-priority";
 type SortBy = "deadline" | "priority" | "updated" | "org";
 
-function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept as a migration fallback while task data is local mock state.
+function LegacyAllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) => void; onNewTask: () => void }) {
   const [search, setSearch] = useState("");
-  const [qf, setQf] = useState<QuickFilter>(null);
+  const [secondaryFilters, setSecondaryFilters] = useState<QuickFilter[]>([]);
   const [ownershipTab, setOwnershipTab] = useState<"all" | "mine" | "delegated" | "waiting" | "done">("all");
   const [taskLayout, setTaskLayout] = useState<"list" | "board">("list");
   const [sortBy, setSortBy] = useState<SortBy>("deadline");
   const [showFilters, setShowFilters] = useState(false);
   const [filterOrg, setFilterOrg] = useState<OrgName | null>(null);
-  const [filterStatus, setFilterStatus] = useState<TaskStatus | null>(null);
-  const [filterPriority, setFilterPriority] = useState<Priority | null>(null);
+  const [filterArea, setFilterArea] = useState<AreaName | null>(null);
+  const [filterProject, setFilterProject] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
+  const [filterDeadline, setFilterDeadline] = useState<"all" | "today" | "tomorrow" | "overdue" | "no-deadline">("all");
 
   const PRIORITY_ORDER: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
@@ -1611,19 +1795,23 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       if (!t.title.toLowerCase().includes(q) && !t.org.toLowerCase().includes(q) && !t.area.toLowerCase().includes(q) && !(t.assignee || "").toLowerCase().includes(q)) return false;
     }
     if (filterOrg && t.org !== filterOrg) return false;
-    if (filterStatus && t.status !== filterStatus) return false;
-    if (filterPriority && t.priority !== filterPriority) return false;
+    if (filterArea && t.area !== filterArea) return false;
+    if (filterProject && t.project !== filterProject) return false;
+    if (filterAssignee && t.assignee !== filterAssignee) return false;
     if (ownershipTab === "mine" && t.nextActionBy !== "me") return false;
     if (ownershipTab === "delegated" && !t.isDelegated) return false;
     if (ownershipTab === "waiting" && !t.isWaiting) return false;
     if (ownershipTab === "done" && t.status !== "done") return false;
-    if (qf === "mine" && t.nextActionBy !== "me") return false;
-    if (qf === "delegated" && !t.isDelegated) return false;
-    if (qf === "no-deadline" && t.deadline) return false;
-    if (qf === "overdue" && !t.isOverdue) return false;
-    if (qf === "waiting" && !t.isWaiting) return false;
-    if (qf === "completed" && t.status !== "done") return false;
-    if (qf === "due-soon" && !t.isToday) return false;
+    if (filterDeadline === "today" && !t.isToday && t.deadline !== "Today") return false;
+    if (filterDeadline === "tomorrow" && t.deadline !== "Tomorrow") return false;
+    if (filterDeadline === "overdue" && !t.isOverdue) return false;
+    if (filterDeadline === "no-deadline" && t.deadline) return false;
+    if (secondaryFilters.includes("no-deadline") && t.deadline) return false;
+    if (secondaryFilters.includes("overdue") && !t.isOverdue) return false;
+    if (secondaryFilters.includes("due-soon") && !t.isToday && t.deadline !== "Tomorrow") return false;
+    if (secondaryFilters.includes("review") && t.status !== "review") return false;
+    if (secondaryFilters.includes("has-files") && !t.files?.length) return false;
+    if (secondaryFilters.includes("high-priority") && t.priority !== "urgent" && t.priority !== "high") return false;
     return true;
   });
 
@@ -1633,15 +1821,27 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
     return 0;
   });
 
-  const quickFilters: { id: QuickFilter; label: string; count: number }[] = [
-    { id: "mine", label: "My Tasks", count: TASKS.filter(t => t.nextActionBy === "me").length },
-    { id: "delegated", label: "Delegated", count: TASKS.filter(t => t.isDelegated).length },
+  const secondaryFilterOptions: { id: QuickFilter; label: string; count: number }[] = [
     { id: "no-deadline", label: "No Deadline", count: TASKS.filter(t => !t.deadline).length },
-    { id: "due-soon", label: "Due Soon", count: TASKS.filter(t => t.isToday).length },
+    { id: "due-soon", label: "Due Soon", count: TASKS.filter(t => t.isToday || t.deadline === "Tomorrow").length },
     { id: "overdue", label: "Overdue", count: TASKS.filter(t => t.isOverdue).length },
-    { id: "waiting", label: "Waiting", count: TASKS.filter(t => t.isWaiting).length },
-    { id: "completed", label: "Completed", count: TASKS.filter(t => t.status === "done").length },
+    { id: "review", label: "Needs Review", count: TASKS.filter(t => t.status === "review").length },
+    { id: "has-files", label: "Has Files", count: TASKS.filter(t => t.files?.length).length },
+    { id: "high-priority", label: "High Priority", count: TASKS.filter(t => t.priority === "urgent" || t.priority === "high").length },
   ];
+  const areas = Array.from(new Set(TASKS.map(task => task.area)));
+  const projects = Array.from(new Set(TASKS.map(task => task.project).filter((project): project is string => Boolean(project))));
+  const assignees = Array.from(new Set(TASKS.map(task => task.assignee).filter((assignee): assignee is string => Boolean(assignee))));
+  const activeFilterCount = secondaryFilters.length + Number(Boolean(filterOrg)) + Number(Boolean(filterArea)) + Number(Boolean(filterProject)) + Number(Boolean(filterAssignee)) + Number(filterDeadline !== "all");
+  const toggleSecondaryFilter = (filter: QuickFilter) => setSecondaryFilters(current => current.includes(filter) ? current.filter(item => item !== filter) : [...current, filter]);
+  const clearAllFilters = () => {
+    setSecondaryFilters([]);
+    setFilterOrg(null);
+    setFilterArea(null);
+    setFilterProject(null);
+    setFilterAssignee(null);
+    setFilterDeadline("all");
+  };
   const boardColumns: { id: TaskStatus; label: string; tint: string; dot: string }[] = [
     { id: "todo", label: "To Do", tint: "luma-tint-lavender", dot: "bg-primary" },
     { id: "in_progress", label: "In Progress", tint: "luma-tint-mint", dot: "bg-success" },
@@ -1656,8 +1856,8 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       <div className="sticky top-0 z-10 border-b border-border bg-background/85 px-4 py-4 backdrop-blur-sm sm:px-6">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex-1">
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-0.5">Master List</p>
-            <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>All Tasks</h1>
+            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-0.5">Task workspace</p>
+            <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Tasks</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors focus-within:border-primary/40 sm:w-64">
@@ -1668,8 +1868,7 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
             </div>
             <button onClick={() => setShowFilters(!showFilters)}
               className={cn("flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[12px] transition-colors", showFilters ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/25 hover:text-foreground")}>
-              <SlidersHorizontal className="w-3.5 h-3.5" />Filters
-              {(filterOrg || filterStatus || filterPriority) && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+              <SlidersHorizontal className="w-3.5 h-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filters"}
             </button>
             <div className="relative">
               <select value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}
@@ -1681,7 +1880,7 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
               </select>
               <ArrowUpDown className="w-3 h-3 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-            <button className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">
+            <button onClick={onNewTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">
               <Plus className="w-3.5 h-3.5" />New Task
             </button>
             <div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1" aria-label="Task layout">
@@ -1701,55 +1900,23 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
             <button key={tab.id} onClick={() => setOwnershipTab(tab.id)} className={cn("rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors", ownershipTab === tab.id ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{tab.label}</button>
           ))}
         </div>
-        {/* Quick filters */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {quickFilters.map(f => (
-            <button key={f.id} onClick={() => setQf(qf === f.id ? null : f.id)}
-              className={cn("flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border",
-                qf === f.id
-                  ? f.id === "overdue" ? "border-overdue/25 bg-overdue/10 text-overdue" : "border-primary/30 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/25 hover:text-foreground")}>
-              {f.label}
-              <span className={cn("font-mono", qf === f.id ? "" : "text-muted-foreground/60")}>{f.count}</span>
-            </button>
-          ))}
-          {qf && <button onClick={() => setQf(null)} className="text-[11px] text-muted-foreground hover:text-foreground ml-1">Clear</button>}
-        </div>
         {/* Filter panel */}
         {showFilters && (
-          <div className="mt-3 pt-3 border-t border-border flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-muted-foreground">Org:</span>
-              <div className="flex gap-1">
-                {(["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => {
-                  const c = ORG_COLORS[org];
-                  return (
-                    <button key={org} onClick={() => setFilterOrg(filterOrg === org ? null : org)}
-                      className={cn("px-2 py-1 rounded text-[11px] transition-colors border", filterOrg === org ? cn(c.bg, c.text, c.border) : "border-border text-muted-foreground hover:text-foreground")}>
-                      {org.split(" ")[0]}
-                    </button>
-                  );
-                })}
+          <div className="mt-3 rounded-2xl border border-border bg-card/90 p-4 shadow-[0_8px_24px_rgb(35_41_61_/_0.06)]">
+            <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Refine your view</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add one or more conditions without changing your task view.</p></div>{activeFilterCount > 0 && <button onClick={clearAllFilters} className="text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground">Clear all</button>}</div>
+            <div className="border-t border-border pt-3">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Task conditions</p>
+              <div className="flex flex-wrap gap-1.5">
+                {secondaryFilterOptions.map(filter => <button key={filter.id} onClick={() => toggleSecondaryFilter(filter.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition-colors", secondaryFilters.includes(filter.id) ? filter.id === "overdue" ? "border-overdue/25 bg-overdue/10 text-overdue" : "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/25 hover:text-foreground")}>{filter.label}<span className="ml-1.5 font-mono opacity-65">{filter.count}</span></button>)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-muted-foreground">Priority:</span>
-              <div className="flex gap-1">
-                {(["urgent", "high", "medium", "low"] as Priority[]).map(p => {
-                  const c = PRIORITY_CONFIG[p];
-                  return (
-                    <button key={p} onClick={() => setFilterPriority(filterPriority === p ? null : p)}
-                      className={cn("px-2 py-1 rounded text-[11px] transition-colors border capitalize", filterPriority === p ? cn(c.bg, c.color) : "border-border text-muted-foreground hover:text-foreground")}>
-                      {p}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="mt-4 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-3">
+              <label className="text-[10px] font-medium text-muted-foreground">Organization<select value={filterOrg || ""} onChange={event => setFilterOrg(event.target.value as OrgName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All organizations</option>{ORGS_META.map(org => <option key={org.name} value={org.name}>{org.name}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Area<select value={filterArea || ""} onChange={event => setFilterArea(event.target.value as AreaName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All areas</option>{areas.map(area => <option key={area} value={area}>{area}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject || ""} onChange={event => setFilterProject(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All projects</option>{projects.map(project => <option key={project} value={project}>{project}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Assignee<select value={filterAssignee || ""} onChange={event => setFilterAssignee(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">Anyone</option>{assignees.map(assignee => <option key={assignee} value={assignee}>{assignee}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Deadline<select value={filterDeadline} onChange={event => setFilterDeadline(event.target.value as typeof filterDeadline)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any target date</option><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="overdue">Past target</option><option value="no-deadline">No target date</option></select></label>
             </div>
-            {(filterOrg || filterStatus || filterPriority) && (
-              <button onClick={() => { setFilterOrg(null); setFilterStatus(null); setFilterPriority(null); }}
-                className="text-[11px] text-muted-foreground hover:text-foreground ml-auto">Clear filters</button>
-            )}
           </div>
         )}
       </div>
@@ -1803,12 +1970,110 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
       <div className="px-4 py-2.5 border-t border-border bg-muted/20 flex items-center gap-3">
         <span className="text-[11px] font-mono text-muted-foreground">{tasks.length} of {TASKS.length} tasks</span>
-        {(search || qf || filterOrg || filterStatus || filterPriority) && (
+        {(search || activeFilterCount > 0) && (
           <span className="text-[11px] text-primary">Filtered</span>
         )}
       </div>
     </div>
   );
+}
+
+// ─── TASKS WORKSPACE ──────────────────────────────────────────────────────────
+
+type TaskScope = "month" | "carried" | "unscheduled" | "done";
+type TaskStateFilter = "all" | "mine" | "delegated" | "waiting" | "review";
+type TaskDeadlineFilter = "all" | "today" | "this-week" | "overdue" | "no-date";
+
+function TaskWorkspaceRow({ task, onClick, archived = false }: { task: Task; onClick: () => void; archived?: boolean }) {
+  const nextAction = task.status === "review"
+    ? "Needs my review"
+    : task.isWaiting
+      ? `Waiting on ${task.nextActionBy === "me" ? "you" : task.nextActionBy}`
+      : task.isDelegated
+        ? `Assigned to ${task.assignee || task.nextActionBy}`
+        : task.status === "in_progress"
+          ? "In progress · Next: Me"
+          : "Next: Me";
+  const target = task.deadline ? `${task.isOverdue ? "Past target · " : "Target "}${task.deadline}` : "No target date";
+  return (
+    <button onClick={onClick} className={cn("group flex w-full items-start gap-3 border-b border-border/70 px-4 py-5 text-left transition-colors hover:bg-primary/[0.025] sm:px-5", task.isOverdue && "bg-overdue/[0.025]")}>
+      <span className="mt-1.5 flex-shrink-0"><PriorityDot priority={task.priority} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-start gap-3"><span className="min-w-0 flex-1"><span className="block text-[14px] font-medium leading-6 text-foreground">{task.title}</span><span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground"><OrgBadge org={task.org} /><span>·</span><AreaBadge area={task.area} />{task.project && <><span>·</span><span className="truncate">{task.project}</span></>}</span></span><ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" /></span>
+        <span className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px]"><span className={cn("inline-flex items-center gap-1.5", task.status === "review" ? "text-review" : task.isWaiting ? "text-info" : "text-muted-foreground")}><StatusDot status={task.status} />{nextAction}</span><span className="text-border">·</span><span className={cn(task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{target}</span>{archived && <><span className="text-border">·</span><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Archived</span></>}</span>
+      </span>
+    </button>
+  );
+}
+
+function AllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) => void; onNewTask: () => void }) {
+  const [scope, setScope] = useState<TaskScope>("month");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("deadline");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showStaleReview, setShowStaleReview] = useState(true);
+  const [filterOrg, setFilterOrg] = useState<OrgName | null>(null);
+  const [filterArea, setFilterArea] = useState<AreaName | null>(null);
+  const [filterProject, setFilterProject] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
+  const [filterState, setFilterState] = useState<TaskStateFilter>("all");
+  const [filterPriority, setFilterPriority] = useState<Priority | "all">("all");
+  const [filterDeadline, setFilterDeadline] = useState<TaskDeadlineFilter>("all");
+  const [hasFilesOnly, setHasFilesOnly] = useState(false);
+
+  const priorityOrder: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  const allSearchableTasks = [...TASKS, ...ARCHIVED_TASKS];
+  const isActive = (task: Task) => task.status !== "done" && !task.archived;
+  const currentMonth = formatWorkspaceDate(getWorkspaceCalendarDate(), { month: "short" });
+  const hasCurrentMonthTarget = (task: Task) => Boolean(task.deadline) && (task.deadline === "Today" || task.deadline === "Tomorrow" || task.deadline === "Yesterday" || task.deadline!.includes(currentMonth) || !/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(task.deadline!));
+  const isInScope = (task: Task) => {
+    if (scope === "month") return isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task);
+    if (scope === "carried") return isActive(task) && Boolean(task.carriedOver || (task.isOverdue && !hasCurrentMonthTarget(task)));
+    if (scope === "unscheduled") return isActive(task) && !task.deadline;
+    return task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task));
+  };
+  const matchesFilters = (task: Task) => {
+    if (filterOrg && task.org !== filterOrg) return false;
+    if (filterArea && task.area !== filterArea) return false;
+    if (filterProject && task.project !== filterProject) return false;
+    if (filterAssignee && task.assignee !== filterAssignee) return false;
+    if (filterState === "mine" && task.nextActionBy !== "me") return false;
+    if (filterState === "delegated" && !task.isDelegated) return false;
+    if (filterState === "waiting" && !task.isWaiting) return false;
+    if (filterState === "review" && task.status !== "review") return false;
+    if (filterPriority !== "all" && task.priority !== filterPriority) return false;
+    if (filterDeadline === "today" && !task.isToday && task.deadline !== "Today") return false;
+    if (filterDeadline === "this-week" && !task.isToday && !hasCurrentMonthTarget(task)) return false;
+    if (filterDeadline === "overdue" && !task.isOverdue) return false;
+    if (filterDeadline === "no-date" && task.deadline) return false;
+    if (hasFilesOnly && !task.files?.length) return false;
+    return true;
+  };
+  const matchesSearch = (task: Task) => {
+    const query = search.trim().toLowerCase();
+    return !query || [task.title, task.org, task.area, task.project, task.assignee, task.deadline].filter(Boolean).some(value => value!.toLowerCase().includes(query));
+  };
+  const sourceTasks = showArchive ? ARCHIVED_TASKS : search.trim() ? allSearchableTasks : TASKS.filter(isInScope);
+  const tasks = sourceTasks.filter(task => matchesSearch(task) && matchesFilters(task)).sort((a, b) => sortBy === "priority" ? priorityOrder[a.priority] - priorityOrder[b.priority] : sortBy === "org" ? a.org.localeCompare(b.org) : 0);
+  const areas = Array.from(new Set(allSearchableTasks.map(task => task.area)));
+  const projects = Array.from(new Set(allSearchableTasks.map(task => task.project).filter((project): project is string => Boolean(project))));
+  const assignees = Array.from(new Set(allSearchableTasks.map(task => task.assignee).filter((assignee): assignee is string => Boolean(assignee))));
+  const carriedTasks = TASKS.filter(task => isActive(task) && task.carriedOver);
+  const longStaleTasks = carriedTasks.filter(task => (task.staleDays || 0) > 30);
+  const activeFilterCount = Number(Boolean(filterOrg)) + Number(Boolean(filterArea)) + Number(Boolean(filterProject)) + Number(Boolean(filterAssignee)) + Number(filterState !== "all") + Number(filterPriority !== "all") + Number(filterDeadline !== "all") + Number(hasFilesOnly);
+  const clearFilters = () => { setFilterOrg(null); setFilterArea(null); setFilterProject(null); setFilterAssignee(null); setFilterState("all"); setFilterPriority("all"); setFilterDeadline("all"); setHasFilesOnly(false); };
+  const scopeTabs: { id: TaskScope; label: string; count: number }[] = [
+    { id: "month", label: "This Month", count: TASKS.filter(task => isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task)).length },
+    { id: "carried", label: "Carried Over", count: carriedTasks.length },
+    { id: "unscheduled", label: "Unscheduled", count: TASKS.filter(task => isActive(task) && !task.deadline).length },
+    { id: "done", label: "Done", count: TASKS.filter(task => task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task))).length },
+  ];
+  const scopeHelp: Record<TaskScope, string> = { month: "Current work with a target this month.", carried: "Unfinished work brought forward from an earlier period.", unscheduled: "Active work without a target date yet.", done: "Completed work from this month." };
+
+  if (showArchive) return <div className="mx-auto w-full max-w-4xl p-5 sm:p-8 lg:p-10"><button onClick={() => setShowArchive(false)} className="mb-5 inline-flex items-center gap-1.5 text-[12px] text-muted-foreground transition-colors hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" />Back to Tasks</button><div className="mb-6"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">History</p><h1 className="luma-heading mt-1 text-3xl font-bold text-foreground">Archive</h1><p className="mt-1.5 text-sm text-muted-foreground">Completed work that is safely kept for reference.</p></div><div className="overflow-hidden rounded-[1.35rem] border border-border bg-card">{tasks.length ? tasks.map(task => <TaskWorkspaceRow key={task.id} task={task} archived onClick={() => onTaskClick(task)} />) : <p className="px-5 py-14 text-center text-sm text-muted-foreground">No archived tasks match these filters.</p>}</div></div>;
+
+  return <div className="mx-auto w-full max-w-4xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="luma-heading text-3xl font-bold text-foreground">Tasks</h1><p className="mt-1.5 text-sm text-muted-foreground">Everything that still needs your attention.</p></div><button onClick={() => setShowArchive(true)} className="w-fit rounded-xl px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Archive</button></div><div className="mb-5 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card/75 p-1">{scopeTabs.map(tab => <button key={tab.id} onClick={() => setScope(tab.id)} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium transition-colors", scope === tab.id ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{tab.label}<span className="ml-1.5 text-[10px] opacity-65">{tab.count}</span></button>)}</div><div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center"><p className="flex-1 text-[11px] text-muted-foreground">{scopeHelp[scope]}</p><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[13rem] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 sm:flex-none"><Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search tasks and archive…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{search && <button onClick={() => setSearch("")} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setShowFilters(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[12px] transition-colors", showFilters ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/25 hover:text-foreground")}><span className="inline-flex items-center gap-1.5"><SlidersHorizontal className="h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filters"}</span></button><select value={sortBy} onChange={event => setSortBy(event.target.value as SortBy)} className="rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground"><option value="deadline">Sort: Target date</option><option value="priority">Sort: Priority</option><option value="org">Sort: Organization</option><option value="updated">Sort: Updated</option></select><button onClick={onNewTask} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" />New Task</button></div></div>{showFilters && <div className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-[0_8px_24px_rgb(35_41_61_/_0.06)]"><div className="mb-3 flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Refine your view</p><p className="mt-0.5 text-[10px] text-muted-foreground">Filters stay tucked away until you need them.</p></div>{activeFilterCount > 0 && <button onClick={clearFilters} className="text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear all</button>}</div><div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-3"><label className="text-[10px] font-medium text-muted-foreground">Organization<select value={filterOrg || ""} onChange={event => setFilterOrg(event.target.value as OrgName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All organizations</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Area<select value={filterArea || ""} onChange={event => setFilterArea(event.target.value as AreaName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All areas</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject || ""} onChange={event => setFilterProject(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All projects</option>{projects.map(project => <option key={project}>{project}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assignee<select value={filterAssignee || ""} onChange={event => setFilterAssignee(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">Anyone</option>{assignees.map(assignee => <option key={assignee}>{assignee}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Work state<select value={filterState} onChange={event => setFilterState(event.target.value as TaskStateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any state</option><option value="mine">Mine</option><option value="delegated">Delegated</option><option value="waiting">Waiting</option><option value="review">Needs review</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={event => setFilterPriority(event.target.value as Priority | "all")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any priority</option><option value="urgent">Needs attention</option><option value="high">Important</option><option value="medium">Planned</option><option value="low">When there’s room</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Deadline<select value={filterDeadline} onChange={event => setFilterDeadline(event.target.value as TaskDeadlineFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any target date</option><option value="today">Today</option><option value="this-week">This week</option><option value="overdue">Past target</option><option value="no-date">No target date</option></select></label><label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={event => setHasFilesOnly(event.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />Has files</label></div></div>}{showStaleReview && longStaleTasks.length > 0 && <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-warning/20 bg-warning/[0.07] p-4 sm:flex-row sm:items-center"><div className="flex-1"><p className="text-[13px] font-semibold text-foreground">{longStaleTasks.length} {longStaleTasks.length === 1 ? "task has" : "tasks have"} been carried over for more than 30 days.</p><p className="mt-1 text-[11px] text-muted-foreground">Take a quiet moment to decide what still matters.</p></div><div className="flex gap-2"><button onClick={() => setScope("carried")} className="rounded-xl bg-card px-3 py-2 text-[11px] font-medium text-foreground shadow-sm">Review them</button><button onClick={() => setShowStaleReview(false)} className="rounded-xl px-3 py-2 text-[11px] text-muted-foreground hover:bg-card/50">Not now</button></div></div>}<div className="overflow-hidden rounded-[1.35rem] border border-border bg-card shadow-[0_3px_16px_var(--theme-shadow)]">{tasks.length ? tasks.map(task => <TaskWorkspaceRow key={task.id} task={task} archived={Boolean(task.archived)} onClick={() => onTaskClick(task)} />) : <div className="px-5 py-14 text-center"><ListTodo className="mx-auto mb-3 h-9 w-9 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">Nothing to show here right now.</p><p className="mt-1 text-[12px] text-muted-foreground">The rest of your work is safely organized.</p></div>}</div><p className="mt-3 text-[11px] text-muted-foreground">{search ? `${tasks.length} search result${tasks.length === 1 ? "" : "s"} across current work and archive.` : `${tasks.length} task${tasks.length === 1 ? "" : "s"} in this view.`}</p></div>;
 }
 
 // ─── PEOPLE / ACCOUNTABILITY VIEW (NEW) ───────────────────────────────────────
@@ -1883,7 +2148,7 @@ function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }
               className="luma-card luma-card-hover group w-full p-5 text-left">
               <div className="flex items-center gap-4">
                 <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                  style={personColorStyle(color)}>
                   {getInitials(person.name)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1927,7 +2192,7 @@ function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }
 
 // ─── PERSON DETAIL VIEW (NEW) ─────────────────────────────────────────────────
 
-function PersonDetailView({ personName, onBack, onTaskClick }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
+function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void; onFollowUp: () => void }) {
   const person = PEOPLE_DATA.find(p => p.name === personName);
   if (!person) return null;
   const color = getPersonColor(person.name);
@@ -1949,7 +2214,7 @@ function PersonDetailView({ personName, onBack, onTaskClick }: { personName: str
       <div className="luma-card mb-6 overflow-hidden p-5 sm:p-6">
         <div className="flex items-center gap-4 mb-5">
           <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold"
-            style={{ backgroundColor: color + "22", color, border: `2px solid ${color}44` }}>
+            style={personColorStyle(color, 2)}>
             {getInitials(person.name)}
           </div>
           <div className="flex-1">
@@ -1961,10 +2226,10 @@ function PersonDetailView({ personName, onBack, onTaskClick }: { personName: str
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors flex items-center gap-1.5">
+            <button onClick={onFollowUp} className="px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5" />Message
             </button>
-            <button className="px-3 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-[12px] hover:text-foreground transition-colors flex items-center gap-1.5">
+            <button onClick={onFollowUp} className="px-3 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-[12px] hover:text-foreground transition-colors flex items-center gap-1.5">
               <Send className="w-3.5 h-3.5" />Follow Up
             </button>
           </div>
@@ -2013,193 +2278,316 @@ const ORGS_META: { name: OrgName; desc: string; areas: AreaName[] }[] = [
   { name: "Personal", desc: "Personal projects & finances", areas: ["Finance"] },
 ];
 
-function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick }: {
-  orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void;
-}) {
-  const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
-  const orgMeta = ORGS_META.find(o => o.name === orgName)!;
-  const c = ORG_COLORS[orgName];
-  const orgTasks = TASKS.filter(t => t.org === orgName);
-  const filteredTasks = selectedArea ? orgTasks.filter(t => t.area === selectedArea) : orgTasks;
-  const orgProjects = STRATEGIC_PROJECTS.filter(p => p.org === orgName);
-  const orgPeople = PEOPLE_DATA.filter(p => p.org === orgName);
-  const resources = ORG_RESOURCES[orgName];
+type OrgTaskFilter = "all" | "today" | "mine" | "delegated" | "waiting" | "review" | "overdue";
+type OrgTaskSort = "deadline" | "priority" | "title" | "updated";
+type ResourceDraft = { label: string; type: ResourceType; url: string; area: string; project: string; description: string };
 
-  const stats = [
-    { label: "Today", value: orgTasks.filter(t => t.isToday).length, color: "text-primary" },
-    { label: "This Week", value: orgTasks.length, color: "text-foreground" },
-    { label: "Dates to revisit", value: orgTasks.filter(t => t.isOverdue).length, color: "text-overdue" },
-    { label: "Waiting", value: orgTasks.filter(t => t.isWaiting).length, color: "text-info" },
-    { label: "Delegated", value: orgTasks.filter(t => t.isDelegated).length, color: "text-success" },
-    { label: "Review", value: orgTasks.filter(t => t.status === "review").length, color: "text-review" },
+const EMPTY_RESOURCE_DRAFT: ResourceDraft = { label: "", type: "website", url: "", area: "", project: "", description: "" };
+
+function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigate, onPersonClick }: {
+  orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void; onNavigate: (view: NavView) => void; onPersonClick: (person: string) => void;
+}) {
+  const orgMeta = ORGS_META.find(o => o.name === orgName);
+  const c = ORG_COLORS[orgName] || ORG_COLORS.Personal;
+  const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
+  const [areas, setAreas] = useState<AreaName[]>(() => orgMeta?.areas || []);
+  const [projects, setProjects] = useState(() => STRATEGIC_PROJECTS.filter(project => project.org === orgName));
+  const [resources, setResources] = useState<OrganizationResource[]>(() => ORG_RESOURCES[orgName] || []);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [archived, setArchived] = useState(false);
+  const [orgTitle, setOrgTitle] = useState(orgName);
+  const [orgDescription, setOrgDescription] = useState(orgMeta?.desc || "");
+  const [orgAccent, setOrgAccent] = useState("Slate blue");
+  const [orgIcon, setOrgIcon] = useState("Rounded marker");
+  const [defaultTimezone, setDefaultTimezone] = useState("Asia/Jakarta");
+  const [defaultArea, setDefaultArea] = useState<AreaName>(orgMeta?.areas[0] || "Operations");
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [resourceFormOpen, setResourceFormOpen] = useState(false);
+  const [resourceManagerOpen, setResourceManagerOpen] = useState(false);
+  const [areasOpen, setAreasOpen] = useState(false);
+  const [orgSettingsOpen, setOrgSettingsOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [newArea, setNewArea] = useState("");
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilterOpen, setTaskFilterOpen] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<OrgTaskFilter>("all");
+  const [taskPriority, setTaskPriority] = useState<Priority | "all">("all");
+  const [taskProject, setTaskProject] = useState("");
+  const [dateFilter, setDateFilter] = useState<"all" | "dated" | "none">("all");
+  const [taskSort, setTaskSort] = useState<OrgTaskSort>("deadline");
+  const [showAllWork, setShowAllWork] = useState(false);
+  const [quickMenuTaskId, setQuickMenuTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
+  const [generatedFollowUp, setGeneratedFollowUp] = useState<string | null>(null);
+  const [copiedFollowUp, setCopiedFollowUp] = useState<string | null>(null);
+  const [showActivity, setShowActivity] = useState(false);
+  const [resourceDraft, setResourceDraft] = useState<ResourceDraft>(EMPTY_RESOURCE_DRAFT);
+  const [editingResourceIndex, setEditingResourceIndex] = useState<number | null>(null);
+  const [resourceError, setResourceError] = useState("");
+  const [projectDraft, setProjectDraft] = useState({ name: "", area: orgMeta?.areas[0] || "Operations", description: "", target: "", owner: "Charlotte", focus: "" });
+  const [projectError, setProjectError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [orgName]);
+
+  if (!orgMeta) {
+    return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Organizations" onClick={onBack} /><div className="luma-card p-8 text-center"><Building2 className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Organization not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p><button onClick={onBack} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Back to organizations</button></div></div>;
+  }
+
+  const refreshWorkspace = (notice?: string) => {
+    setWorkspaceRevision(current => current + 1);
+    if (notice) {
+      setMessage(notice);
+      window.setTimeout(() => setMessage(""), 2400);
+    }
+  };
+  void workspaceRevision;
+
+  const orgTasks = TASKS.filter(task => task.org === orgName && !task.archived);
+  const scopedAreaTasks = selectedArea ? orgTasks.filter(task => task.area === selectedArea) : orgTasks;
+  const taskMatchesFilter = (task: Task) => {
+    if (taskFilter === "today" && !task.isToday) return false;
+    if (taskFilter === "mine" && task.nextActionBy !== "me") return false;
+    if (taskFilter === "delegated" && !task.isDelegated) return false;
+    if (taskFilter === "waiting" && !task.isWaiting) return false;
+    if (taskFilter === "review" && task.status !== "review") return false;
+    if (taskFilter === "overdue" && !task.isOverdue) return false;
+    if (taskPriority !== "all" && task.priority !== taskPriority) return false;
+    if (taskProject && task.project !== taskProject) return false;
+    if (dateFilter === "dated" && !task.deadline) return false;
+    if (dateFilter === "none" && task.deadline) return false;
+    if (taskSearch && ![task.title, task.area, task.project || "", task.assignee || "", task.nextActionBy].join(" ").toLowerCase().includes(taskSearch.toLowerCase())) return false;
+    return true;
+  };
+  const filteredTasks = [...scopedAreaTasks.filter(taskMatchesFilter)].sort((left, right) => {
+    if (taskSort === "title") return left.title.localeCompare(right.title);
+    if (taskSort === "priority") return ["urgent", "high", "medium", "low"].indexOf(left.priority) - ["urgent", "high", "medium", "low"].indexOf(right.priority);
+    if (taskSort === "updated") return (right.lastUpdate || "").localeCompare(left.lastUpdate || "");
+    return (left.deadline || "zzzz").localeCompare(right.deadline || "zzzz");
+  });
+  const visibleTasks = showAllWork ? filteredTasks : filteredTasks.slice(0, 8);
+  const scopedProjects = projects.filter(project => !selectedArea || PROJECT_DETAILS[project.id]?.area === selectedArea);
+  const scopedPeople = PEOPLE_DATA.filter(person => person.org === orgName && (!selectedArea || orgTasks.some(task => task.area === selectedArea && (task.assignee === person.name || task.nextActionBy === person.name))));
+  const attentionTasks = scopedAreaTasks.filter(task => task.isOverdue || task.status === "review" || (task.isWaiting && task.waitingSince));
+  const activityEntries: Array<Activity & { key: string; task?: Task; project?: { id: string } }> = [
+    ...orgTasks.flatMap(task => (task.activity || []).slice(-1).map(activity => ({ ...activity, key: `${task.id}-${activity.time}`, task }))),
+    ...projects.flatMap(project => (PROJECT_DETAILS[project.id]?.recentActivity || []).slice(0, 1).map(activity => ({ ...activity, key: `${project.id}-${activity.time}`, project }))),
+  ].slice(0, showActivity ? 10 : 4);
+  const projectNames = projects.map(project => project.name);
+  const activeFilterCount = Number(taskFilter !== "all") + Number(taskPriority !== "all") + Number(Boolean(taskProject)) + Number(dateFilter !== "all");
+  const accentColor = orgAccent === "Dusty sage" ? "var(--success)" : orgAccent === "Warm stone" ? "var(--warning)" : "var(--org-villa-dot)";
+
+  function completeTask(task: Task) {
+    Object.assign(task, { status: "done" as TaskStatus, isWaiting: false, isOverdue: false, nextActionBy: "me", lastUpdate: "Just now", completedInCurrentMonth: true });
+    refreshWorkspace("Task completed");
+  }
+
+  function rescheduleTask(task: Task) {
+    Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
+    refreshWorkspace("Rescheduled for tomorrow");
+  }
+
+  function reassignTask(task: Task) {
+    const people = scopedPeople.map(person => person.name);
+    const next = people[(Math.max(people.indexOf(task.assignee || ""), -1) + 1) % Math.max(people.length, 1)] || "Bu Desti";
+    Object.assign(task, { assignee: next, nextActionBy: next, isDelegated: true, isWaiting: true, lastUpdate: `Assigned to ${next}` });
+    refreshWorkspace(`Assigned to ${next}`);
+  }
+
+  function duplicateTask(task: Task) {
+    TASKS.push({ ...task, id: `duplicate-${Date.now()}`, title: `Copy of ${task.title}`, status: "todo", isWaiting: false, isOverdue: false, nextActionBy: "me", assignee: undefined, isDelegated: false, lastUpdate: "Just now" });
+    refreshWorkspace("Task duplicated");
+  }
+
+  function moveTaskToProject(task: Task) {
+    const target = projects.find(project => project.name !== task.project);
+    if (!target) return refreshWorkspace("Create another project to move this task");
+    Object.assign(task, { project: target.name, area: PROJECT_DETAILS[target.id]?.area || task.area, lastUpdate: `Moved to ${target.name}` });
+    refreshWorkspace(`Moved to ${target.name}`);
+  }
+
+  function moveTaskToNextArea(task: Task) {
+    const next = areas[(areas.indexOf(task.area) + 1) % Math.max(areas.length, 1)] || task.area;
+    Object.assign(task, { area: next, lastUpdate: `Moved to ${next}` });
+    refreshWorkspace(`Moved to ${next}`);
+  }
+
+  function archiveTask(task: Task) {
+    Object.assign(task, { archived: true, status: "done" as TaskStatus, isWaiting: false, lastUpdate: "Archived just now" });
+    refreshWorkspace("Task archived");
+  }
+
+  function saveTaskTitle(task: Task) {
+    const title = editingTaskTitle.trim();
+    if (!title) return;
+    Object.assign(task, { title, lastUpdate: "Edited just now" });
+    setEditingTaskId(null);
+    refreshWorkspace("Task updated");
+  }
+
+  function addArea() {
+    const area = newArea.trim();
+    if (!area || areas.includes(area)) return;
+    setAreas(current => [...current, area]);
+    setNewArea("");
+    refreshWorkspace("Area added");
+  }
+
+  function renameArea(area: AreaName) {
+    const next = window.prompt("Rename area", area)?.trim();
+    if (!next || next === area || areas.includes(next)) return;
+    setAreas(current => current.map(item => item === area ? next : item));
+    TASKS.filter(task => task.org === orgName && task.area === area).forEach(task => { task.area = next; });
+    if (selectedArea === area) setSelectedArea(next);
+    refreshWorkspace("Area renamed");
+  }
+
+  function moveArea(area: AreaName, direction: -1 | 1) {
+    setAreas(current => {
+      const index = current.indexOf(area);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  function hideArea(area: AreaName) {
+    setAreas(current => current.filter(item => item !== area));
+    if (selectedArea === area) setSelectedArea(null);
+    refreshWorkspace("Area hidden from this workspace");
+  }
+
+  function openResourceForm(index?: number) {
+    const resource = index === undefined ? undefined : resources[index];
+    setEditingResourceIndex(index ?? null);
+    setResourceDraft(resource ? { label: resource.label, type: resource.type, url: resource.url, area: resource.area || "", project: resource.project || "", description: resource.description || "" } : EMPTY_RESOURCE_DRAFT);
+    setResourceError("");
+    setResourceManagerOpen(false);
+    setResourceFormOpen(true);
+  }
+
+  function detectResourceType(url: string): ResourceType {
+    const normalized = url.toLowerCase();
+    if (normalized.includes("figma")) return "figma";
+    if (normalized.includes("github")) return "github";
+    if (normalized.includes("notion")) return "notion";
+    if (normalized.includes("docs.google")) return "doc";
+    if (normalized.includes("sheets.google")) return "sheet";
+    if (normalized.includes("drive.google")) return "drive";
+    return "website";
+  }
+
+  function saveResource() {
+    const label = resourceDraft.label.trim();
+    const url = resourceDraft.url.trim();
+    if (!label) return setResourceError("Give this resource a name.");
+    if (url && !/^https?:\/\//i.test(url)) return setResourceError("Use a full URL beginning with https://.");
+    const resource: OrganizationResource = { label, url, type: url ? detectResourceType(url) : resourceDraft.type, area: resourceDraft.area || undefined, project: resourceDraft.project || undefined, description: resourceDraft.description.trim() || undefined };
+    const next = editingResourceIndex === null ? [...resources, resource] : resources.map((item, index) => index === editingResourceIndex ? resource : item);
+    setResources(next);
+    ORG_RESOURCES[orgName] = next;
+    setResourceFormOpen(false);
+    refreshWorkspace(editingResourceIndex === null ? "Resource added" : "Resource updated");
+  }
+
+  function createProject() {
+    const name = projectDraft.name.trim();
+    if (!name) return setProjectError("Give this project a name.");
+    const id = `project-${Date.now()}`;
+    const deadline = projectDraft.target.trim() || "No target yet";
+    const project = { id, name, org: orgName, progress: 0, tasks: 0, done: 0, deadline, status: "on_track" as const };
+    STRATEGIC_PROJECTS.push(project);
+    PROJECT_DETAILS[id] = { id, name, org: orgName, area: projectDraft.area as AreaName, progress: 0, deadline, status: "on_track", tasks: 0, done: 0, currentFocus: [projectDraft.focus.trim() || "Set a focused next step"], resources: [], recentActivity: [{ type: "assigned", actor: projectDraft.owner || "Charlotte", text: `Created ${name}`, time: "Just now" }] };
+    setProjects(current => [...current, project]);
+    setProjectDraft({ name: "", area: areas[0] || "Operations", description: "", target: "", owner: "Charlotte", focus: "" });
+    setProjectError("");
+    setProjectOpen(false);
+    refreshWorkspace("Project created");
+  }
+
+  function generateFollowUp(person: string) {
+    setGeneratedFollowUp(current => current === person ? null : person);
+  }
+
+  function copyFollowUp(person: string) {
+    const relevant = scopedAreaTasks.filter(task => task.nextActionBy === person && task.isWaiting).slice(0, 4);
+    const text = `Hi ${person}, could you share an update on ${relevant.map(task => task.title).join(", ") || "the open items"}? Thank you.`;
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopiedFollowUp(person);
+    window.setTimeout(() => setCopiedFollowUp(null), 1800);
+  }
+
+  const stats: { label: string; value: number; color: string; filter: OrgTaskFilter }[] = [
+    { label: "Today", value: orgTasks.filter(task => task.isToday).length, color: "text-primary", filter: "today" },
+    { label: "This Week", value: orgTasks.length, color: "text-foreground", filter: "all" },
+    { label: "Dates to revisit", value: orgTasks.filter(task => task.isOverdue).length, color: "text-overdue", filter: "overdue" },
+    { label: "Waiting", value: orgTasks.filter(task => task.isWaiting).length, color: "text-info", filter: "waiting" },
+    { label: "Delegated", value: orgTasks.filter(task => task.isDelegated).length, color: "text-success", filter: "delegated" },
+    { label: "Review", value: orgTasks.filter(task => task.status === "review").length, color: "text-review", filter: "review" },
   ];
+
+  if (loading) {
+    return <div className="mx-auto max-w-[1100px] p-5 sm:p-8 lg:p-10"><BackButton label="Organizations" onClick={onBack} /><div className="animate-pulse space-y-5"><div className="h-20 rounded-2xl bg-muted/70" /><div className="grid grid-cols-3 gap-3 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-24 rounded-2xl bg-muted/60" />)}</div><div className="grid gap-6 lg:grid-cols-3"><div className="h-[30rem] rounded-2xl bg-card" /><div className="h-[30rem] rounded-2xl bg-card" /></div></div></div>;
+  }
 
   return (
     <div className="mx-auto max-w-[1100px] p-5 sm:p-8 lg:p-10">
       <BackButton label="Organizations" onClick={onBack} />
+      {message && <div role="status" className="mb-4 rounded-xl border border-success/20 bg-success/10 px-3.5 py-2 text-[12px] font-medium text-success">{message}</div>}
+      {archived && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/25 bg-warning/[0.06] p-4"><div><p className="text-[13px] font-semibold text-foreground">This organization is archived.</p><p className="mt-0.5 text-[11px] text-muted-foreground">Its work remains available for reference.</p></div><button onClick={() => { setArchived(false); refreshWorkspace("Organization restored"); }} className="rounded-xl bg-card px-3 py-2 text-[11px] font-medium text-foreground shadow-sm">Restore organization</button></div>}
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className={cn("w-3 h-3 rounded-sm", c.dot)} />
-            <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>{orgName}</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">{orgMeta.desc}</p>
+          <div className="mb-1 flex items-center gap-3">{orgIcon === "Building" ? <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted" style={{ color: accentColor }}><Building2 className="h-3.5 w-3.5" /></span> : orgIcon === "Spark" ? <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted" style={{ color: accentColor }}><Sparkles className="h-3.5 w-3.5" /></span> : <div className={cn("h-3 w-3 rounded-sm", c.dot)} style={{ backgroundColor: accentColor }} />}<h1 className="luma-heading text-3xl font-bold text-foreground">{orgTitle}</h1>{archived && <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Archived</span>}</div>
+          <p className="text-sm text-muted-foreground">{orgDescription}</p>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors"><Plus className="w-3.5 h-3.5" />Quick Capture</button>
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-[12px] hover:text-foreground transition-colors"><FolderKanban className="w-3.5 h-3.5" />Add Project</button>
-        </div>
+        {!archived && <div className="flex flex-wrap items-center gap-2"><button onClick={() => setCaptureOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-[12px] font-medium text-primary transition-colors hover:bg-primary/20"><Plus className="h-3.5 w-3.5" />Quick Capture</button><button onClick={() => setProjectOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"><FolderKanban className="h-3.5 w-3.5" />Add Project</button><div className="relative"><button onClick={() => setOverflowOpen(current => !current)} aria-label="Organization options" aria-expanded={overflowOpen} className="rounded-xl border border-border bg-card p-2 text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{overflowOpen && <div className="absolute right-0 top-[calc(100%+0.4rem)] z-30 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_28px_rgb(35_41_61_/_0.12)]">{[{ label: "Edit Organization", action: () => setOrgSettingsOpen(true) }, { label: "Manage Areas", action: () => setAreasOpen(true) }, { label: "Manage Resources", action: () => setResourceManagerOpen(true) }, { label: "Organization Settings", action: () => setOrgSettingsOpen(true) }, { label: "Archive Organization", action: () => setArchiveConfirmOpen(true), destructive: true }].map(item => <button key={item.label} onClick={() => { setOverflowOpen(false); item.action(); }} className={cn("w-full rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-muted", item.destructive ? "text-overdue" : "text-foreground")}>{item.label}</button>)}</div>}</div></div>}
       </div>
 
-      {/* Summary stats */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {stats.map(({ label, value, color }) => (
-          <div key={label} className="luma-card p-4 text-center">
-            <p className={cn("text-2xl font-bold", color)} style={{ fontFamily: "var(--font-display)" }}>{value}</p>
-            <p className="text-[10px] font-mono text-muted-foreground mt-1">{label}</p>
-          </div>
-        ))}
-      </div>
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{stats.map(stat => <button key={stat.label} onClick={() => { setSelectedArea(null); setTaskFilter(stat.filter); }} className={cn("luma-card luma-card-hover p-4 text-center", taskFilter === stat.filter && "border-primary/30 bg-secondary/45")}><p className={cn("luma-heading text-2xl font-bold", stat.color)}>{stat.value}</p><p className="mt-1 text-[10px] font-medium text-muted-foreground">{stat.label}</p></button>)}</div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left: Areas + Tasks */}
-        <div className="space-y-5 lg:col-span-2">
-          {/* Areas */}
-          <div>
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Areas</p>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => setSelectedArea(null)}
-                className={cn("px-3 py-2 rounded-lg border text-[12px] font-medium transition-all", !selectedArea ? cn("border", c.border, c.bg, c.text) : "border-border text-muted-foreground hover:text-foreground")}>
-                All
-                <span className="ml-1.5 text-[10px] font-mono opacity-60">{orgTasks.length}</span>
-              </button>
-              {orgMeta.areas.map(area => {
-                const count = orgTasks.filter(t => t.area === area).length;
-                return (
-                  <button key={area} onClick={() => setSelectedArea(selectedArea === area ? null : area)}
-                    className={cn("px-3 py-2 rounded-lg border text-[12px] transition-all", selectedArea === area ? cn(AREA_COLORS[area], "bg-muted/60 border-white/15") : "border-border text-muted-foreground hover:text-foreground")}>
-                    {area}
-                    <span className="ml-1.5 text-[10px] font-mono opacity-60">{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        <div className="space-y-6 lg:col-span-2">
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Areas</p><button onClick={() => setAreasOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">Manage Areas</button></div><div className="flex flex-wrap gap-2"><button onClick={() => setSelectedArea(null)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", !selectedArea ? cn(c.border, c.bg, c.text) : "border-border bg-card text-muted-foreground hover:text-foreground")}>All <span className="ml-1 text-[10px] opacity-65">{orgTasks.length}</span></button>{areas.map(area => <button key={area} onClick={() => setSelectedArea(current => current === area ? null : area)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", selectedArea === area ? "border-primary/25 bg-secondary text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{area} <span className="ml-1 text-[10px] opacity-65">{orgTasks.filter(task => task.area === area).length}</span></button>)}</div></section>
 
-          {/* Tasks */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider">
-                {selectedArea ? selectedArea : "All Tasks"} · {filteredTasks.length}
-              </p>
-            </div>
-            <div className="luma-card overflow-hidden">
-              {filteredTasks.slice(0, 8).map(t => <TaskRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
-              {filteredTasks.length > 8 && (
-                <div className="px-4 py-2.5 border-t border-border text-center">
-                  <span className="text-[11px] text-muted-foreground">+{filteredTasks.length - 8} more tasks</span>
-                </div>
-              )}
-              {filteredTasks.length === 0 && (
-                <div className="py-8 text-center text-muted-foreground text-sm">No tasks in this area.</div>
-              )}
-            </div>
-          </div>
+          <section><div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center"><p className="flex-1 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">{selectedArea || "All Work"} · {filteredTasks.length}</p><div className="flex flex-wrap gap-2"><div className="flex min-w-[11rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={taskSearch} onChange={event => setTaskSearch(event.target.value)} placeholder="Search work" className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground" />{taskSearch && <button onClick={() => setTaskSearch("")} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setTaskFilterOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors", taskFilterOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button><select value={taskSort} onChange={event => setTaskSort(event.target.value as OrgTaskSort)} className="rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground"><option value="deadline">Sort: target date</option><option value="priority">Sort: priority</option><option value="title">Sort: title</option><option value="updated">Sort: updated</option></select></div></div>{taskFilterOpen && <div className="mb-3 grid gap-3 rounded-2xl border border-border bg-card p-3 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Work state<select value={taskFilter} onChange={event => setTaskFilter(event.target.value as OrgTaskFilter)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">All work</option><option value="mine">Mine</option><option value="delegated">Delegated</option><option value="waiting">Waiting</option><option value="review">Needs review</option><option value="overdue">Overdue</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={taskPriority} onChange={event => setTaskPriority(event.target.value as Priority | "all")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any priority</option><option value="urgent">Needs attention</option><option value="high">Important</option><option value="medium">Planned</option><option value="low">When there’s room</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={taskProject} onChange={event => setTaskProject(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projectNames.map(name => <option key={name}>{name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={event => setDateFilter(event.target.value as "all" | "dated" | "none")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any date</option><option value="dated">Has target date</option><option value="none">No target date</option></select></label><button onClick={() => { setTaskFilter("all"); setTaskPriority("all"); setTaskProject(""); setDateFilter("all"); }} className="w-fit text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear filters</button></div>}<div className="luma-card overflow-visible">{visibleTasks.map(task => <div key={task.id} className="group relative border-b border-border/70 last:border-b-0"><div className="flex items-center gap-3 px-4 py-3"><button onClick={() => onTaskClick(task)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><PriorityDot priority={task.priority} /><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground"><AreaBadge area={task.area} />{task.project && <span>· {task.project}</span>}<span>· {task.nextActionBy === "me" ? "Next: me" : `Waiting on ${task.nextActionBy}`}</span></span></span></button><span className={cn("hidden text-[10px] font-medium sm:inline", task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{task.deadline || "No date"}</span><div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><button onClick={() => completeTask(task)} aria-label={`Complete ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success"><Check className="h-3.5 w-3.5" /></button><button onClick={() => { setEditingTaskId(task.id); setEditingTaskTitle(task.title); }} aria-label={`Edit ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">Edit</button><button onClick={() => reassignTask(task)} aria-label={`Delegate ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Users className="h-3.5 w-3.5" /></button><button onClick={() => rescheduleTask(task)} aria-label={`Reschedule ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Calendar className="h-3.5 w-3.5" /></button><button onClick={() => setQuickMenuTaskId(current => current === task.id ? null : task.id)} aria-label={`More actions for ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" /></button></div></div>{editingTaskId === task.id && <div className="flex gap-2 border-t border-border bg-muted/25 px-4 py-2"><input autoFocus value={editingTaskTitle} onChange={event => setEditingTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveTaskTitle(task)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground" /><button onClick={() => saveTaskTitle(task)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setEditingTaskId(null)} className="rounded-lg px-2 text-[11px] text-muted-foreground">Cancel</button></div>}{quickMenuTaskId === task.id && <div className="absolute right-3 top-11 z-20 w-40 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]"><button onClick={() => onTaskClick(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Open Detail</button><button onClick={() => duplicateTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Duplicate</button><button onClick={() => moveTaskToProject(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Move to Project</button><button onClick={() => moveTaskToNextArea(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Change Area</button><button onClick={() => archiveTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Archive / Cancel</button></div>}</div>)}{filteredTasks.length === 0 && <div className="px-5 py-12 text-center"><ListTodo className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No work matches these filters.</p><p className="mt-1 text-[11px] text-muted-foreground">Try a different area or clear a filter.</p></div>}{filteredTasks.length > 8 && <button onClick={() => setShowAllWork(current => !current)} className="w-full border-t border-border px-4 py-3 text-center text-[11px] font-medium text-primary transition-colors hover:bg-primary/[0.025]">{showAllWork ? "Show less" : "View all work →"}</button>}</div></section>
 
-          {/* People in this org */}
-          {orgPeople.length > 0 && (
-            <div>
-              <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">People with Open Work</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {orgPeople.map(person => {
-                  const pc = getPersonColor(person.name);
-                  return (
-                    <div key={person.name} className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/25 hover:bg-primary/[0.025]">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold"
-                        style={{ backgroundColor: pc + "22", color: pc, border: `1px solid ${pc}44` }}>
-                        {getInitials(person.name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-medium text-foreground truncate">{person.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{person.active} active · {person.waitingOnThem} waiting</p>
-                      </div>
-                      {person.overdue > 0 && <span className="text-[10px] font-mono text-red-400">{person.overdue} OD</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">People with Open Work</p>{scopedPeople.length > 0 && <span className="text-[10px] text-muted-foreground">{scopedPeople.length} people</span>}</div>{scopedPeople.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{scopedPeople.map(person => { const personTasks = scopedAreaTasks.filter(task => task.assignee === person.name || task.nextActionBy === person.name); const followUpTasks = personTasks.filter(task => task.isWaiting && task.nextActionBy === person.name); const color = getPersonColor(person.name); return <div key={person.name} className="rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/25"><button onClick={() => onPersonClick(person.name)} className="flex w-full items-center gap-2.5 text-left"><div className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold" style={personColorStyle(color)}>{getInitials(person.name)}</div><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{person.name}</span><span className="block text-[10px] text-muted-foreground">{person.active} active · {person.waitingOnThem} waiting · Updated {person.lastUpdate}</span></span>{person.overdue > 0 && <span className="text-[10px] font-medium text-overdue">{person.overdue} overdue</span>}</button>{followUpTasks.length > 1 && <div className="mt-2 flex items-center justify-between border-t border-border pt-2"><span className="text-[10px] text-muted-foreground">{followUpTasks.length} items waiting</span><button onClick={() => generateFollowUp(person.name)} className="text-[10px] font-medium text-primary hover:text-primary/80">Generate Follow-Up</button></div>}{generatedFollowUp === person.name && <div className="mt-2 rounded-lg bg-primary/[0.05] p-2.5"><p className="text-[10px] leading-4 text-muted-foreground">Binnie will combine the {followUpTasks.length} waiting items into one calm update request.</p><div className="mt-2 flex gap-2"><button onClick={() => copyFollowUp(person.name)} className="rounded-lg bg-card px-2 py-1 text-[10px] font-medium text-foreground shadow-sm">{copiedFollowUp === person.name ? "Copied" : "Copy message"}</button><button onClick={() => onNavigate("followup")} className="text-[10px] font-medium text-primary">Open Follow Up</button></div></div>}</div>; })}</div> : <div className="luma-card px-5 py-10 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No delegated work in this organization.</p></div>}</section>
+
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><button onClick={() => setShowActivity(current => !current)} className="text-[11px] font-medium text-primary hover:text-primary/80">{showActivity ? "Show less" : "View Activity"}</button></div>{activityEntries.length ? <div className="luma-card divide-y divide-border/70">{activityEntries.map(entry => <button key={entry.key} onClick={() => entry.task ? onTaskClick(entry.task) : entry.project ? onProjectClick(entry.project.id) : undefined} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/45"><div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary" /><span className="min-w-0 flex-1"><span className="block text-[12px] text-foreground">{entry.text}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{entry.actor} · {entry.time}</span></span><ChevronRight className="mt-1 h-3.5 w-3.5 text-muted-foreground" /></button>)}</div> : <div className="luma-card px-5 py-10 text-center"><p className="text-sm font-medium text-foreground">No recent activity yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Updates will appear here as work moves.</p></div>}</section>
         </div>
 
-        {/* Right: Projects + Resources */}
-        <div className="space-y-5">
-          {/* Projects */}
-          {orgProjects.length > 0 && (
-            <div>
-              <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Current Projects</p>
-              <div className="space-y-2">
-                {orgProjects.map(proj => {
-                  const statusColor = proj.status === "at_risk" ? "text-orange-400" : "text-emerald-400";
-                  return (
-                    <button key={proj.id} onClick={() => onProjectClick(proj.id)}
-                      className="luma-card luma-card-hover group w-full p-4 text-left">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
-                        <span className={cn("text-[11px] font-mono", statusColor)}>{proj.progress}%</span>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2">
-                        <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${proj.progress}%` }} />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-muted-foreground">{proj.tasks - proj.done} remaining</span>
-                        <span className="text-[10px] font-mono text-muted-foreground">Due {proj.deadline}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+        <div className="space-y-6">
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Current Projects</p><button onClick={() => setProjectOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Project</button></div>{scopedProjects.length ? <div className="space-y-2">{scopedProjects.map(project => { const detail = PROJECT_DETAILS[project.id]; const remaining = Math.max(project.tasks - project.done, 0); return <button key={project.id} onClick={() => onProjectClick(project.id)} className="luma-card luma-card-hover w-full p-4 text-left"><div className="mb-2 flex items-start gap-3"><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-foreground">{project.name}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{detail?.currentFocus[0] || "Set a focused next step"}</span></span>{project.status === "at_risk" && <span className="rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div><div className="mb-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", c.dot)} style={{ width: `${project.progress}%` }} /></div><div className="flex items-center justify-between text-[10px] text-muted-foreground"><span>{project.progress}% · {remaining} remaining</span><span>Target: {project.deadline}</span></div></button>; })}</div> : <div className="luma-card px-5 py-10 text-center"><FolderKanban className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No active projects yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Create one when a piece of work needs its own focus.</p></div>}</section>
 
-          {/* Resources */}
-          <div>
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</p>
-            <div className="space-y-1.5">
-              {resources.map((r, i) => (
-                <a key={i} href={r.url}
-                  className="group flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5 transition-colors hover:border-primary/25 hover:bg-primary/[0.025]">
-                  <LinkIcon type={r.type} />
-                  <span className="text-[13px] text-foreground flex-1">{r.label}</span>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </a>
-              ))}
-            </div>
-          </div>
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Resources</p><button onClick={() => openResourceForm()} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Resource</button></div>{resources.length ? <div className="space-y-1.5">{resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{resource.label}</span>{(resource.area || resource.project) && <span className="block truncate text-[10px] text-muted-foreground">{resource.project || resource.area}</span>}</span>{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Open ↗</a> : <button onClick={() => openResourceForm(index)} className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Add link</button>}</div>)}</div> : <div className="luma-card px-5 py-10 text-center"><Link2 className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">Keep important links close.</p><p className="mt-1 text-[11px] text-muted-foreground">Add your Drive, website, dashboards, or project tools here.</p></div>}</section>
 
-          {/* Attention items */}
-          {orgTasks.some(t => t.isOverdue || t.status === "review") && (
-            <div>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-warning">Needs attention</p>
-              <div className="space-y-1.5">
-                {orgTasks.filter(t => t.isOverdue || t.status === "review").map(t => (
-                  <button key={t.id} onClick={() => onTaskClick(t)}
-                    className="w-full rounded-xl border border-warning/15 bg-warning/[0.04] p-2.5 text-left transition-colors hover:border-warning/25">
-                    <div className="flex items-center gap-2">
-                      <PriorityDot priority={t.priority} />
-                      <p className="text-[12px] text-foreground truncate flex-1">{t.title}</p>
-                      {t.isOverdue && <span className="flex-shrink-0 text-[10px] text-overdue">Due</span>}
-                      {t.status === "review" && <span className="flex-shrink-0 text-[10px] text-review">Review</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-warning">Needs Attention</p><span className="text-[10px] text-muted-foreground">{attentionTasks.length} items</span></div>{attentionTasks.length ? <div className="space-y-1.5">{attentionTasks.slice(0, 4).map(task => { const isReview = task.status === "review"; const reason = isReview ? "Needs Review" : task.isOverdue ? "Overdue" : `No update from ${task.nextActionBy} for ${task.waitingSince || "a while"}`; return <div key={task.id} className="rounded-xl border border-warning/15 bg-warning/[0.04] p-3"><p className="truncate text-[12px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{reason}</p><div className="mt-2 flex gap-2"><button onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{isReview ? "Review" : "Open"}</button>{!isReview && task.isWaiting && <button onClick={() => onNavigate("followup")} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary">Follow Up</button>}</div></div>; })}</div> : <div className="luma-card px-5 py-10 text-center"><CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-success/45" /><p className="text-sm font-medium text-foreground">Nothing needs attention right now.</p></div>}</section>
         </div>
       </div>
+
+      {captureOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.5rem] border border-border bg-background p-4 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)] sm:p-5"><div className="mb-3 flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Quick Capture for {orgTitle}</p><p className="text-[10px] text-muted-foreground">This organization is already selected.</p></div><button onClick={() => setCaptureOpen(false)} aria-label="Close quick capture" className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><QuickCapture organization={orgName} onSaved={() => refreshWorkspace("Saved to this organization")} /></div></div>}
+
+      {projectOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Add project" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="luma-heading text-xl font-bold text-foreground">Add Project</h2><p className="mt-1 text-[11px] text-muted-foreground">{orgTitle} is already selected.</p></div><button onClick={() => setProjectOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Project name<input autoFocus value={projectDraft.name} onChange={event => setProjectDraft(current => ({ ...current, name: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization<input value={orgTitle} disabled className="mt-1.5 w-full rounded-xl border border-border bg-muted px-3 py-2.5 text-[12px] text-muted-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Area<select value={projectDraft.area} onChange={event => setProjectDraft(current => ({ ...current, area: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={projectDraft.description} onChange={event => setProjectDraft(current => ({ ...current, description: event.target.value }))} className="mt-1.5 min-h-16 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input value={projectDraft.target} onChange={event => setProjectDraft(current => ({ ...current, target: event.target.value }))} placeholder="September" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Owner<input value={projectDraft.owner} onChange={event => setProjectDraft(current => ({ ...current, owner: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={projectDraft.focus} onChange={event => setProjectDraft(current => ({ ...current, focus: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div>{projectError && <p className="mt-3 text-[11px] text-overdue">{projectError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setProjectOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={createProject} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create Project</button></div></div></div>}
+
+      {resourceManagerOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Manage resources" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-center justify-between"><div><h2 className="luma-heading text-xl font-bold text-foreground">Manage Resources</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep the tools for {orgTitle} close.</p></div><button onClick={() => setResourceManagerOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="max-h-64 space-y-2 overflow-y-auto">{resources.length ? resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2 rounded-xl border border-border p-3"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{resource.label}</span><button onClick={() => openResourceForm(index)} className="text-[11px] font-medium text-primary">Edit</button></div>) : <p className="rounded-xl bg-muted/45 px-3 py-6 text-center text-[11px] text-muted-foreground">No resources yet.</p>}</div><div className="mt-4 flex justify-end gap-2"><button onClick={() => setResourceManagerOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Close</button><button onClick={() => openResourceForm()} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Resource</button></div></div></div>}
+
+      {resourceFormOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Add resource" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="luma-heading text-xl font-bold text-foreground">{editingResourceIndex === null ? "Add Resource" : "Edit Resource"}</h2><p className="mt-1 text-[11px] text-muted-foreground">Binnie will recognize common links automatically.</p></div><button onClick={() => setResourceFormOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Resource name<input autoFocus value={resourceDraft.label} onChange={event => setResourceDraft(current => ({ ...current, label: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Type<select value={resourceDraft.type} onChange={event => setResourceDraft(current => ({ ...current, type: event.target.value as ResourceType }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{["website", "drive", "sheet", "doc", "figma", "github", "dashboard", "notion", "other"].map(type => <option key={type} value={type}>{type === "drive" ? "Google Drive" : type === "sheet" ? "Google Sheet" : type === "doc" ? "Google Doc" : type[0].toUpperCase() + type.slice(1)}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Related area <span className="font-normal">(optional)</span><select value={resourceDraft.area} onChange={event => setResourceDraft(current => ({ ...current, area: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">No area</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">URL <span className="font-normal">(optional)</span><input value={resourceDraft.url} onChange={event => setResourceDraft(current => ({ ...current, url: event.target.value }))} placeholder="https://" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Related project <span className="font-normal">(optional)</span><select value={resourceDraft.project} onChange={event => setResourceDraft(current => ({ ...current, project: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">No project</option>{projectNames.map(project => <option key={project}>{project}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><input value={resourceDraft.description} onChange={event => setResourceDraft(current => ({ ...current, description: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div>{resourceError && <p className="mt-3 text-[11px] text-overdue">{resourceError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setResourceFormOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={saveResource} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save</button></div></div></div>}
+
+      {areasOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Manage areas" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="luma-heading text-xl font-bold text-foreground">Manage Areas</h2><p className="mt-1 text-[11px] text-muted-foreground">Group work in the way that makes sense for this organization.</p></div><button onClick={() => setAreasOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="space-y-2">{areas.map((area, index) => <div key={area} className="flex items-center gap-2 rounded-xl border border-border p-3"><span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{area}</span><button onClick={() => moveArea(area, -1)} disabled={index === 0} aria-label={`Move ${area} up`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"><ChevronUp className="h-3.5 w-3.5" /></button><button onClick={() => moveArea(area, 1)} disabled={index === areas.length - 1} aria-label={`Move ${area} down`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"><ChevronDown className="h-3.5 w-3.5" /></button><button onClick={() => renameArea(area)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">Rename</button><button onClick={() => hideArea(area)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-overdue hover:bg-overdue/10">Hide</button></div>)}</div><div className="mt-4 flex gap-2 border-t border-border pt-4"><input value={newArea} onChange={event => setNewArea(event.target.value)} onKeyDown={event => event.key === "Enter" && addArea()} placeholder="New area" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground" /><button onClick={addArea} className="rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground">Add Area</button></div></div></div>}
+
+      {orgSettingsOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Organization settings" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="luma-heading text-xl font-bold text-foreground">Organization Settings</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep the workspace details up to date.</p></div><button onClick={() => setOrgSettingsOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Organization name<input value={orgTitle} onChange={event => setOrgTitle(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description<input value={orgDescription} onChange={event => setOrgDescription(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization color<select value={orgAccent} onChange={event => setOrgAccent(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option>Slate blue</option><option>Dusty sage</option><option>Warm stone</option></select></label><label className="text-[11px] font-medium text-muted-foreground">Icon<select value={orgIcon} onChange={event => setOrgIcon(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option>Rounded marker</option><option>Building</option><option>Spark</option></select></label><label className="text-[11px] font-medium text-muted-foreground">Default timezone<select value={defaultTimezone} onChange={event => setDefaultTimezone(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option>Asia/Jakarta</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option></select></label><label className="text-[11px] font-medium text-muted-foreground">Default task area<select value={defaultArea} onChange={event => setDefaultArea(event.target.value as AreaName)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{areas.map(area => <option key={area}>{area}</option>)}</select></label></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => setOrgSettingsOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => { setOrgSettingsOpen(false); refreshWorkspace("Organization updated"); }} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save changes</button></div></div></div>}
+
+      {archiveConfirmOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Archive organization" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><h2 className="luma-heading text-xl font-bold text-foreground">Archive {orgTitle}?</h2><p className="mt-2 text-[12px] leading-5 text-muted-foreground">The work will stay available for reference, but this organization will no longer appear as active.</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setArchiveConfirmOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => { setArchiveConfirmOpen(false); setArchived(true); refreshWorkspace("Organization archived"); }} className="rounded-xl bg-overdue px-4 py-2 text-[12px] font-medium text-white">Archive Organization</button></div></div></div>}
     </div>
   );
 }
@@ -2212,7 +2600,9 @@ function ProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: stri
   const [tab, setTab] = useState<ProjectTab>("active");
   const detail = PROJECT_DETAILS[projectId];
   const basicProj = STRATEGIC_PROJECTS.find(p => p.id === projectId);
-  if (!detail || !basicProj) return null;
+  if (!detail || !basicProj) {
+    return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="luma-card p-8 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Project not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p><button onClick={onBack} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Back to projects</button></div></div>;
+  }
 
   const c = ORG_COLORS[detail.org];
   const projTasks = TASKS.filter(t => t.project === detail.name);
@@ -2329,14 +2719,7 @@ function ProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: stri
           <div>
             <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</p>
             <div className="space-y-1.5">
-              {detail.resources.map((r, i) => (
-                <a key={i} href={r.url}
-                  className="group flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5 transition-colors hover:border-primary/25 hover:bg-primary/[0.025]">
-                  <LinkIcon type={r.type} />
-                  <span className="text-[13px] text-foreground flex-1">{r.label}</span>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </a>
-              ))}
+              {detail.resources.map((r, i) => r.url === "#" ? <div key={i} className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5"><LinkIcon type={r.type} /><span className="flex-1 text-[13px] text-foreground">{r.label}</span><span className="text-[10px] text-muted-foreground">Not connected</span></div> : <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5 transition-colors hover:border-primary/25 hover:bg-primary/[0.025]"><LinkIcon type={r.type} /><span className="flex-1 text-[13px] text-foreground">{r.label}</span><ExternalLink className="h-3 w-3 text-muted-foreground transition-colors group-hover:text-foreground" /></a>)}
             </div>
           </div>
           <div>
@@ -2347,7 +2730,7 @@ function ProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: stri
                 return (
                   <div key={i} className="flex gap-2.5">
                     <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
-                      style={{ backgroundColor: actorColor + "22", color: actorColor }}>
+                      style={personColorStyle(actorColor)}>
                       {getInitials(act.actor)}
                     </div>
                     <div>
@@ -2379,12 +2762,14 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [tab, setTab] = useState<FollowUpTab>("today");
   const [generated, setGenerated] = useState<Set<string>>(new Set());
   const [followedUp, setFollowedUp] = useState<Set<string>>(new Set());
+  const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
 
-  const todayData = FOLLOWUP_DATA.filter(d => d.section === "today" && !followedUp.has(d.person));
-  const laterData = FOLLOWUP_DATA.filter(d => d.section === "later" && !followedUp.has(d.person));
-  const overdueData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "overdue") && !followedUp.has(d.person));
-  const noUpdateData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "no_update") && !followedUp.has(d.person));
+  const isVisible = (person: string) => !followedUp.has(person) && !snoozed.has(person);
+  const todayData = FOLLOWUP_DATA.filter(d => d.section === "today" && isVisible(d.person));
+  const laterData = FOLLOWUP_DATA.filter(d => d.section === "later" && isVisible(d.person));
+  const overdueData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "overdue") && isVisible(d.person));
+  const noUpdateData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "no_update") && isVisible(d.person));
 
   const tabs: { id: FollowUpTab; label: string; count: number; urgentColor?: string }[] = [
     { id: "today", label: "Follow Up Today", count: todayData.length, urgentColor: "text-amber-400" },
@@ -2408,9 +2793,14 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
     setGenerated(prev => { const n = new Set(prev); n.delete(person); return n; });
   }
 
+  function handleSnooze(person: string) {
+    setSnoozed(prev => new Set([...prev, person]));
+    setGenerated(prev => { const next = new Set(prev); next.delete(person); return next; });
+  }
+
   const totalNeedFollowUp = todayData.length;
-  const totalItems = FOLLOWUP_DATA.filter(d => !followedUp.has(d.person)).reduce((a, d) => a + d.items.length, 0);
-  const overdueResponses = FOLLOWUP_DATA.filter(d => !followedUp.has(d.person)).flatMap(d => d.items.filter(i => i.status === "overdue")).length;
+  const totalItems = FOLLOWUP_DATA.filter(d => isVisible(d.person)).reduce((a, d) => a + d.items.length, 0);
+  const overdueResponses = FOLLOWUP_DATA.filter(d => isVisible(d.person)).flatMap(d => d.items.filter(i => i.status === "overdue")).length;
 
   return (
     <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
@@ -2462,7 +2852,7 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
               {/* Person header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                  style={personColorStyle(color)}>
                   {getInitials(fp.person)}
                 </div>
                 <div className="flex-1">
@@ -2472,7 +2862,7 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 {!isGenerated ? (
                   <button onClick={() => setGenerated(prev => new Set([...prev, fp.person]))}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors">
-                    <Sparkles className="w-3.5 h-3.5" />Draft with Luma
+                    <Sparkles className="w-3.5 h-3.5" />Draft with Binnie
                   </button>
                 ) : (
                   <div className="flex items-center gap-1 text-[11px] text-success">
@@ -2513,7 +2903,7 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 <div className="mx-4 mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-primary/15">
                     <MessageSquare className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-[11px] font-medium text-primary">Luma suggested message</span>
+                    <span className="text-[11px] font-medium text-primary">Binnie suggested message</span>
                     <span className="text-[10px] text-muted-foreground ml-auto">Preview</span>
                   </div>
                   <div className="p-4">
@@ -2528,7 +2918,7 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                       className="flex items-center gap-1.5 rounded-lg bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success transition-colors hover:bg-success/15">
                       <Check className="w-3 h-3" />Mark Followed Up
                     </button>
-                    <button onClick={() => setGenerated(prev => { const n = new Set(prev); n.delete(fp.person); return n; })}
+                    <button onClick={() => handleSnooze(fp.person)}
                       className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
                       <ChevronDown className="w-3.5 h-3.5" />Snooze
                     </button>
@@ -2553,50 +2943,72 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
 
 function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [formMessage, setFormMessage] = useState("");
+  const [, setRevision] = useState(0);
+
+  function addOrganization() {
+    const organizationName = name.trim();
+    if (!organizationName) { setFormMessage("Add a workspace name to continue."); return; }
+    if (ORGS_META.some(org => org.name.toLowerCase() === organizationName.toLowerCase())) { setFormMessage("That workspace already exists."); return; }
+    ORGS_META.push({ name: organizationName, desc: description.trim() || "A new Binnie workspace", areas: [] });
+    ORG_COLORS[organizationName] = { ...ORG_COLORS["Villa Khayangan"] };
+    ORG_RESOURCES[organizationName] = [];
+    setRevision(current => current + 1);
+    setName("");
+    setDescription("");
+    setFormMessage("");
+    setIsAdding(false);
+  }
+
   return (
-    <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Portfolio</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Organizations</h1>
+    <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
+      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="luma-heading text-3xl font-bold text-foreground">Organizations</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">Your workspaces, all in one place.</p>
+        </div>
+        <button onClick={() => { setIsAdding(current => !current); setFormMessage(""); }} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" /> Add Organization</button>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {isAdding && <div className="luma-card mb-5 grid gap-3 bg-[#fdfcff] p-4 sm:grid-cols-[1fr_1.4fr_auto]"><input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && addOrganization()} placeholder="Workspace name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><input value={description} onChange={event => setDescription(event.target.value)} onKeyDown={event => event.key === "Enter" && addOrganization()} placeholder="Short description (optional)" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><div className="flex gap-2"><button onClick={addOrganization} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div>{formMessage && <p className="sm:col-span-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {ORGS_META.map(org => {
           const c = ORG_COLORS[org.name];
           const orgTasks = TASKS.filter(t => t.org === org.name);
-          const overdue = orgTasks.filter(t => t.isOverdue).length;
+          const activeTasks = orgTasks.filter(task => task.status !== "done");
+          const orgProjects = STRATEGIC_PROJECTS.filter(project => project.org === org.name);
+          const waiting = activeTasks.filter(task => task.isWaiting).length;
+          const attention = activeTasks.filter(task => task.isOverdue || task.status === "review").length;
+          const visibleAreas = org.areas.slice(0, 3);
+          const currentFocus = orgProjects.slice(0, 2).map(project => project.name).join(" · ") || activeTasks[0]?.title || "A quieter personal workspace.";
           return (
             <button key={org.name} onClick={() => onOrgClick(org.name)}
-              className="luma-card luma-card-hover group overflow-hidden text-left">
-              <div className={cn("h-1", c.dot)} />
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h2 className={cn("text-base font-bold", c.text)} style={{ fontFamily: "var(--font-display)" }}>{org.name}</h2>
-                    <p className="text-[12px] text-muted-foreground mt-0.5">{org.desc}</p>
-                  </div>
-                  {overdue > 0 && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-400/10 text-red-400">{overdue} OD</span>}
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                    <p className={cn("text-xl font-bold", c.text)}>{orgTasks.length}</p>
-                    <p className="text-[10px] text-muted-foreground">Active Tasks</p>
-                  </div>
-                  <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                    <p className="text-xl font-bold text-foreground">{STRATEGIC_PROJECTS.filter(p => p.org === org.name).length}</p>
-                    <p className="text-[10px] text-muted-foreground">Projects</p>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  {org.areas.map(area => (
-                    <div key={area} className="flex items-center justify-between py-1 px-2 rounded hover:bg-muted/40 transition-colors">
-                      <span className={cn("text-[12px]", AREA_COLORS[area])}>{area}</span>
-                      <span className="text-[10px] font-mono text-muted-foreground">{TASKS.filter(t => t.org === org.name && t.area === area).length} tasks</span>
+              className={cn("luma-card luma-card-hover group relative flex h-full min-h-[19.5rem] overflow-hidden p-5 text-left", c.card)}>
+              <div aria-hidden="true" className={cn("absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-50 blur-2xl", c.bg)} />
+              <div className="relative flex h-full w-full flex-col">
+                <div className="mb-4 grid min-h-[4.5rem] grid-cols-[2.5rem_minmax(0,1fr)_1rem] items-start gap-x-3">
+                  <span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl", c.bg, c.text)}><Building2 className="h-4 w-4" /></span>
+                  <div className="min-w-0">
+                    <div className="flex h-5 items-center gap-2">
+                      <h2 className="luma-heading min-w-0 flex-1 truncate text-[16px] font-bold leading-5 text-foreground">{org.name}</h2>
+                      {attention > 0 && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-2 py-0.5 text-[10px] font-medium text-overdue">{attention} to revisit</span>}
                     </div>
-                  ))}
+                    <p className="mt-1 min-h-9 line-clamp-2 text-[12px] leading-[1.125rem] text-muted-foreground">{org.desc}</p>
+                  </div>
+                  <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                 </div>
-                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">View details</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                <div className="mb-4 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+                  <span><strong className={cn("font-semibold", c.text)}>{activeTasks.length}</strong> Active</span><span className="text-border">·</span><span><strong className="font-semibold text-foreground">{orgProjects.length}</strong> Projects</span><span className="text-border">·</span><span><strong className="font-semibold text-info">{waiting}</strong> Waiting</span>
+                </div>
+                <div className="mb-4 flex min-h-9 flex-wrap content-start gap-1.5">
+                  {visibleAreas.map(area => <span key={area} className={cn("rounded-full px-2.5 py-1 text-[10px] font-medium", c.bg, AREA_COLORS[area])}>{area} <span className="opacity-65">· {orgTasks.filter(task => task.area === area).length}</span></span>)}
+                  {org.areas.length > visibleAreas.length && <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">+{org.areas.length - visibleAreas.length}</span>}
+                </div>
+                <div className="mt-auto min-h-[3.75rem] rounded-xl border border-white/80 bg-white/70 px-3 py-2.5">
+                  <p className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Current focus</p>
+                  <p className="truncate text-[12px] font-medium text-foreground">{currentFocus}</p>
                 </div>
               </div>
             </button>
@@ -2610,67 +3022,94 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
 // ─── PROJECTS VIEW ────────────────────────────────────────────────────────────
 
 function ProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void }) {
+  const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [isAdding, setIsAdding] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectOrg, setProjectOrg] = useState<OrgName>("Villa Khayangan");
+  const [formMessage, setFormMessage] = useState("");
+  const [, setRevision] = useState(0);
+
+  function addProject() {
+    const name = projectName.trim();
+    if (!name) { setFormMessage("Add a project name to continue."); return; }
+    const id = `p-${Date.now()}`;
+    STRATEGIC_PROJECTS.push({ id, name, org: projectOrg, progress: 0, tasks: 0, done: 0, deadline: "No target", status: "on_track" });
+    PROJECT_DETAILS[id] = { id, name, org: projectOrg, area: "Operations", progress: 0, deadline: "No target", status: "on_track", tasks: 0, done: 0, currentFocus: [], resources: [], recentActivity: [] };
+    setRevision(current => current + 1);
+    setProjectName("");
+    setFormMessage("");
+    setIsAdding(false);
+  }
+  const needsAttention = (project: typeof STRATEGIC_PROJECTS[number]) => {
+    const detail = PROJECT_DETAILS[project.id];
+    const projectTasks = TASKS.filter(task => task.project === project.name);
+    return detail?.status === "at_risk" || projectTasks.some(task => task.isOverdue || task.isWaiting || task.status === "review");
+  };
+  const attentionProjects = STRATEGIC_PROJECTS.filter(needsAttention);
+  const activeProjects = STRATEGIC_PROJECTS.filter(project => project.done < project.tasks && !needsAttention(project));
+  const completedProjects = STRATEGIC_PROJECTS.filter(project => project.done >= project.tasks);
+  const visibleProjects = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : STRATEGIC_PROJECTS;
+  const projectGridClass = viewMode === "grid" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 gap-3";
+
+  const renderProjectCard = (project: typeof STRATEGIC_PROJECTS[number]) => {
+    const c = ORG_COLORS[project.org];
+    const detail = PROJECT_DETAILS[project.id];
+    const projectTasks = TASKS.filter(task => task.project === project.name);
+    const nextTask = projectTasks.find(task => task.nextActionBy === "me" && task.status !== "done") || projectTasks.find(task => task.status !== "done");
+    const waiting = projectTasks.filter(task => task.isWaiting).length;
+    const review = projectTasks.filter(task => task.status === "review").length;
+    const attention = needsAttention(project);
+    return (
+      <button key={project.id} onClick={() => onProjectClick(project.id)} className={cn("luma-card luma-card-hover group relative flex h-full min-h-[21.25rem] overflow-hidden p-4 text-left sm:p-5", c.card)}>
+        <div aria-hidden="true" className={cn("absolute -right-10 -top-10 h-28 w-28 rounded-full opacity-45 blur-2xl", c.bg)} />
+        <div className="relative flex h-full w-full flex-col">
+          <div className="mb-4 grid min-h-[4.25rem] grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-start gap-x-3">
+            <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", c.bg, c.text)}><FolderKanban className="h-4 w-4" /></span>
+            <div className="min-w-0">
+              <div className="flex h-5 items-center gap-2"><h2 className="luma-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{project.name}</h2>{attention && <span className="flex-shrink-0 rounded-full bg-warning/12 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div>
+              <div className="mt-2 flex min-h-5 items-center gap-1.5 overflow-hidden"><OrgBadge org={project.org} />{detail && <AreaBadge area={detail.area} />}</div>
+            </div>
+            <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+          </div>
+          <div className="mb-3 flex items-end gap-3">
+            <p className={cn("luma-heading text-2xl font-bold", c.text)}>{project.progress}%</p>
+            <div className="min-w-0 flex-1 pb-1"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", c.dot)} style={{ width: `${project.progress}%` }} /></div></div>
+          </div>
+          <div className="mb-3 flex min-h-4 items-center justify-between text-[11px] text-muted-foreground"><span>{project.done} / {project.tasks} tasks</span><span>Target: {project.deadline}</span></div>
+          <div className="space-y-2.5 border-t border-border/80 pt-3">
+            <div className="min-h-10"><p className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Current focus</p><p className="truncate text-[12px] font-medium text-foreground">{detail?.currentFocus[0] || "Set a focused next step"}</p></div>
+            <div className="min-h-10"><p className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Next</p><p className="truncate text-[12px] text-foreground">{nextTask?.title || "No next task scheduled"}</p></div>
+          </div>
+          <div className="mt-3 flex min-h-6 flex-wrap gap-1.5">{waiting > 0 && <span className="rounded-full bg-info/10 px-2 py-1 text-[10px] font-medium text-info">{waiting} waiting</span>}{review > 0 && <span className="rounded-full bg-review/10 px-2 py-1 text-[10px] font-medium text-review">{review} review</span>}</div>
+        </div>
+      </button>
+    );
+  };
+
+  const renderProjectGroup = (title: string, projects: typeof STRATEGIC_PROJECTS, accent: string) => projects.length > 0 ? (
+    <section className="mb-7">
+      <div className="mb-3 flex items-center gap-2"><span className={cn("h-2 w-2 rounded-full", accent)} /><h2 className="text-[13px] font-semibold text-foreground">{title}</h2><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{projects.length}</span></div>
+      <div className={projectGridClass}>{projects.map(renderProjectCard)}</div>
+    </section>
+  ) : null;
+
   return (
-    <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Long-term</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Projects</h1>
+    <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div><h1 className="luma-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div>
+        <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" aria-pressed={viewMode === "grid"} className={cn("rounded-lg p-1.5 transition-colors", viewMode === "grid" ? "bg-secondary text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" aria-pressed={viewMode === "list"} className={cn("rounded-lg p-1.5 transition-colors", viewMode === "list" ? "bg-secondary text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => { setIsAdding(current => !current); setFormMessage(""); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" /> Add Project</button></div>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-        {STRATEGIC_PROJECTS.map(proj => {
-          const c = ORG_COLORS[proj.org];
-          const projTasks = TASKS.filter(t => t.project === proj.name);
-          const detail = PROJECT_DETAILS[proj.id];
-          return (
-            <button key={proj.id} onClick={() => onProjectClick(proj.id)}
-              className="luma-card luma-card-hover group overflow-hidden text-left">
-              <div className={cn("h-1", c.dot)} />
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "var(--font-display)" }}>{proj.name}</h2>
-                    <OrgBadge org={proj.org} />
-                  </div>
-                  <span className={cn("text-2xl font-bold", c.text)}>{proj.progress}%</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3 mb-2">
-                  <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${proj.progress}%` }} />
-                </div>
-                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-3">
-                  <span>{proj.done}/{proj.tasks} tasks</span>
-                  <span>Due {proj.deadline}</span>
-                </div>
-                {detail && detail.currentFocus.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-[10px] font-mono text-muted-foreground uppercase mb-1.5">Current Focus</p>
-                    <div className="space-y-1">
-                      {detail.currentFocus.slice(0, 2).map((f, i) => (
-                        <div key={i} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <div className="w-1 h-1 rounded-full bg-primary/50 flex-shrink-0" />{f}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {projTasks.length > 0 && (
-                  <div className="space-y-1 pt-2 border-t border-border">
-                    {projTasks.slice(0, 2).map(t => (
-                      <div key={t.id} className="flex items-center gap-2 py-1">
-                        <StatusDot status={t.status} />
-                        <span className="text-[12px] text-foreground truncate">{t.title}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">Open project</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </div>
-              </div>
-            </button>
-          );
-        })}
+      {isAdding && <div className="luma-card mb-5 grid gap-3 bg-[#fdfcff] p-4 sm:grid-cols-[1.4fr_1fr_auto]"><input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} onKeyDown={event => event.key === "Enter" && addProject()} placeholder="Project name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><select value={projectOrg} onChange={event => setProjectOrg(event.target.value as OrgName)} className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground">{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select><div className="flex gap-2"><button onClick={addProject} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div>{formMessage && <p className="sm:col-span-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
+      <div className="mb-5 flex flex-wrap items-center gap-1.5">
+        {[
+          { id: "all" as const, label: "All", count: STRATEGIC_PROJECTS.length },
+          { id: "active" as const, label: "Active", count: activeProjects.length },
+          { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length },
+          { id: "completed" as const, label: "Completed", count: completedProjects.length },
+        ].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors", filter === item.id ? "border-primary/25 bg-secondary text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/25 hover:text-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}
       </div>
+      {filter === "all" ? <>{renderProjectGroup("Needs Attention", attentionProjects, "bg-warning")}{renderProjectGroup("Active Projects", activeProjects, "bg-primary")}</> : visibleProjects.length > 0 ? <div className={projectGridClass}>{visibleProjects.map(renderProjectCard)}</div> : <div className="luma-card py-14 text-center"><CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-success/50" /><p className="text-sm font-medium text-foreground">Nothing to show here right now.</p><p className="mt-1 text-[12px] text-muted-foreground">The rest of your work is safely organized.</p></div>}
     </div>
   );
 }
@@ -2679,8 +3118,9 @@ function ProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void
 
 function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [query, setQuery] = useState("");
+  const searchableTasks = [...TASKS, ...ARCHIVED_TASKS];
   const results = query.length > 1
-    ? TASKS.filter(t =>
+    ? searchableTasks.filter(t =>
         t.title.toLowerCase().includes(query.toLowerCase()) ||
         t.org.toLowerCase().includes(query.toLowerCase()) ||
         t.area.toLowerCase().includes(query.toLowerCase()) ||
@@ -2702,7 +3142,7 @@ function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       {results.length > 0 && (
         <div>
           <p className="text-[11px] font-mono text-muted-foreground mb-3">{results.length} results</p>
-          <div className="space-y-2">{results.map(t => <TaskCard key={t.id} task={t} onClick={() => onTaskClick(t)} />)}</div>
+          <div className="space-y-2">{results.map(t => <div key={t.id} className="relative">{t.archived && <span className="absolute right-3 top-3 z-10 rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Archived</span>}<TaskCard task={t} onClick={() => onTaskClick(t)} /></div>)}</div>
         </div>
       )}
       {query.length > 1 && results.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">No results for &ldquo;{query}&rdquo;</p>}
@@ -2718,6 +3158,9 @@ function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "luma-sidebar-collapsed";
+const WORKSPACE_THEME_STORAGE_KEY = "luma-workspace-theme";
+
 const NAV_GROUPS = [
   {
     label: "Home",
@@ -2728,7 +3171,7 @@ const NAV_GROUPS = [
     items: [
       { id: "today" as NavView, label: "Today", icon: <CalendarDays className="w-4 h-4" />, badge: TASKS.filter(t => t.isToday && t.nextActionBy === "me").length },
       { id: "this-week" as NavView, label: "This Week", icon: <Calendar className="w-4 h-4" /> },
-      { id: "all-tasks" as NavView, label: "All Tasks", icon: <ListTodo className="w-4 h-4" /> },
+      { id: "all-tasks" as NavView, label: "Tasks", icon: <ListTodo className="w-4 h-4" /> },
     ]
   },
   {
@@ -2757,19 +3200,49 @@ const NAV_GROUPS = [
   },
 ];
 
-function LumaMark({ compact = false }: { compact?: boolean }) {
+function BinnieMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-[0.85rem] bg-[#eeecff] text-[18px] font-bold text-primary shadow-[0_4px_10px_rgb(141_137_203_/_0.16)]">
-        <span className="luma-heading -mt-px">L</span>
-        <Sparkles aria-hidden="true" className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-white p-0.5 text-[#b6aeeb]" />
-      </div>
-      {!compact && <div><p className="luma-heading text-[17px] font-bold text-foreground">Luma</p><p className="-mt-0.5 text-[10px] text-muted-foreground">Make space for what matters.</p></div>}
+      <Image src="/binnie-brandmark.svg" alt="Binnie" width={44} height={44} priority className="h-10 w-10 flex-shrink-0" />
+      {!compact && <div><p className="luma-heading text-[17px] font-bold lowercase text-foreground">binnie</p><p className="-mt-0.5 text-[10px] text-muted-foreground">Less to remember. More room to think.</p></div>}
     </div>
   );
 }
 
-function Sidebar({ view, onNav, className, onNavigate }: { view: NavView; onNav: (v: NavView) => void; className?: string; onNavigate?: () => void }) {
+const WORKSPACE_THEME_OPTIONS: { id: WorkspaceTheme; label: string; description: string; preview: string }[] = [
+  { id: "soft", label: "Soft", description: "Warm, pastel, and airy.", preview: "luma-theme-preview-soft" },
+  { id: "grounded", label: "Grounded", description: "Neutral, cool, and quiet.", preview: "luma-theme-preview-grounded" },
+  { id: "dark", label: "Dark", description: "Low-light, calm, and premium.", preview: "luma-theme-preview-dark" },
+];
+
+function ProfilePanel({ profile, theme, onThemeChange, onSave, onClose, onSignOut }: { profile: UserProfile; theme: WorkspaceTheme; onThemeChange: (theme: WorkspaceTheme) => void; onSave: (profile: UserProfile) => void; onClose: () => void; onSignOut: () => void }) {
+  const [draft, setDraft] = useState(profile);
+  const [section, setSection] = useState<"profile" | "preferences" | "settings">("profile");
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+  const update = (patch: Partial<UserProfile>) => setDraft(current => ({ ...current, ...patch }));
+  return (
+    <div className="fixed inset-0 z-[80] flex justify-end" role="dialog" aria-modal="true" aria-label="Profile settings">
+      <button aria-label="Close profile settings" onClick={onClose} className="absolute inset-0 cursor-default bg-foreground/10 backdrop-blur-[1px]" />
+      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-border bg-sidebar shadow-[-20px_0_50px_rgb(35_41_61_/_0.12)]">
+        <div className="flex items-start justify-between border-b border-border px-5 py-5 sm:px-6"><div><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Your account</p><h2 className="luma-heading mt-1 text-xl font-bold text-foreground">Profile & preferences</h2></div><button onClick={onClose} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button></div>
+        <div className="border-b border-border px-5 py-3 sm:px-6"><div className="flex gap-1 rounded-xl bg-muted/50 p-1">{[{ id: "profile" as const, label: "Profile" }, { id: "preferences" as const, label: "Preferences" }, { id: "settings" as const, label: "Settings" }].map(item => <button key={item.id} onClick={() => setSection(item.id)} className={cn("flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors", section === item.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div>
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          <div className="mb-6 flex items-center gap-3"><Avatar name={draft.displayName || "Charlotte"} size="lg" /><div><p className="text-sm font-semibold text-foreground">{draft.displayName || "Charlotte"}</p><p className="text-[12px] text-muted-foreground">{draft.role}</p></div></div>
+          {section === "profile" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Display name<input value={draft.displayName} onChange={event => update({ displayName: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Role<input value={draft.role} onChange={event => update({ role: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Email <span className="font-normal">(optional)</span><input value={draft.email} onChange={event => update({ email: event.target.value })} type="email" className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label></div>}
+          {section === "preferences" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Timezone<select value={draft.timezone} onChange={event => update({ timezone: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>Asia/Jakarta</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option></select></label><label className="block text-[11px] font-medium text-muted-foreground">Preferred date format<select value={draft.dateFormat} onChange={event => update({ dateFormat: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>12 Aug 2026</option><option>Aug 12, 2026</option><option>2026-08-12</option></select></label></div>}
+          {section === "settings" && <section><div className="mb-4"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Appearance</p><h3 className="luma-heading mt-1 text-lg font-bold text-foreground">Workspace Theme</h3><p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">Choose the atmosphere that feels best to work in.</p></div><div className="space-y-2.5">{WORKSPACE_THEME_OPTIONS.map(option => { const isSelected = theme === option.id; return <button key={option.id} onClick={() => onThemeChange(option.id)} className={cn("w-full rounded-2xl border p-3 text-left transition-colors", isSelected ? "border-primary/35 bg-secondary/50 shadow-sm" : "border-border bg-card hover:border-primary/25 hover:bg-muted/35")} aria-pressed={isSelected}><div className={cn("mb-3 rounded-xl border border-white/70 p-2.5", option.preview)}><div className="rounded-lg bg-[var(--preview-background)] p-2"><div className="flex h-9 items-center gap-2 rounded-md bg-[var(--preview-surface)] px-2 shadow-sm"><span className="h-4 w-4 rounded bg-[var(--preview-primary)]" /><span className="h-2 flex-1 rounded-full bg-[var(--preview-secondary)]" /><span className="h-3 w-3 rounded-full bg-[var(--preview-accent)]" /></div></div></div><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-foreground">{option.label}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{option.description}</p></div>{isSelected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="h-3 w-3" /></span>}</div></button>; })}</div></section>}
+        </div>
+        <div className="flex items-center justify-between border-t border-border px-5 py-4 sm:px-6"><button onClick={onSignOut} className="rounded-lg px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Sign Out</button><button onClick={() => { onSave(draft); onClose(); }} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Save changes</button></div>
+      </aside>
+    </div>
+  );
+}
+
+function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onToggleCollapse, className, onNavigate }: { view: NavView; onNav: (v: NavView) => void; profile: UserProfile; onProfileClick: () => void; collapsed?: boolean; onToggleCollapse?: () => void; className?: string; onNavigate?: () => void }) {
   const activeView = (["org-detail", "person-detail", "project-detail"].includes(view))
     ? (view === "org-detail" ? "organizations" : view === "project-detail" ? "projects" : "people") as NavView
     : view;
@@ -2779,49 +3252,56 @@ function Sidebar({ view, onNav, className, onNavigate }: { view: NavView; onNav:
   };
 
   return (
-    <aside className={cn("flex h-dvh w-[17rem] flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar", className)}>
-      <div className="flex items-center justify-between border-b border-sidebar-border px-5 py-5">
-        <LumaMark />
-        <button onClick={() => choose("search")} aria-label="Search your workspace" className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"><Search className="h-4 w-4" /></button>
+    <aside className={cn("flex h-dvh flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200", collapsed ? "w-[4.75rem]" : "w-[17rem]", className)}>
+      <div className={cn("border-b border-sidebar-border", collapsed ? "flex flex-col items-center gap-2 px-3 py-4" : "flex items-center justify-between px-5 py-5")}>
+        <BinnieMark compact={collapsed} />
+        <div className="flex items-center gap-1">
+          <button onClick={() => choose("search")} aria-label="Search your workspace" title={collapsed ? "Search" : undefined} className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"><Search className="h-4 w-4" /></button>
+          {onToggleCollapse && <button onClick={onToggleCollapse} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground">{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>}
+        </div>
       </div>
-      <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-3 py-4">
+      <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
         {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} className={gi > 0 ? "mt-5" : ""}>
-            {group.label && (
+          <div key={gi} className={cn(gi > 0 && (collapsed ? "mt-3" : "mt-5"))}>
+            {!collapsed && group.label && (
               <p className="mb-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{group.label}</p>
             )}
             {group.items.map((item: { id: NavView; label: string; icon: ReactNode; badge?: number; urgent?: boolean; highlight?: boolean }) => {
               const isActive = activeView === item.id;
               return (
                 <button key={item.id} onClick={() => choose(item.id)}
+                  title={collapsed ? item.label : undefined}
                   className={cn(
-                    "mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition-all duration-200",
+                    "group relative mb-0.5 flex rounded-xl text-[13px] transition-all duration-200",
+                    collapsed ? "mx-auto h-10 w-10 items-center justify-center" : "w-full items-center gap-2.5 px-3 py-2.5",
                     isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-[0_2px_8px_rgb(92_85_153_/_0.06)]" : "text-sidebar-foreground hover:bg-sidebar-accent/65 hover:text-foreground",
                     item.highlight && !isActive && "text-primary"
                   )}>
                   <span className={cn("flex-shrink-0", isActive ? "text-primary" : "opacity-65")}>{item.icon}</span>
-                  <span className="flex-1 text-left">{item.label}</span>
+                  {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className={cn("min-w-[19px] rounded-full px-1.5 py-0.5 text-center text-[10px] font-medium",
+                    <span className={cn("rounded-full text-center text-[10px] font-medium", collapsed ? "absolute -right-1 -top-1 min-w-4 px-1 py-0.5" : "min-w-[19px] px-1.5 py-0.5",
                       item.urgent ? "bg-overdue/10 text-overdue" : isActive ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
                       {item.badge}
                     </span>
                   )}
+                  {collapsed && <span role="tooltip" className="pointer-events-none absolute left-[calc(100%+0.65rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground opacity-0 shadow-[0_5px_16px_rgb(35_41_61_/_0.10)] transition-opacity group-hover:opacity-100">{item.label}</span>}
                 </button>
               );
             })}
           </div>
         ))}
       </nav>
-      <div className="border-t border-sidebar-border px-4 py-4">
-        <div className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-accent/60">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#fff5d9] text-[11px] font-bold text-warning">BO</div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-foreground truncate">Bos</p>
-            <p className="text-[10px] text-muted-foreground">Owner</p>
-          </div>
-          <Settings className="w-3.5 h-3.5 text-muted-foreground" />
-        </div>
+      <div className={cn("border-t border-sidebar-border py-4", collapsed ? "px-2" : "px-4")}>
+        <button onClick={onProfileClick} title={collapsed ? "Profile & settings" : undefined} className={cn("group relative flex rounded-xl text-left transition-colors hover:bg-sidebar-accent/60", collapsed ? "mx-auto h-10 w-10 items-center justify-center" : "w-full items-center gap-2.5 px-2 py-2")}>
+          <Avatar name={profile.displayName || "Charlotte"} size="sm" />
+          {!collapsed && <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-medium text-foreground truncate">{profile.displayName || "Charlotte"}</p>
+            <p className="text-[10px] text-muted-foreground">{profile.role}</p>
+          </div>}
+          {!collapsed && <Settings className="w-3.5 h-3.5 text-muted-foreground" />}
+          {collapsed && <span role="tooltip" className="pointer-events-none absolute left-[calc(100%+0.65rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground opacity-0 shadow-[0_5px_16px_rgb(35_41_61_/_0.10)] transition-opacity group-hover:opacity-100">Profile & settings</span>}
+        </button>
       </div>
     </aside>
   );
@@ -2829,13 +3309,18 @@ function Sidebar({ view, onNav, className, onNavigate }: { view: NavView; onNav:
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-export default function LumaApp() {
+export default function BinnieApp() {
   const [view, setView] = useState<NavView>("home");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<OrgName | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>("soft");
+  const [profile, setProfile] = useState<UserProfile>({ displayName: "Charlotte", role: "Owner", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026" });
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [accountMessage, setAccountMessage] = useState("");
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -2845,6 +3330,40 @@ export default function LumaApp() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    const preferenceTimer = window.setTimeout(() => {
+      if (window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true") setSidebarCollapsed(true);
+    }, 0);
+    return () => window.clearTimeout(preferenceTimer);
+  }, []);
+
+  useEffect(() => {
+    const themeTimer = window.setTimeout(() => {
+      const savedTheme = window.localStorage.getItem(WORKSPACE_THEME_STORAGE_KEY);
+      if (savedTheme === "grounded" || savedTheme === "dark") {
+        setWorkspaceTheme(savedTheme);
+        document.documentElement.dataset.theme = savedTheme;
+      } else {
+        document.documentElement.dataset.theme = "soft";
+      }
+    }, 0);
+    return () => window.clearTimeout(themeTimer);
+  }, []);
+
+  function toggleSidebar() {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
+  }
+
+  function changeWorkspaceTheme(theme: WorkspaceTheme) {
+    setWorkspaceTheme(theme);
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(WORKSPACE_THEME_STORAGE_KEY, theme);
+    setAccountMessage(`${theme.charAt(0).toUpperCase()}${theme.slice(1)} workspace theme applied`);
+    window.setTimeout(() => setAccountMessage(""), 2400);
+  }
 
   function navTo(v: NavView, opts?: { org?: OrgName; project?: string; person?: string }) {
     setView(v);
@@ -2856,55 +3375,55 @@ export default function LumaApp() {
 
   function renderView() {
     switch (view) {
-      case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} />;
+      case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
       case "today": return <TodayView onTaskClick={setSelectedTask} />;
       case "this-week": return <ThisWeekView onTaskClick={setSelectedTask} />;
       case "inbox": return <InboxView />;
-      case "delegated": return <DelegatedView onTaskClick={setSelectedTask} />;
+      case "delegated": return <DelegatedView onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onPersonClick={person => navTo("person-detail", { person })} />;
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
       case "review": return <ReviewView onTaskClick={setSelectedTask} />;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
-      case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} />;
+      case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} />;
       case "people": return <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
       case "person-detail": return selectedPerson
-        ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} />
+        ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} />
         : <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
       case "followup": return <FollowUpView onTaskClick={setSelectedTask} />;
       case "organizations": return <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
       case "org-detail": return selectedOrg
-        ? <OrgDetailView orgName={selectedOrg} onBack={() => setView("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} />
+        ? <OrgDetailView orgName={selectedOrg} onBack={() => setView("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} />
         : <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
       case "projects": return <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
       case "project-detail": return selectedProject
         ? <ProjectDetailView projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} />
         : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
       case "search": return <SearchView onTaskClick={setSelectedTask} />;
-      default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} />;
+      default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
     }
   }
 
-  const isFullHeight = view === "all-tasks";
-
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
-      <Sidebar className="hidden lg:flex" view={view} onNav={v => navTo(v)} />
+      <Sidebar className="hidden lg:flex" view={view} onNav={v => navTo(v)} profile={profile} onProfileClick={() => setProfileOpen(true)} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-border bg-sidebar/90 px-4 backdrop-blur-sm lg:hidden">
           <button aria-label="Open navigation" onClick={() => setMobileMenuOpen(true)} className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><Menu className="h-5 w-5" /></button>
-          <LumaMark compact />
+          <BinnieMark compact />
           <button aria-label="Search your workspace" onClick={() => navTo("search")} className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><Search className="h-5 w-5" /></button>
         </header>
-        <main className={cn("min-h-0 flex-1 overflow-hidden", isFullHeight ? "flex flex-col" : "overflow-y-auto")}>
+        <main className="min-h-0 flex-1 overflow-y-auto">
           {renderView()}
         </main>
       </div>
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)} className="absolute inset-0 bg-[#293047]/15 backdrop-blur-[1px]" />
-          <Sidebar className="relative z-10 !flex shadow-[16px_0_40px_rgb(38_48_71_/_0.12)]" view={view} onNav={v => navTo(v)} onNavigate={() => setMobileMenuOpen(false)} />
+          <Sidebar className="relative z-10 !flex shadow-[16px_0_40px_rgb(38_48_71_/_0.12)]" view={view} onNav={v => navTo(v)} profile={profile} onProfileClick={() => { setMobileMenuOpen(false); setProfileOpen(true); }} onNavigate={() => setMobileMenuOpen(false)} />
         </div>
       )}
       {selectedTask && <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />}
+      {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onThemeChange={changeWorkspaceTheme} onSave={nextProfile => { setProfile(nextProfile); setAccountMessage("Profile updated"); window.setTimeout(() => setAccountMessage(""), 2400); }} onClose={() => setProfileOpen(false)} onSignOut={() => { setProfileOpen(false); setAccountMessage("Signed out of this local preview"); window.setTimeout(() => setAccountMessage(""), 2400); }} />}
+      {accountMessage && <div role="status" className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl border border-success/20 bg-card px-3.5 py-2 text-[12px] font-medium text-success shadow-[0_8px_22px_rgb(35_41_61_/_0.10)]">{accountMessage}</div>}
     </div>
   );
 }
