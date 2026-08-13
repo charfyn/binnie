@@ -18,6 +18,7 @@ const cn = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
 const WORKSPACE_TIME_ZONE = "Asia/Jakarta";
+const WEEK_LANE_TOKENS = ["--week-mon", "--week-tue", "--week-wed", "--week-thu", "--week-fri", "--week-sat", "--week-sun"];
 
 function getWorkspaceCalendarDate() {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -64,7 +65,7 @@ interface Task {
   deadline?: string; deadlineDate?: string; startDate?: string; targetDate?: string; waitingSince?: string; responseDue?: string;
   lastUpdate?: string; isDelegated: boolean; isWaiting: boolean;
   isOverdue?: boolean; isToday?: boolean; estimatedHours?: number;
-  carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; staleDays?: number;
+  carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; statusBeforeCompletion?: Exclude<TaskStatus, "done">; staleDays?: number;
   links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; description?: string; notes?: string; contributorIds?: string[]; activity?: Activity[];
   createdAt?: string; createdBy?: string; updatedAt?: string;
   blockedBy?: { kind: DependencyKind; type: DependencyType; label: string; taskId?: string; owner?: string };
@@ -460,6 +461,33 @@ function archiveCanonicalTask(taskId: string) {
   publishTaskStore();
 }
 
+function markTaskDone(task: Task, lastUpdate = "Just now") {
+  const statusBeforeCompletion = task.status === "done" ? task.statusBeforeCompletion : task.status;
+  const scheduledDate = getTaskRelevantDate(task);
+  Object.assign(task, {
+    status: "done" as const,
+    statusBeforeCompletion: statusBeforeCompletion || "ready",
+    // Preserve a relative legacy deadline (such as "Tomorrow") as the date it
+    // represented when the work was completed, rather than letting it drift.
+    deadlineDate: task.deadlineDate || scheduledDate,
+    isWaiting: false,
+    isOverdue: false,
+    nextActionBy: "me",
+    completedInCurrentMonth: true,
+    lastUpdate,
+  });
+}
+
+function reopenTask(task: Task, lastUpdate = "Reopened just now") {
+  Object.assign(task, {
+    status: task.statusBeforeCompletion || "ready",
+    statusBeforeCompletion: undefined,
+    isWaiting: false,
+    isOverdue: false,
+    lastUpdate,
+  });
+}
+
 const STRATEGIC_PROJECTS = [
   { id: "p1", name: "Villa Website Revamp", org: "Villa Khayangan" as OrgName, progress: 65, tasks: 12, done: 8, deadline: "Sep 2024", status: "on_track" as const },
   { id: "p2", name: "Apotik Management System", org: "Apotik" as OrgName, progress: 30, tasks: 18, done: 5, deadline: "Dec 2024", status: "at_risk" as const },
@@ -541,15 +569,29 @@ function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function getLegacyDeadlineDate(deadline?: string) {
+  const match = deadline?.trim().match(/^(?:[a-z]+,?\s+)?(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{4}))?$/i);
+  if (!match) return undefined;
+
+  const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const month = monthNames.indexOf(match[2].slice(0, 3).toLowerCase());
+  const day = Number(match[1]);
+  const year = Number(match[3] || getWorkspaceCalendarDate().getUTCFullYear());
+  const date = new Date(Date.UTC(year, month, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day ? isoDate(date) : undefined;
+}
+
 function getTaskRelevantDate(task: Task) {
-  if (task.startDate) return task.startDate;
+  // Calendar placement follows the task's target date. Completion is separate
+  // state, so finishing Friday work early never moves it into Thursday.
   if (task.targetDate) return task.targetDate;
   if (task.deadlineDate) return task.deadlineDate;
+  if (task.startDate) return task.startDate;
   const today = getWorkspaceCalendarDate();
   if (task.isToday || task.deadline === "Today") return isoDate(today);
   if (task.deadline === "Tomorrow") { const tomorrow = new Date(today); tomorrow.setUTCDate(today.getUTCDate() + 1); return isoDate(tomorrow); }
   if (task.deadline === "Yesterday") { const yesterday = new Date(today); yesterday.setUTCDate(today.getUTCDate() - 1); return isoDate(yesterday); }
-  return undefined;
+  return getLegacyDeadlineDate(task.deadline);
 }
 
 function isTaskOverdue(task: Task) {
@@ -578,8 +620,19 @@ function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
   const end = new Date(monday); end.setUTCDate(end.getUTCDate() + 6);
   return tasks.filter(task => {
     const relevant = getTaskRelevantDate(task);
-    return Boolean(isActiveTask(task) && relevant && relevant >= start && relevant <= isoDate(end));
+    // The week board is both a plan and a record. Keep completed tasks until
+    // their scheduled week is no longer being shown; archives remain separate.
+    return Boolean(!task.archived && relevant && relevant >= start && relevant <= isoDate(end));
   });
+}
+
+function weeklyTaskSortOrder(task: Task) {
+  if (task.status === "done") return 5;
+  if (isTaskOverdue(task) || task.status === "blocked" || task.status === "review") return 0;
+  if (task.status === "in_progress") return 1;
+  if (task.status === "ready") return 2;
+  if (task.status === "waiting") return 3;
+  return 4;
 }
 
 function getTasksForMonth(tasks = TASKS, date = getWorkspaceCalendarDate()) {
@@ -855,6 +908,43 @@ function StatusDot({ status }: { status: TaskStatus }) {
   return <span className={cn("w-2 h-2 rounded-full flex-shrink-0", configs[status])} />;
 }
 
+function DoneChip() {
+  return <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[9px] font-medium text-success"><Check className="h-2.5 w-2.5" strokeWidth={2.25} />Done</span>;
+}
+
+function WeeklyPlannerTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
+  const isDone = task.status === "done";
+  const stateLabel = task.status === "waiting"
+    ? `Waiting on ${task.nextActionBy === "me" ? "you" : task.nextActionBy}`
+    : task.status === "in_progress"
+      ? "In progress"
+      : task.status === "blocked"
+        ? "Blocked"
+        : task.status === "review"
+          ? "Ready for review"
+          : undefined;
+
+  return (
+    <button onClick={onClick} aria-label={`${task.title}${isDone ? ", completed" : ""}`}
+      className={cn("w-full rounded-xl border border-border/80 bg-card p-2.5 text-left shadow-[0_1px_5px_rgb(35_41_61_/_0.035)] transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_5px_12px_rgb(35_41_61_/_0.06)]", isDone && "border-success/15 bg-card/85")}>
+      <div className="flex items-start gap-1.5">
+        <span className={cn("mt-0.5", isDone && "opacity-45")}><PriorityDot priority={task.priority} /></span>
+        <p className={cn("min-w-0 flex-1 text-[11px] leading-snug", isDone ? "text-foreground/70" : "text-foreground")}>{task.title}</p>
+      </div>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+        <OrgBadge org={task.org} />
+        {isDone && <DoneChip />}
+      </div>
+      {stateLabel && <p className={cn("mt-1.5 truncate text-[9px]", task.status === "blocked" ? "text-overdue" : task.status === "review" ? "text-review" : task.status === "waiting" ? "text-info" : "text-muted-foreground")}>{stateLabel}</p>}
+    </button>
+  );
+}
+
+function WeeklyPlannerDayCount({ taskCount, doneCount }: { taskCount: number; doneCount: number }) {
+  const taskLabel = `${taskCount} ${taskCount === 1 ? "task" : "tasks"}`;
+  return <p className="mt-1 flex items-center gap-1 text-[10px] font-mono text-muted-foreground">{taskLabel}{doneCount > 0 && <><span>·</span>{doneCount === taskCount ? <span className="inline-flex items-center gap-0.5 text-success">All done <Check className="h-2.5 w-2.5" /></span> : <span>{doneCount} done</span>}</>}</p>;
+}
+
 function LinkIcon({ type }: { type: TaskLink["type"] }) {
   const configs: Record<ResourceType, { icon: ReactNode; color: string; bg: string }> = {
     website: { icon: <Globe className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
@@ -1002,10 +1092,16 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
   }, [onClose]);
 
   function markDone() {
-    Object.assign(task, { status: "done" as TaskStatus, isWaiting: false, isOverdue: false, nextActionBy: "me", lastUpdate: "Just now" });
+    markTaskDone(task);
     TASKS.filter(candidate => candidate.status === "blocked" && candidate.blockedBy?.taskId === task.id).forEach(candidate => {
       Object.assign(candidate, { status: "ready" as TaskStatus, isWaiting: false, blockedBy: undefined, nextActionBy: candidate.assignee || candidate.area, lastUpdate: `${task.title} completed — ready to move` });
     });
+    commitTaskStore();
+    onClose();
+  }
+
+  function reopen() {
+    reopenTask(task);
     commitTaskStore();
     onClose();
   }
@@ -1185,9 +1281,9 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
         </div>
         {waitingCheckOpen && <div className="mx-4 mb-1 rounded-2xl border border-info/20 bg-info/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Does this stop the task from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting can still leave room for other progress. Only use Blocked for a real dependency.</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => markWaiting(true)} className="rounded-lg border border-info/20 bg-card px-3 py-2 text-[11px] font-medium text-info">No, I can still continue</button><button onClick={() => markWaiting(false)} className="rounded-lg bg-overdue px-3 py-2 text-[11px] font-medium text-white">Yes, this task is blocked</button><select value={blockingKind} onChange={event => setBlockingKind(event.target.value as DependencyKind)} aria-label="Blocking dependency type" className="rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-muted-foreground"><option value="task">Another task</option><option value="department">Another department</option><option value="decision">Waiting for approval</option><option value="external">External dependency</option><option value="other">Other</option></select></div></div>}
         <div className="flex flex-wrap gap-2 border-t border-border p-4 sm:p-5">
-          <button onClick={markDone} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">
-            {task.status === "review" ? "Approve" : "Mark Done"}
-          </button>
+          {task.status === "done"
+            ? <button onClick={reopen} className="flex-1 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15">Reopen</button>
+            : <button onClick={markDone} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">{task.status === "review" ? "Approve" : "Mark Done"}</button>}
           {task.status === "review" && (
             <button onClick={requestRevision} className="flex-1 rounded-xl border border-border bg-secondary px-4 py-2.5 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">
               Request Revision
@@ -2033,7 +2129,10 @@ function HomeView({
   const waitingTasks = getWaitingTasks(TASKS);
   const waitingPeople = Array.from(new Map(waitingTasks.flatMap(task => taskAssigneeNames(task).map(name => [name, task] as const))).entries()).map(([name, task]) => ({ name, outstanding: waitingTasks.filter(item => taskAssigneeNames(item).includes(name)).length, overdue: waitingTasks.filter(item => taskAssigneeNames(item).includes(name) && isTaskOverdue(item)).length, oldest: task.waitingSince || "Recently" }));
   const weeklyTasks = getTasksForWeek(TASKS);
-  const weekOrgs: { org: OrgName; tasks: number; done: number }[] = (["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => ({ org, tasks: weeklyTasks.filter(task => task.org === org).length, done: TASKS.filter(task => task.org === org && task.status === "done").length }));
+  const weekOrgs: { org: OrgName; tasks: number; done: number }[] = (["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => {
+    const orgTasks = weeklyTasks.filter(task => task.org === org);
+    return { org, tasks: orgTasks.length, done: orgTasks.filter(task => task.status === "done").length };
+  });
   const [homeCards, setHomeCards] = useState<HomeCardConfig[]>(DEFAULT_HOME_CARDS);
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [isCustomizing, setIsCustomizing] = useState(false);
@@ -2214,7 +2313,7 @@ function HomeView({
             <div className="p-4 space-y-3">
               {weekOrgs.map(({ org, tasks, done }) => {
                 const c = ORG_COLORS[org];
-                const pct = Math.round((done / tasks) * 100);
+                const pct = tasks ? Math.round((done / tasks) * 100) : 0;
                 return (
                   <button key={org} onClick={() => onOrgClick(org)} className="block w-full rounded-lg p-1 text-left transition-colors hover:bg-muted/55">
                     <div className="flex items-center justify-between mb-1.5">
@@ -2549,7 +2648,7 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [, setRevision] = useState(0);
   const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
   function approve(task: Task) {
-    Object.assign(task, { status: "done" as TaskStatus, isWaiting: false, isOverdue: false, nextActionBy: "me", lastUpdate: "Approved just now" });
+    markTaskDone(task, "Approved just now");
     commitTaskStore();
     setRevision(current => current + 1);
   }
@@ -2727,45 +2826,117 @@ function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const workspaceDate = getWorkspaceCalendarDate();
   const weekdayIndex = (workspaceDate.getUTCDay() + 6) % 7;
-  const monday = new Date(workspaceDate);
-  monday.setUTCDate(workspaceDate.getUTCDate() - weekdayIndex);
-  const weekDays = Array.from({ length: 5 }, (_, index) => {
-    const date = new Date(monday);
-    date.setUTCDate(monday.getUTCDate() + index);
+  const currentMonday = new Date(workspaceDate);
+  currentMonday.setUTCDate(workspaceDate.getUTCDate() - weekdayIndex);
+  const [weekStart, setWeekStart] = useState(() => new Date(currentMonday));
+  const [selectedDayId, setSelectedDayId] = useState(() => isoDate(workspaceDate));
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setUTCDate(weekStart.getUTCDate() + index);
     return { date, index, label: formatWorkspaceDate(date, { weekday: "short", day: "numeric" }) };
   });
-  const weekTasks = getTasksForWeek(TASKS, monday);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const weekTasks = getTasksForWeek(TASKS, weekStart);
+  const dayColumns = weekDays.map(({ date, index, label }) => {
+    const dateId = isoDate(date);
+    const tasks = weekTasks
+      .filter(task => getTaskRelevantDate(task) === dateId)
+      .sort((left, right) => weeklyTaskSortOrder(left) - weeklyTaskSortOrder(right));
+    return {
+      date,
+      dateId,
+      index,
+      label,
+      tasks,
+      doneCount: tasks.filter(task => task.status === "done").length,
+      isToday: dateId === isoDate(workspaceDate),
+    };
+  });
+  const selectedDay = dayColumns.find(day => day.dateId === selectedDayId) || dayColumns[0];
+  const isCurrentWeek = isoDate(weekStart) === isoDate(currentMonday);
+  const startLabel = formatWorkspaceDate(weekStart, { month: "short", day: "numeric" });
+  const endLabel = formatWorkspaceDate(weekEnd, weekStart.getUTCMonth() === weekEnd.getUTCMonth()
+    ? { day: "numeric" }
+    : { month: "short", day: "numeric" });
+
+  function moveWeek(direction: -1 | 1) {
+    const nextWeek = new Date(weekStart);
+    nextWeek.setUTCDate(weekStart.getUTCDate() + direction * 7);
+    setWeekStart(nextWeek);
+    setSelectedDayId(isoDate(nextWeek));
+  }
+
+  function returnToCurrentWeek() {
+    setWeekStart(new Date(currentMonday));
+    setSelectedDayId(isoDate(workspaceDate));
+  }
+
+  function toggleDayExpansion(dateId: string) {
+    setExpandedDays(current => ({ ...current, [dateId]: !current[dateId] }));
+  }
+
+  function renderDayTasks(day: typeof dayColumns[number]) {
+    const visibleTasks = expandedDays[day.dateId] ? day.tasks : day.tasks.slice(0, 3);
+    const remainingCount = day.tasks.length - visibleTasks.length;
+    if (!day.tasks.length) return <p className="px-1 pt-3 text-[10px] text-muted-foreground/70">No work planned</p>;
+    return <>
+      <div className="space-y-2 pt-3">
+        {visibleTasks.map(task => <WeeklyPlannerTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}
+      </div>
+      {remainingCount > 0 && <button onClick={() => toggleDayExpansion(day.dateId)} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[10px] font-medium text-primary transition-colors hover:bg-primary/8">+{remainingCount} more</button>}
+      {expandedDays[day.dateId] && day.tasks.length > 3 && <button onClick={() => toggleDayExpansion(day.dateId)} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted">Show less</button>}
+    </>;
+  }
+
   return (
     <div className="h-full overflow-auto p-5 sm:p-8 lg:p-10">
-      <div className="mb-6">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Week of {formatWorkspaceDate(monday, { day: "numeric", month: "short" })}</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>This Week</h1>
+      <div className="mb-5">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="mb-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Week of {startLabel}</p>
+            <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>This Week</h1>
+          </div>
+          <p className="pb-0.5 text-right text-[12px] font-medium text-muted-foreground">{startLabel} – {endLabel}</p>
+        </div>
+        <div className="mt-4 flex items-center justify-end gap-1.5">
+          <button onClick={() => moveWeek(-1)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" />Previous</button>
+          <button onClick={returnToCurrentWeek} disabled={isCurrentWeek} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:cursor-default disabled:opacity-45">Today</button>
+          <button onClick={() => moveWeek(1)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Next<ChevronRight className="h-3.5 w-3.5" /></button>
+        </div>
       </div>
-      <div className="overflow-x-auto pb-2">
-      <div className="grid min-h-[400px] min-w-[58rem] grid-cols-[repeat(5,minmax(10rem,1fr))] gap-4">
-        {weekDays.map(({ date, index, label }) => {
-          const tasks = weekTasks.filter(task => getTaskRelevantDate(task) === isoDate(date));
-          const isToday = index === weekdayIndex;
-          const tint = ["bg-[#eae6ff]/60", "bg-[#dcede7]/60", "bg-[#ddebfa]/60", "bg-[#f8e3d3]/55", "bg-[#f5e7b8]/45"][index];
-          return (
-            <div key={date.toISOString()} className={cn("binnie-board-column flex flex-col", tint, isToday && "border-primary/45 shadow-[0_8px_22px_rgb(142_148_242_/_0.10)]")}>
-              <div className={cn("border-b px-2 pb-3", isToday ? "border-primary/25" : "border-border/75")}>
-                <p className={cn("text-[12px] font-semibold", isToday ? "text-primary" : "text-foreground")}>{label}{isToday && <span className="ml-1.5 rounded-full bg-primary/12 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">Today</span>}</p>
-                <p className="text-[10px] text-muted-foreground font-mono">{tasks.length} tasks</p>
-              </div>
-              <div className="space-y-2.5 pt-3 flex-1">
-                {tasks.map(t => (
-                  <button key={t.id} onClick={() => onTaskClick(t)}
-                    className="w-full rounded-xl border border-white/80 bg-white/85 p-3 text-left shadow-[0_2px_8px_rgb(35_41_61_/_0.035)] transition-all hover:-translate-y-px hover:bg-white">
-                    <div className="flex items-start gap-1.5"><PriorityDot priority={t.priority} /><p className="text-[11px] text-foreground leading-snug">{t.title}</p></div>
-                    <div className="mt-1"><OrgBadge org={t.org} /></div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+      <div className="hidden lg:block">
+        <div className="overflow-x-auto xl:overflow-visible">
+          <div className="grid min-h-[25rem] min-w-[56rem] grid-cols-[repeat(7,minmax(0,1fr))] overflow-hidden rounded-[1.25rem] border border-border bg-card xl:min-w-0">
+            {dayColumns.map(day => (
+              <section key={day.dateId} style={{ backgroundColor: `var(${WEEK_LANE_TOKENS[day.index]})` }} className={cn("flex min-w-0 flex-col border-l border-border/70 first:border-l-0", day.isToday && "shadow-[inset_0_2px_0_rgb(142_148_242_/_0.72)]")}>
+                <header className={cn("border-b border-border/70 px-2.5 py-3", day.isToday && "border-b-primary/25 bg-primary/[0.075]")}>
+                  <div className="flex items-start justify-between gap-1">
+                    <p className={cn("text-[11px] font-semibold", day.isToday ? "text-primary" : "text-foreground")}>{day.label}</p>
+                    {day.isToday && <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-primary">Today</span>}
+                  </div>
+                  <WeeklyPlannerDayCount taskCount={day.tasks.length} doneCount={day.doneCount} />
+                </header>
+                <div className="flex flex-1 flex-col px-2.5 pb-3">{renderDayTasks(day)}</div>
+              </section>
+            ))}
+          </div>
+        </div>
       </div>
+      <div className="lg:hidden">
+        <div className="overflow-x-auto pb-2">
+          <div className="flex min-w-max gap-1.5">
+            {dayColumns.map(day => <button key={day.dateId} onClick={() => setSelectedDayId(day.dateId)} aria-pressed={selectedDay.dateId === day.dateId} className={cn("w-[4.4rem] rounded-xl border px-2 py-2 text-left transition-colors", selectedDay.dateId === day.dateId ? "border-primary/35 bg-primary/[0.09] text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/20")}><span className="block text-[10px] font-semibold uppercase">{formatWorkspaceDate(day.date, { weekday: "short" })}</span><span className="mt-0.5 block text-sm font-semibold">{formatWorkspaceDate(day.date, { day: "numeric" })}</span><span className="mt-1 block text-[9px]">{day.tasks.length} {day.tasks.length === 1 ? "task" : "tasks"}</span>{day.isToday && <span className="mt-1 block text-[8px] font-semibold uppercase tracking-wide">Today</span>}</button>)}
+          </div>
+        </div>
+        <section style={{ backgroundColor: `var(${WEEK_LANE_TOKENS[selectedDay.index]})` }} className={cn("mt-3 rounded-[1.25rem] border border-border", selectedDay.isToday && "border-primary/35")}>
+          <header className={cn("border-b border-border/70 px-4 py-3", selectedDay.isToday && "border-b-primary/25 bg-primary/[0.075]")}>
+            <div className="flex items-center justify-between gap-2"><p className={cn("text-sm font-semibold", selectedDay.isToday ? "text-primary" : "text-foreground")}>{formatWorkspaceDate(selectedDay.date, { weekday: "long", month: "short", day: "numeric" })}</p>{selectedDay.isToday && <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">Today</span>}</div>
+            <WeeklyPlannerDayCount taskCount={selectedDay.tasks.length} doneCount={selectedDay.doneCount} />
+          </header>
+          <div className="p-3">{renderDayTasks(selectedDay)}</div>
+        </section>
       </div>
     </div>
   );
@@ -3374,7 +3545,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   const accentColor = orgAccent === "Dusty sage" ? "var(--success)" : orgAccent === "Warm stone" ? "var(--warning)" : "var(--org-villa-dot)";
 
   function completeTask(task: Task) {
-    Object.assign(task, { status: "done" as TaskStatus, isWaiting: false, isOverdue: false, nextActionBy: "me", lastUpdate: "Just now", completedInCurrentMonth: true });
+    markTaskDone(task);
     refreshWorkspace("Task completed");
   }
 

@@ -32,6 +32,14 @@
   --theme-capture-divider: #e2e0ef;
   --theme-deep-blue: #4e5178;
   --theme-link: #4e5178;
+  /* Weekly planner lanes — pale enough to keep the compact layout airy. */
+  --week-mon: #f3f0ff;
+  --week-tue: #eef7f3;
+  --week-wed: #eef5fc;
+  --week-thu: #fff2ea;
+  --week-fri: #fff8df;
+  --week-sat: #f5f1ff;
+  --week-sun: #f0f7f5;
 
   --background: var(--theme-background);
   --foreground: var(--theme-text);
@@ -166,6 +174,14 @@
   --theme-error-surface: #fceaec;
   --theme-info-surface: #e8f1f8;
   --theme-review-surface: #ebeef8;
+  /* Clear keeps the same weekly grouping with a much quieter tint. */
+  --week-mon: #f7f9fe;
+  --week-tue: #f6faf8;
+  --week-wed: #f4f8fc;
+  --week-thu: #faf8f5;
+  --week-fri: #fcfaef;
+  --week-sat: #f7f8fd;
+  --week-sun: #f5f9f8;
 
   --primary-foreground: #ffffff;
   --secondary-foreground: #3f73f1;
@@ -275,6 +291,14 @@
   --theme-capture-divider: #343c47;
   --theme-deep-blue: #d7dde3;
   --theme-link: #b9d0e0;
+  /* Dark retains subtle lane distinction without bright panels. */
+  --week-mon: #24283a;
+  --week-tue: #212d2a;
+  --week-wed: #222d38;
+  --week-thu: #302824;
+  --week-fri: #302d22;
+  --week-sat: #28263b;
+  --week-sun: #22302d;
 
   --primary-foreground: #15191f;
   --secondary-foreground: #d7dde3;
