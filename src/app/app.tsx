@@ -1,7 +1,55 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
+import {
+  addChecklistItemAction,
+  addTaskLinkAction,
+  addTaskDependencyAction,
+  addProjectFocusItemAction,
+  addProjectLinkAction,
+  addProjectMilestoneAction,
+  deleteProjectFocusItemAction,
+  deleteProjectResourceAction,
+  updateProjectMilestoneAction,
+  deleteProjectMilestoneAction,
+  claimTaskAction,
+  createSubtaskAction,
+  createTaskAction,
+  createWorkflowTemplateAction,
+  createProjectAction,
+  createPrincipalAction,
+  updatePrincipalAction,
+  decideTaskReviewAction,
+  archiveTaskAction,
+  archiveWorkflowTemplateAction,
+  applyWorkflowTemplateAction,
+  importLocalTasksAction,
+  mergeTasksAction,
+  postTaskUpdateAction,
+  removeTaskDependencyAction,
+  resolveTaskDependencyAction,
+  resolveInboxCaptureAction,
+  saveInboxCaptureAction,
+  saveViewAction,
+  deleteViewAction,
+  setTaskAssignmentsAction,
+  setProjectMembersAction,
+  setNudgeStateAction,
+  setTaskRecurrenceAction,
+  splitTaskAction,
+  submitTaskForReviewAction,
+  transitionTaskAction,
+  toggleChecklistItemAction,
+  undoCaptureAction,
+  updateTaskAction,
+  uploadTaskFileAction,
+  uploadTaskUpdateFileAction,
+  uploadProjectFileAction,
+} from "./actions";
+import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, ProjectDTO, SavedViewDTO, TaskDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
+import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
   Building2, FolderKanban, Search, Sparkles, Paperclip,
@@ -11,7 +59,7 @@ import {
   ChevronDown, ChevronUp, Check, Calendar, Send,
   Hourglass, Eye, BarChart2, Layers, Timer,
   SlidersHorizontal, ArrowUpDown, Copy, ChevronLeft,
-  MessageSquare, ListTodo, Target, UserCheck, Menu, ImagePlus, Download, Trash2, Pencil,
+  MessageSquare, ListTodo, Target, UserCheck, Menu, ImagePlus, Download, Trash2, Pencil, Database,
 } from "lucide-react";
 
 const cn = (...classes: Array<string | false | null | undefined>) =>
@@ -47,7 +95,7 @@ type WorkspaceTheme = "soft" | "clear" | "dark";
 type NavView =
   | "home" | "today" | "this-week" | "inbox" | "delegated"
   | "waiting" | "review" | "overdue" | "organizations" | "projects" | "search"
-  | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup";
+  | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup" | "workload" | "templates";
 
 type ResourceType = "website" | "sheet" | "figma" | "github" | "drive" | "doc" | "dashboard" | "notion" | "other";
 interface TaskLink { label: string; url: string; type: ResourceType; description?: string }
@@ -68,6 +116,16 @@ interface Task {
   carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; statusBeforeCompletion?: Exclude<TaskStatus, "done">; staleDays?: number;
   links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; description?: string; notes?: string; contributorIds?: string[]; activity?: Activity[];
   createdAt?: string; createdBy?: string; updatedAt?: string;
+  version?: number; organizationId?: string; leadDepartmentId?: string; projectId?: string; involvedDepartmentIds?: string[];
+  followUpDate?: string; nextActionKind?: "principal" | "department" | "external" | "ready";
+  nextActionPrincipalId?: string; nextActionDepartmentId?: string; nextActionExternalLabel?: string; completionBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
+  startBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
+  dependencyRecords?: Array<{ id: string; type: "start_blocker" | "completion_blocker" | "related"; label: string; prerequisiteTaskId?: string; owner?: string; resolvedAt?: string }>;
+  canStartNow?: boolean; updates?: Array<{ id: string; author: string; text: string; createdAt: string; resources?: Array<{ id: string; label: string; url?: string; fileName?: string; kind: "link" | "file" }> }>;
+  checklistItems?: Array<{ id: string; title: string; position: number; completedAt?: string; completedBy?: string }>;
+  subtaskProgress?: { total: number; completed: number };
+  parentTaskId?: string; sourceTaskId?: string; mergedIntoTaskId?: string;
+  recurrence?: { id: string; frequency: "daily" | "weekly" | "monthly" | "months"; interval: number; weekDays: number[]; monthDay?: number; startDate: string; endDate?: string; nextOccurrenceDate?: string; active: boolean };
   blockedBy?: { kind: DependencyKind; type: DependencyType; label: string; taskId?: string; owner?: string };
   relatedTaskIds?: string[];
 }
@@ -362,6 +420,16 @@ let TASKS: Task[] = SEED_TASKS.map(task => ({ ...task }));
 let ARCHIVED_TASKS: Task[] = SEED_ARCHIVED_TASKS.map(task => ({ ...task }));
 let taskStoreVersion = 0;
 let taskStoreHydrated = false;
+let taskStoreUsesServer = false;
+let taskStoreServerRevision = 0;
+let CANONICAL_ACTOR_ID = DEFAULT_CURRENT_USER_ID;
+let CANONICAL_PROJECTS: ProjectDTO[] = [];
+let CANONICAL_SAVED_VIEWS: SavedViewDTO[] = [];
+let CANONICAL_INBOX_CAPTURES: InboxCaptureDTO[] = [];
+let CANONICAL_WORKFLOW_TEMPLATES: WorkflowTemplateDTO[] = [];
+let CANONICAL_NUDGE_STATES: NudgeStateDTO[] = [];
+const remoteDepartmentIds = new Map<string, string>();
+const remoteOrganizationIds = new Map<string, string>();
 const taskStoreListeners = new Set<() => void>();
 
 function taskStoreSnapshot() {
@@ -374,7 +442,7 @@ function subscribeToTaskStore(listener: () => void) {
 }
 
 function persistTaskStore() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || taskStoreUsesServer) return;
   try {
     window.localStorage.setItem(BINNIE_TASK_STORE_STORAGE_KEY, JSON.stringify({ tasks: TASKS, archivedTasks: ARCHIVED_TASKS }));
   } catch {
@@ -390,7 +458,7 @@ function publishTaskStore() {
 }
 
 function initializeTaskStore() {
-  if (taskStoreHydrated || typeof window === "undefined") return;
+  if (taskStoreHydrated || taskStoreUsesServer || typeof window === "undefined") return;
   taskStoreHydrated = true;
   try {
     const stored = JSON.parse(window.localStorage.getItem(BINNIE_TASK_STORE_STORAGE_KEY) || "null") as { tasks?: Task[]; archivedTasks?: Task[] } | null;
@@ -403,6 +471,181 @@ function initializeTaskStore() {
     // safe demo seed.
   }
   publishTaskStore();
+}
+
+function taskDateLabel(iso?: string) {
+  if (!iso) return undefined;
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${iso}T00:00:00Z`));
+}
+
+function taskActivityType(type: string): Activity["type"] {
+  if (type.includes("submitted")) return "submitted";
+  if (type.includes("revision")) return "revision";
+  if (type.includes("approved") || type.includes("completed")) return "approved";
+  if (type.includes("assigned") || type.includes("claimed") || type.includes("reassigned")) return "assigned";
+  if (type.includes("update")) return "commented";
+  return "updated";
+}
+
+function canonicalTaskToLegacy(task: TaskDTO): Task {
+  const startBlocker = task.startBlockedBy[0];
+  return {
+    id: task.id,
+    title: task.title,
+    org: task.org,
+    organizationId: task.organizationId,
+    area: task.area,
+    leadDepartmentId: task.leadDepartmentId,
+    involvedAreas: task.involvedAreas as AreaName[],
+    involvedDepartmentIds: task.involvedDepartments.map(department => department.id),
+    project: task.project,
+    projectId: task.projectId,
+    priority: task.priority,
+    status: task.status,
+    assignee: task.assignee,
+    assigneeIds: task.assigneeIds,
+    nextActionBy: task.nextActionBy,
+    nextActionKind: task.nextActionKind,
+    nextActionPrincipalId: task.nextActionPrincipalId,
+    nextActionDepartmentId: task.nextActionDepartmentId,
+    nextActionExternalLabel: task.nextActionExternalLabel,
+    startDate: task.startDate,
+    targetDate: task.targetDate,
+    deadline: taskDateLabel(task.deadlineDate),
+    deadlineDate: task.deadlineDate,
+    followUpDate: task.followUpDate,
+    responseDue: task.followUpDate ? taskDateLabel(task.followUpDate) : undefined,
+    waitingSince: task.waitingSince,
+    isDelegated: task.assigneeIds.some(id => id !== DEFAULT_CURRENT_USER_ID),
+    isWaiting: task.status === "waiting",
+    isOverdue: task.isOverdue,
+    completedInCurrentMonth: task.status === "done",
+    archived: Boolean(task.archivedAt),
+    description: task.description,
+    notes: task.description,
+    originalCapture: task.originalCapture,
+    version: task.version,
+    canStartNow: task.canStartNow,
+    completionBlockedBy: task.completionBlockedBy,
+    startBlockedBy: task.startBlockedBy,
+    dependencyRecords: [...task.startBlockedBy, ...task.completionBlockedBy, ...task.relatedWork],
+    updates: task.updates.map(update => ({ id: update.id, author: update.author, text: update.text, createdAt: update.createdAt, resources: update.resources })),
+    checklistItems: task.checklistItems,
+    subtaskProgress: task.subtaskProgress,
+    parentTaskId: task.parentTaskId,
+    sourceTaskId: task.sourceTaskId,
+    mergedIntoTaskId: task.mergedIntoTaskId,
+    recurrence: task.recurrence,
+    links: task.resources.filter(resource => resource.kind === "link" && resource.url).map(resource => ({ label: resource.label, url: resource.url!, type: "website" as ResourceType })),
+    files: task.resources.filter(resource => resource.kind === "file").map(resource => ({ id: resource.id, name: resource.fileName || resource.label, type: resource.mimeType?.includes("pdf") ? "pdf" as const : resource.mimeType?.includes("sheet") || resource.mimeType?.includes("excel") ? "excel" as const : resource.mimeType?.startsWith("image/") ? "screenshot" as const : "doc" as const, size: resource.byteSize ? `${Math.ceil(resource.byteSize / 1024)} KB` : undefined, url: resource.url })),
+    activity: task.activity.map(activity => ({ type: taskActivityType(activity.type), actor: activity.actor || "Binnie", text: activity.summary, time: new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(Math.round((new Date(activity.createdAt).getTime() - Date.now()) / 86400000), "day") })),
+    blockedBy: startBlocker ? { kind: startBlocker.prerequisiteTaskId ? "task" : startBlocker.owner ? "department" : "other", type: "blocking", label: startBlocker.label, taskId: startBlocker.prerequisiteTaskId, owner: startBlocker.owner } : undefined,
+    relatedTaskIds: task.relatedWork.map(dependency => dependency.prerequisiteTaskId).filter((id): id is string => Boolean(id)),
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    lastUpdate: task.activity[0] ? "Updated recently" : undefined,
+  };
+}
+
+function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
+  taskStoreUsesServer = true;
+  taskStoreHydrated = true;
+  taskStoreServerRevision = snapshot.revision;
+  CANONICAL_ACTOR_ID = snapshot.actorId;
+  remoteDepartmentIds.clear();
+  remoteOrganizationIds.clear();
+  snapshot.organizations.forEach(organization => {
+    remoteOrganizationIds.set(organization.name, organization.id);
+    organization.departments.forEach(department => remoteDepartmentIds.set(`${organization.name}::${department.name}`, department.id));
+  });
+  // The client directory is only a compatibility projection for existing views.
+  // In shared mode it is always hydrated from canonical principals, never used as
+  // an independent source of truth.
+  PEOPLE_DIRECTORY.splice(0, PEOPLE_DIRECTORY.length, ...snapshot.directory.map(person => ({
+    id: person.id,
+    name: person.name,
+    type: person.type,
+    active: person.active,
+    accountStatus: person.active ? "active_user" as const : "disabled" as const,
+    email: person.email,
+    memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", role: membership.role?.replace(/_/g, " "), area: membership.department as AreaName | undefined })),
+  })));
+  TASKS = snapshot.tasks.filter(task => !task.archivedAt).map(canonicalTaskToLegacy);
+  ARCHIVED_TASKS = snapshot.tasks.filter(task => task.archivedAt).map(canonicalTaskToLegacy);
+  CANONICAL_PROJECTS = snapshot.projects;
+  CANONICAL_SAVED_VIEWS = snapshot.savedViews;
+  CANONICAL_INBOX_CAPTURES = snapshot.inboxCaptures;
+  CANONICAL_WORKFLOW_TEMPLATES = snapshot.workflowTemplates;
+  CANONICAL_NUDGE_STATES = snapshot.nudgeStates;
+  publishTaskStore();
+}
+
+function applyCanonicalInboxCapture(capture: InboxCaptureDTO, revision?: number) {
+  CANONICAL_INBOX_CAPTURES = [capture, ...CANONICAL_INBOX_CAPTURES.filter(item => item.id !== capture.id)];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function removeCanonicalInboxCapture(captureId: string, revision?: number) {
+  CANONICAL_INBOX_CAPTURES = CANONICAL_INBOX_CAPTURES.filter(item => item.id !== captureId);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function applyCanonicalProject(project: ProjectDTO, revision?: number) {
+  const exists = CANONICAL_PROJECTS.some(candidate => candidate.id === project.id);
+  CANONICAL_PROJECTS = exists
+    ? CANONICAL_PROJECTS.map(candidate => candidate.id === project.id ? project : candidate)
+    : [project, ...CANONICAL_PROJECTS];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+  return project;
+}
+
+function getCanonicalProject(projectId: string) {
+  return CANONICAL_PROJECTS.find(project => project.id === projectId);
+}
+
+function applyCanonicalWorkflowTemplate(template: WorkflowTemplateDTO, revision?: number) {
+  const exists = CANONICAL_WORKFLOW_TEMPLATES.some(candidate => candidate.id === template.id);
+  CANONICAL_WORKFLOW_TEMPLATES = exists
+    ? CANONICAL_WORKFLOW_TEMPLATES.map(candidate => candidate.id === template.id ? template : candidate)
+    : [template, ...CANONICAL_WORKFLOW_TEMPLATES];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function removeCanonicalWorkflowTemplate(templateId: string, revision?: number) {
+  CANONICAL_WORKFLOW_TEMPLATES = CANONICAL_WORKFLOW_TEMPLATES.filter(template => template.id !== templateId);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function applyCanonicalNudgeState(state: NudgeStateDTO, revision?: number) {
+  CANONICAL_NUDGE_STATES = [...CANONICAL_NUDGE_STATES.filter(item => item.dedupKey !== state.dedupKey), state];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function applyCanonicalTask(task: TaskDTO, revision?: number) {
+  const next = canonicalTaskToLegacy(task);
+  const collection = next.archived ? ARCHIVED_TASKS : TASKS;
+  const otherCollection = next.archived ? TASKS : ARCHIVED_TASKS;
+  const exists = collection.some(candidate => candidate.id === next.id);
+  if (next.archived) {
+    TASKS = otherCollection.filter(candidate => candidate.id !== next.id);
+    ARCHIVED_TASKS = exists ? collection.map(candidate => candidate.id === next.id ? next : candidate) : [...collection, next];
+  } else {
+    ARCHIVED_TASKS = otherCollection.filter(candidate => candidate.id !== next.id);
+    TASKS = exists ? collection.map(candidate => candidate.id === next.id ? next : candidate) : [...collection, next];
+  }
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+  return next;
+}
+
+function getRemoteDepartmentId(org: OrgName, area: AreaName) {
+  return remoteDepartmentIds.get(`${org}::${area}`);
 }
 
 function useTaskStoreVersion() {
@@ -513,6 +756,20 @@ const PEOPLE_DIRECTORY: DirectoryPerson[] = [
 
 function getDirectoryPerson(nameOrId: string) {
   return PEOPLE_DIRECTORY.find(person => person.name === nameOrId || person.id === nameOrId);
+}
+
+function applyCanonicalDirectoryPerson(person: DirectoryDTO) {
+  const next: DirectoryPerson = {
+    id: person.id, name: person.name, type: person.type, active: person.active,
+    accountStatus: person.active ? "active_user" : "disabled",
+    email: person.email,
+    memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", area: membership.department as AreaName | undefined, role: membership.role.replace(/_/g, " ") })),
+  };
+  const index = PEOPLE_DIRECTORY.findIndex(item => item.id === next.id);
+  if (index >= 0) PEOPLE_DIRECTORY.splice(index, 1, next);
+  else PEOPLE_DIRECTORY.push(next);
+  publishTaskStore();
+  return next;
 }
 
 function getDirectoryPeople(ids?: string[]) {
@@ -1083,6 +1340,36 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
   const [blockingKind, setBlockingKind] = useState<DependencyKind>("task");
   const [areasEditOpen, setAreasEditOpen] = useState(false);
   const [assigneesEditOpen, setAssigneesEditOpen] = useState(false);
+  const [updateText, setUpdateText] = useState("");
+  const [updateAttachments, setUpdateAttachments] = useState<File[]>([]);
+  const [reviewTarget, setReviewTarget] = useState("");
+  const [revisionRequestOpen, setRevisionRequestOpen] = useState(false);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [nextActionEditOpen, setNextActionEditOpen] = useState(false);
+  const [nextActionKind, setNextActionKind] = useState<"principal" | "department" | "external" | "ready">(task.nextActionKind || "ready");
+  const [nextActionTarget, setNextActionTarget] = useState(task.nextActionPrincipalId || task.nextActionDepartmentId || task.nextActionExternalLabel || "");
+  const [dependencyOpen, setDependencyOpen] = useState(false);
+  const [dependencyType, setDependencyType] = useState<"start_blocker" | "completion_blocker" | "related">("completion_blocker");
+  const [dependencyTaskId, setDependencyTaskId] = useState("");
+  const [dependencyLabel, setDependencyLabel] = useState("");
+  const [checklistText, setChecklistText] = useState("");
+  const [subtaskText, setSubtaskText] = useState("");
+  const [subtaskArea, setSubtaskArea] = useState<AreaName | "">("");
+  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState("");
+  const [subtaskDeadline, setSubtaskDeadline] = useState("");
+  const [recurrenceOpen, setRecurrenceOpen] = useState(false);
+  const [repeatFrequency, setRepeatFrequency] = useState<"daily" | "weekly" | "monthly" | "months">(task.recurrence?.frequency || "weekly");
+  const [repeatInterval, setRepeatInterval] = useState(String(task.recurrence?.interval || 1));
+  const [repeatStart, setRepeatStart] = useState(task.recurrence?.startDate || task.startDate || isoDate(getWorkspaceCalendarDate()));
+  const [repeatEnd, setRepeatEnd] = useState(task.recurrence?.endDate || "");
+  const [repeatWeekDays, setRepeatWeekDays] = useState<number[]>(task.recurrence?.weekDays?.length ? task.recurrence.weekDays : [new Date(`${task.recurrence?.startDate || task.startDate || isoDate(getWorkspaceCalendarDate())}T00:00:00Z`).getUTCDay()]);
+  const [repeatMonthDay, setRepeatMonthDay] = useState(String(task.recurrence?.monthDay || new Date(`${task.recurrence?.startDate || task.startDate || isoDate(getWorkspaceCalendarDate())}T00:00:00Z`).getUTCDate()));
+  const [mergeTaskId, setMergeTaskId] = useState("");
+  const [mergeDatesFrom, setMergeDatesFrom] = useState<"survivor" | "source">("survivor");
+  const [splitText, setSplitText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const updateFileInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -1091,7 +1378,23 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  function markDone() {
+  function applyServerTask(result: Awaited<ReturnType<typeof transitionTaskAction>>) {
+    if (!result.ok) { setActionMessage(result.message); return false; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setRevision(value => value + 1);
+    setActionMessage("");
+    return true;
+  }
+
+  async function markDone() {
+    if (taskStoreUsesServer && task.version) {
+      const result = task.status === "review"
+        ? await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: true })
+        : await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "done" });
+      const applied = applyServerTask(result);
+      if (applied) onClose();
+      return;
+    }
     markTaskDone(task);
     TASKS.filter(candidate => candidate.status === "blocked" && candidate.blockedBy?.taskId === task.id).forEach(candidate => {
       Object.assign(candidate, { status: "ready" as TaskStatus, isWaiting: false, blockedBy: undefined, nextActionBy: candidate.assignee || candidate.area, lastUpdate: `${task.title} completed — ready to move` });
@@ -1100,25 +1403,62 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
     onClose();
   }
 
-  function reopen() {
+  async function reopen() {
+    if (taskStoreUsesServer && task.version) {
+      const applied = applyServerTask(await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "ready" }));
+      if (applied) onClose();
+      return;
+    }
     reopenTask(task);
     commitTaskStore();
     onClose();
   }
 
-  function requestRevision() {
+  async function requestRevision() {
+    if (taskStoreUsesServer && task.version) {
+      if (!revisionNote.trim()) { setActionMessage("Add a short revision note before sending work back."); return; }
+      const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: false, revisionNote });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(value => value + 1);
+      setRevisionRequestOpen(false);
+      setRevisionNote("");
+      return;
+    }
     Object.assign(task, { status: "ready" as TaskStatus, isWaiting: false, nextActionBy: task.assignee || "me", lastUpdate: "Revision requested just now" });
     commitTaskStore();
     onClose();
   }
 
-  function reschedule() {
+  async function reschedule() {
+    if (taskStoreUsesServer && task.version) {
+      const tomorrow = new Date(getWorkspaceCalendarDate());
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, deadlineDate: isoDate(tomorrow) });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(value => value + 1);
+      return;
+    }
     Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
     commitTaskStore();
     onClose();
   }
 
-  function markWaiting(canStillMove: boolean) {
+  async function markWaiting(canStillMove: boolean) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await transitionTaskAction({
+        taskId: task.id,
+        expectedVersion: task.version,
+        status: canStillMove ? "waiting" : "blocked",
+        blocker: canStillMove ? undefined : { type: "start_blocker", label: blockingKind === "task" ? "A dependent task" : blockingKind === "department" ? "Another department" : blockingKind === "decision" ? "A decision" : blockingKind === "external" ? "An external response" : "Another dependency" },
+      });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setWaitingCheckOpen(false);
+      setRevision(current => current + 1);
+      return;
+    }
     if (canStillMove) {
       Object.assign(task, { status: "waiting" as TaskStatus, isWaiting: true, lastUpdate: "Waiting noted just now" });
     } else {
@@ -1134,13 +1474,36 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
     setRevision(current => current + 1);
   }
 
-  function setLeadArea(area: AreaName) {
+  async function setLeadArea(area: AreaName) {
+    if (taskStoreUsesServer && task.version) {
+      const leadDepartmentId = getRemoteDepartmentId(task.org, area);
+      if (!leadDepartmentId) { setActionMessage("This department is not configured in the shared workspace yet."); return; }
+      const involvedDepartmentIds = Array.from(new Set([leadDepartmentId, ...(task.involvedDepartmentIds || [])]));
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, leadDepartmentId, involvedDepartmentIds });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(current => current + 1);
+      return;
+    }
     Object.assign(task, { area, involvedAreas: Array.from(new Set([area, ...(task.involvedAreas || [])])) });
     commitTaskStore();
     setRevision(current => current + 1);
   }
 
-  function toggleInvolvedArea(area: AreaName) {
+  async function toggleInvolvedArea(area: AreaName) {
+    if (taskStoreUsesServer && task.version) {
+      const departmentId = getRemoteDepartmentId(task.org, area);
+      if (!departmentId) { setActionMessage("This department is not configured in the shared workspace yet."); return; }
+      const currentIds = task.involvedDepartmentIds || [];
+      const nextIds = currentIds.includes(departmentId) ? currentIds.filter(id => id !== departmentId) : [...currentIds, departmentId];
+      const leadDepartmentId = task.leadDepartmentId || getRemoteDepartmentId(task.org, task.area);
+      if (leadDepartmentId && !nextIds.includes(leadDepartmentId)) nextIds.unshift(leadDepartmentId);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, involvedDepartmentIds: nextIds });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(current => current + 1);
+      return;
+    }
     const existing = getTaskAreas(task);
     const next = existing.includes(area) ? existing.filter(item => item !== area) : [...existing, area];
     Object.assign(task, { involvedAreas: Array.from(new Set([task.area, ...next])) });
@@ -1148,10 +1511,174 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
     setRevision(current => current + 1);
   }
 
-  function toggleTaskAssignee(id: string) {
+  async function toggleTaskAssignee(id: string) {
     const current = getTaskAssigneeIds(task);
+    if (taskStoreUsesServer && task.version) {
+      const next = current.includes(id) ? current.filter(item => item !== id) : [...current, id];
+      const primaryId = next.includes(task.assignee ? getDirectoryPerson(task.assignee)?.id || "" : "") ? getDirectoryPerson(task.assignee || "")?.id : next[0];
+      const result = await setTaskAssignmentsAction({ taskId: task.id, expectedVersion: task.version, assignments: next.map(principalId => ({ principalId, role: principalId === primaryId ? "primary_owner" as const : "collaborator" as const })) });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(value => value + 1);
+      return;
+    }
     setTaskAssignees(task, current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
     setRevision(value => value + 1);
+  }
+
+  async function postUpdate() {
+    if (!updateText.trim()) return;
+    if (taskStoreUsesServer && task.version) {
+      const result = await postTaskUpdateAction({ taskId: task.id, expectedVersion: task.version, text: updateText });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      const update = result.data.updates.find(item => item.authorId === DEFAULT_CURRENT_USER_ID && item.text === updateText.trim());
+      let expectedVersion = result.data.version;
+      if (update && updateAttachments.length) {
+        for (const file of updateAttachments) {
+          const body = new FormData();
+          body.set("taskId", task.id);
+          body.set("updateId", update.id);
+          body.set("expectedVersion", String(expectedVersion));
+          body.set("file", file);
+          const uploaded = await uploadTaskUpdateFileAction(body);
+          if (!uploaded.ok) { setActionMessage(uploaded.message); return; }
+          expectedVersion = uploaded.data.version;
+          Object.assign(task, applyCanonicalTask(uploaded.data, uploaded.revision));
+        }
+      }
+      setUpdateText("");
+      setUpdateAttachments([]);
+      setRevision(value => value + 1);
+      return;
+    }
+    updateTask(task.id, { activity: [...(task.activity || []), { type: "commented", actor: "You", text: updateText.trim(), time: "Just now" }], lastUpdate: "Updated just now" });
+    setUpdateText("");
+    commitTaskStore();
+    setRevision(value => value + 1);
+  }
+
+  async function submitForReview() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const reviewerId = reviewTarget || DEFAULT_CURRENT_USER_ID;
+    const result = await submitTaskForReviewAction({ taskId: task.id, expectedVersion: task.version, reviewerId });
+    if (!result.ok) { setActionMessage(result.message); return; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setRevision(value => value + 1);
+  }
+
+  async function claimTask() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const teamId = getTaskAssignees(task).find(assignee => assignee.type === "team")?.id;
+    const result = await claimTaskAction({ taskId: task.id, expectedVersion: task.version, teamId });
+    if (!result.ok) { setActionMessage(result.message); return; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setRevision(value => value + 1);
+  }
+
+  async function saveNextAction() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const nextAction = nextActionKind === "ready" ? { kind: "ready" as const }
+      : nextActionKind === "principal" ? { kind: "principal" as const, principalId: nextActionTarget }
+        : nextActionKind === "department" ? { kind: "department" as const, departmentId: nextActionTarget }
+          : { kind: "external" as const, externalLabel: nextActionTarget };
+    if (nextActionKind !== "ready" && !nextActionTarget.trim()) { setActionMessage("Choose who needs to move this next."); return; }
+    const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, nextAction });
+    if (!applyServerTask(result)) return;
+    setNextActionEditOpen(false);
+  }
+
+  async function addDependency() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const prerequisite = TASKS.find(candidate => candidate.id === dependencyTaskId);
+    const label = dependencyLabel.trim() || prerequisite?.title;
+    if (!label) { setActionMessage("Choose related work or describe the dependency."); return; }
+    const result = await addTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependency: { type: dependencyType, label, prerequisiteTaskId: prerequisite?.id } });
+    if (!applyServerTask(result)) return;
+    setDependencyTaskId(""); setDependencyLabel(""); setDependencyOpen(false);
+  }
+
+  async function changeDependency(dependencyId: string, resolved: boolean, remove = false) {
+    if (!taskStoreUsesServer || !task.version) return;
+    const result = remove
+      ? await removeTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependencyId })
+      : await resolveTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependencyId, resolved });
+    applyServerTask(result);
+  }
+
+  async function addChecklistItem() {
+    if (!taskStoreUsesServer || !task.version || !checklistText.trim()) return;
+    const result = await addChecklistItemAction({ taskId: task.id, expectedVersion: task.version, title: checklistText });
+    if (!applyServerTask(result)) return;
+    setChecklistText("");
+  }
+
+  async function toggleChecklistItem(itemId: string, completed: boolean) {
+    if (!taskStoreUsesServer || !task.version) return;
+    applyServerTask(await toggleChecklistItemAction({ taskId: task.id, expectedVersion: task.version, itemId, completed }));
+  }
+
+  async function addSubtask() {
+    if (!taskStoreUsesServer || !subtaskText.trim()) return;
+    const leadDepartmentId = subtaskArea ? getRemoteDepartmentId(task.org, subtaskArea) : task.leadDepartmentId;
+    const result = await createSubtaskAction({ parentTaskId: task.id, title: subtaskText, priority: task.priority, leadDepartmentId, projectId: task.projectId, involvedDepartmentIds: leadDepartmentId ? [leadDepartmentId] : task.involvedDepartmentIds, deadlineDate: subtaskDeadline || undefined, assignments: subtaskAssigneeId ? [{ principalId: subtaskAssigneeId, role: "primary_owner" as const }] : task.assigneeIds?.length ? task.assigneeIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })) : undefined });
+    if (!result.ok) { setActionMessage(result.message); return; }
+    setSubtaskText(""); setSubtaskArea(""); setSubtaskAssigneeId(""); setSubtaskDeadline(""); setActionMessage("Subtask added.");
+  }
+
+  async function saveRecurrence() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const interval = Number(repeatInterval);
+    if (!Number.isInteger(interval) || interval < 1) { setActionMessage("Repeat interval must be at least one."); return; }
+    if (repeatFrequency === "weekly" && !repeatWeekDays.length) { setActionMessage("Choose at least one weekday."); return; }
+    if ((repeatFrequency === "monthly" || repeatFrequency === "months") && (!Number.isInteger(Number(repeatMonthDay)) || Number(repeatMonthDay) < 1 || Number(repeatMonthDay) > 31)) { setActionMessage("Choose a valid day of the month."); return; }
+    if (repeatEnd && repeatEnd < repeatStart) { setActionMessage("The end date must be on or after the start date."); return; }
+    const result = await setTaskRecurrenceAction({ taskId: task.id, expectedVersion: task.version, recurrence: { frequency: repeatFrequency, interval, weekDays: repeatFrequency === "weekly" ? repeatWeekDays : [], monthDay: repeatFrequency === "monthly" || repeatFrequency === "months" ? Number(repeatMonthDay) : undefined, startDate: repeatStart, endDate: repeatEnd || undefined } });
+    if (!applyServerTask(result)) return;
+    setRecurrenceOpen(false);
+  }
+
+  async function stopRecurrence() {
+    if (!taskStoreUsesServer || !task.version) return;
+    if (applyServerTask(await setTaskRecurrenceAction({ taskId: task.id, expectedVersion: task.version }))) setRecurrenceOpen(false);
+  }
+
+  async function uploadFiles(files: FileList | null) {
+    if (!taskStoreUsesServer || !task.version || !files?.length) return;
+    let expectedVersion = task.version;
+    for (const file of Array.from(files)) {
+      const body = new FormData(); body.set("taskId", task.id); body.set("expectedVersion", String(expectedVersion)); body.set("file", file);
+      const result = await uploadTaskFileAction(body);
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      expectedVersion = task.version || expectedVersion;
+    }
+    setRevision(value => value + 1);
+  }
+
+  async function archiveTask() {
+    if (taskStoreUsesServer && task.version) {
+      if (applyServerTask(await archiveTaskAction({ taskId: task.id, expectedVersion: task.version }))) onClose();
+      return;
+    }
+    TASKS = TASKS.filter(candidate => candidate.id !== task.id);
+    ARCHIVED_TASKS = [{ ...task, archived: true, status: "done", isWaiting: false, updatedAt: new Date().toISOString(), lastUpdate: "Archived just now" }, ...ARCHIVED_TASKS];
+    commitTaskStore();
+    onClose();
+  }
+
+  async function mergeTask() {
+    if (!taskStoreUsesServer || !task.version || !mergeTaskId) return;
+    const result = await mergeTasksAction({ survivorId: task.id, expectedVersion: task.version, sourceTaskIds: [mergeTaskId], dateResolution: { startDate: mergeDatesFrom, targetDate: mergeDatesFrom, deadlineDate: mergeDatesFrom, followUpDate: mergeDatesFrom } });
+    if (applyServerTask(result)) setMergeTaskId("");
+  }
+
+  async function splitTask() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const titles = splitText.split(/\n|,/).map(title => title.trim()).filter(Boolean);
+    const result = await splitTaskAction({ taskId: task.id, expectedVersion: task.version, titles });
+    if (!result.ok) { setActionMessage(result.message); return; }
+    setSplitText(""); setActionMessage(`Split into ${result.data.length} tasks.`); onClose();
   }
 
   const assignedPeople = getTaskAssignees(task);
@@ -1181,14 +1708,16 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
               { label: "Priority", value: <PriorityBadge priority={task.priority} /> },
               { label: "Assigned To", value: assignedPeople.length ? <div className="flex flex-wrap items-center gap-1.5">{assignedPeople.map(person => <span key={person.id} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2 py-1 text-sm text-foreground"><Avatar name={person.name} size="xs" />{person.name}</span>)}</div> : <span className="text-sm text-muted-foreground">Unassigned</span> },
               { label: "Next Action By", value: <span className={cn("text-sm font-medium", task.nextActionBy === "me" ? "text-warning" : "text-primary")}>{task.nextActionBy === "me" ? "You" : task.nextActionBy}</span> },
-              { label: "Start / Target", value: <span className={cn("text-sm font-medium", task.isOverdue ? "text-overdue" : "text-foreground")}>{task.startDate || "—"} <span className="text-muted-foreground">→</span> {task.targetDate || task.deadline || "—"}</span> },
+              { label: "Start Date", value: <span className="text-sm font-medium text-foreground">{task.startDate || "—"}</span> },
+              { label: "Target Date", value: <span className="text-sm font-medium text-foreground">{task.targetDate || "—"}</span> },
+              { label: "Deadline", value: <span className={cn("text-sm font-medium", task.isOverdue ? "text-overdue" : "text-foreground")}>{task.deadline || "—"}</span> },
+              { label: "Follow-Up Date", value: <span className="text-sm font-medium text-foreground">{task.responseDue || "—"}</span> },
               { label: "Project", value: <span className="text-sm text-foreground">{task.project || "—"}</span> },
               { label: "Lead Area", value: <AreaBadge area={task.area} /> },
               { label: "Involved Areas", value: <span className="text-sm text-foreground">{getTaskAreas(task).filter(area => area !== task.area).join(" · ") || "No additional areas"}</span> },
               { label: "Contributors", value: <span className="text-sm text-foreground">{directoryNames(task.contributorIds).join(" · ") || "—"}</span> },
               { label: "Blocked By", value: task.blockedBy ? <span className="flex items-center gap-1.5 text-sm font-medium text-overdue"><GitBranch className="h-3.5 w-3.5" />{task.blockedBy.label}</span> : <span className="text-sm text-muted-foreground">No blocking dependency</span> },
               { label: "Waiting Since", value: <span className="text-sm font-mono text-muted-foreground">{task.waitingSince || "—"}</span> },
-              { label: "Response Due", value: <span className="text-sm font-mono text-muted-foreground">{task.responseDue || "—"}</span> },
               { label: "Last Update", value: <span className="text-sm text-muted-foreground">{task.lastUpdate || "—"}</span> },
               { label: "Est. Time", value: <span className="text-sm font-mono text-muted-foreground">{task.estimatedHours ? `${task.estimatedHours}h` : "—"}</span> },
             ].map(({ label, value }) => (
@@ -1207,6 +1736,19 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
             {assignedPeople.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{assignedPeople.map(person => <span key={person.id} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[10px] text-foreground"><Avatar name={person.name} size="xs" />{person.name}{assigneesEditOpen && <button onClick={() => toggleTaskAssignee(person.id)} aria-label={`Remove ${person.name}`} className="text-muted-foreground hover:text-overdue"><X className="h-3 w-3" /></button>}</span>)}</div>}
             {assigneesEditOpen && <div className="mt-3 border-t border-border pt-3"><p className="text-[10px] font-medium text-muted-foreground">Add people or teams</p><div className="mt-2 flex flex-wrap gap-1.5">{getDirectoryAssignees(task.org).map(person => <button key={person.id} onClick={() => toggleTaskAssignee(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", getTaskAssigneeIds(task).includes(person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div></div>}
           </section>
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Next action by</p><p className="mt-0.5 text-[10px] text-muted-foreground">Make the next move clear without changing who owns the task.</p></div><button onClick={() => setNextActionEditOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{nextActionEditOpen ? "Close" : "Edit"}</button></div>
+            {nextActionEditOpen && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[9rem_1fr_auto]"><select value={nextActionKind} onChange={event => { setNextActionKind(event.target.value as typeof nextActionKind); setNextActionTarget(""); }} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="ready">Nobody / Ready</option><option value="principal">Person or team</option><option value="department">Department</option><option value="external">External</option></select>{nextActionKind === "principal" ? <select value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Choose person or team</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : nextActionKind === "department" ? <select value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Choose department</option>{captureOrgAreas(task.org).map(area => <option key={area} value={getRemoteDepartmentId(task.org, area)}>{area}</option>)}</select> : nextActionKind === "external" ? <input value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} placeholder="Supplier, guest, bank…" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /> : <span className="rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-muted-foreground">Ready for anyone to take.</span>}<button onClick={() => void saveNextAction()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button></div>}
+          </section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Dependencies & related work</p><p className="mt-0.5 text-[10px] text-muted-foreground">Start blockers stop starting. Completion blockers still let work move now.</p></div><button onClick={() => setDependencyOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add</button></div>
+            {task.dependencyRecords?.length ? <div className="mt-3 space-y-1.5">{task.dependencyRecords.map(dependency => <div key={dependency.id} className="flex items-center gap-2 rounded-xl bg-muted/45 px-2.5 py-2"><GitBranch className={cn("h-3.5 w-3.5", dependency.type === "related" ? "text-primary" : dependency.type === "completion_blocker" ? "text-info" : "text-overdue")} /><span className="min-w-0 flex-1 truncate text-[11px] text-foreground">{dependency.label}</span><span className="text-[9px] text-muted-foreground">{dependency.type.replace("_", " ")}</span><button onClick={() => void changeDependency(dependency.id, !dependency.resolvedAt)} className="text-[10px] font-medium text-primary">{dependency.resolvedAt ? "Reopen" : "Resolve"}</button><button onClick={() => void changeDependency(dependency.id, false, true)} className="text-muted-foreground hover:text-overdue"><X className="h-3 w-3" /></button></div>)}</div> : <p className="mt-3 text-[11px] text-muted-foreground">No dependencies or related work yet.</p>}
+            {dependencyOpen && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[10rem_1fr_auto]"><select value={dependencyType} onChange={event => setDependencyType(event.target.value as typeof dependencyType)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="start_blocker">Start blocker</option><option value="completion_blocker">Completion blocker</option><option value="related">Related</option></select><select value={dependencyTaskId} onChange={event => { setDependencyTaskId(event.target.value); setDependencyLabel(""); }} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Describe instead…</option>{TASKS.filter(candidate => candidate.id !== task.id && !candidate.archived).map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><button onClick={() => void addDependency()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Add</button><input value={dependencyLabel} onChange={event => setDependencyLabel(event.target.value)} placeholder="Or describe an approval, department, or external response" className="sm:col-span-3 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div>}
+          </section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Completion criteria</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional checks for work that needs a clear Done state.</p></div>{task.checklistItems?.length ? <span className="text-[10px] text-muted-foreground">{task.checklistItems.filter(item => item.completedAt).length}/{task.checklistItems.length}</span> : null}</div>{task.checklistItems?.length ? <div className="mt-3 space-y-1.5">{task.checklistItems.map(item => <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-foreground"><input type="checkbox" checked={Boolean(item.completedAt)} onChange={event => void toggleChecklistItem(item.id, event.target.checked)} className="accent-primary" /> <span className={cn(item.completedAt && "line-through text-muted-foreground")}>{item.title}</span></label>)}</div> : null}<div className="mt-3 flex gap-2"><input value={checklistText} onChange={event => setChecklistText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addChecklistItem()} placeholder="Add completion item" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addChecklistItem()} disabled={!checklistText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add</button></div></section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Subtasks</p><p className="mt-0.5 text-[10px] text-muted-foreground">Use only for distinct deliverables inside this work.</p></div>{task.subtaskProgress?.total ? <span className="text-[10px] text-muted-foreground">{task.subtaskProgress.completed}/{task.subtaskProgress.total} complete</span> : null}</div><div className="mt-3 grid gap-2"><input value={subtaskText} onChange={event => setSubtaskText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addSubtask()} placeholder="Add a distinct deliverable" className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="grid gap-2 sm:grid-cols-3"><select value={subtaskArea} onChange={event => setSubtaskArea(event.target.value as AreaName)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent area</option>{captureOrgAreas(task.org).map(area => <option key={area}>{area}</option>)}</select><select value={subtaskAssigneeId} onChange={event => setSubtaskAssigneeId(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent assignee</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={subtaskDeadline} onChange={event => setSubtaskDeadline(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div><button onClick={() => void addSubtask()} disabled={!subtaskText.trim()} className="w-fit rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add subtask</button></div></section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Repeat</p><p className="mt-0.5 text-[10px] text-muted-foreground">Create the next occurrence only after this one is complete.</p></div><button onClick={() => setRecurrenceOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{task.recurrence?.active ? "Edit" : "Set repeat"}</button></div>{task.recurrence?.active && <p className="mt-3 text-[11px] text-foreground">Every {task.recurrence.interval > 1 ? `${task.recurrence.interval} ` : ""}{task.recurrence.frequency} · next {task.recurrence.nextOccurrenceDate ? taskDateLabel(task.recurrence.nextOccurrenceDate) : "after completion"}</p>}{recurrenceOpen && <div className="mt-3 space-y-2 border-t border-border pt-3"><div className="grid gap-2 sm:grid-cols-4"><select value={repeatFrequency} onChange={event => setRepeatFrequency(event.target.value as typeof repeatFrequency)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="months">Every N months</option></select><input aria-label="Repeat interval" type="number" min="1" value={repeatInterval} onChange={event => setRepeatInterval(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><input aria-label="Repeat start date" type="date" value={repeatStart} onChange={event => setRepeatStart(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><input aria-label="Repeat end date" type="date" value={repeatEnd} onChange={event => setRepeatEnd(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div>{repeatFrequency === "weekly" && <div className="flex flex-wrap gap-1.5">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, day) => <button key={label} onClick={() => setRepeatWeekDays(current => current.includes(day) ? current.filter(item => item !== day) : [...current, day])} className={cn("rounded-lg border px-2 py-1 text-[10px] font-medium", repeatWeekDays.includes(day) ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{label}</button>)}</div>}{(repeatFrequency === "monthly" || repeatFrequency === "months") && <label className="block text-[10px] font-medium text-muted-foreground">Day of month<input aria-label="Day of month" type="number" min="1" max="31" value={repeatMonthDay} onChange={event => setRepeatMonthDay(event.target.value)} className="ml-2 w-16 rounded-lg border border-border bg-background px-2 py-1 text-[11px] text-foreground" /></label>}<div className="flex items-center gap-3"><button onClick={() => void saveRecurrence()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button>{task.recurrence?.active && <button onClick={() => void stopRecurrence()} className="text-left text-[10px] font-medium text-overdue">Stop repeating</button>}<span className="text-[10px] text-muted-foreground">End date is optional.</span></div></div>}</section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div><p className="text-[12px] font-semibold text-foreground">Reshape work</p><p className="mt-0.5 text-[10px] text-muted-foreground">Merge duplicate captures, or split truly independent actions while preserving history.</p></div><div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[1fr_auto]"><select value={mergeTaskId} onChange={event => setMergeTaskId(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Merge another task into this one…</option>{TASKS.filter(candidate => candidate.id !== task.id && !candidate.archived && candidate.status !== "done").map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><button onClick={() => void mergeTask()} disabled={!mergeTaskId} className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Merge</button>{mergeTaskId && <label className="sm:col-span-2 flex items-center gap-2 text-[10px] text-muted-foreground">Dates <select value={mergeDatesFrom} onChange={event => setMergeDatesFrom(event.target.value as "survivor" | "source")} className="rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground"><option value="survivor">Keep this task&apos;s dates</option><option value="source">Use selected task&apos;s dates</option></select><span>Choose before merging when dates differ.</span></label>}<textarea value={splitText} onChange={event => setSplitText(event.target.value)} rows={2} placeholder="One distinct action per line to split this task" className="sm:col-span-2 resize-none rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void splitTask()} disabled={splitText.split(/\n|,/).filter(value => value.trim()).length < 2} className="w-fit rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-foreground disabled:opacity-40">Split into tasks</button></div></section>}
           {task.links && task.links.length > 0 && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</h3>
@@ -1234,12 +1776,18 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
               </div>
             </div>
           )}
+          {taskStoreUsesServer && <div className="flex items-center gap-2"><input ref={fileInputRef} type="file" multiple className="hidden" onChange={event => void uploadFiles(event.target.files)} /><button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary hover:bg-primary/5"><Paperclip className="h-3.5 w-3.5" />Attach file</button><span className="text-[10px] text-muted-foreground">Up to 5 MB each</span></div>}
           {task.notes && (
             <div>
               <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Notes</h3>
               <p className="rounded-xl bg-muted/45 p-3 text-[13px] leading-relaxed text-muted-foreground">{task.notes}</p>
             </div>
           )}
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Updates</p><p className="mt-0.5 text-[10px] text-muted-foreground">Share progress without changing the task status.</p></div></div>
+            {task.updates && task.updates.length > 0 && <div className="mt-3 space-y-2 border-t border-border pt-3">{task.updates.map(update => <div key={update.id} className="rounded-xl bg-muted/45 p-2.5"><p className="text-[12px] text-foreground">{update.text}</p>{update.resources?.length ? <div className="mt-2 flex flex-wrap gap-1.5">{update.resources.map(resource => resource.url ? <a key={resource.id} href={resource.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-primary"><Paperclip className="h-3 w-3" />{resource.fileName || resource.label}</a> : <span key={resource.id} className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground"><Paperclip className="h-3 w-3" />{resource.fileName || resource.label}</span>)}</div> : null}<p className="mt-1 text-[10px] text-muted-foreground">{update.author} · {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(update.createdAt))}</p></div>)}</div>}
+            <div className="mt-3 flex flex-wrap gap-2"><input ref={updateFileInputRef} type="file" multiple className="hidden" onChange={event => setUpdateAttachments(Array.from(event.target.files || []).slice(0, 4))} /><input value={updateText} onChange={event => setUpdateText(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void postUpdate(); }} placeholder="Add a short work update…" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><button onClick={() => updateFileInputRef.current?.click()} className="rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-medium text-primary"><Paperclip className="h-3.5 w-3.5" /></button><button onClick={() => void postUpdate()} disabled={!updateText.trim()} className="rounded-xl bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Post</button>{updateAttachments.length ? <p className="w-full text-[10px] text-muted-foreground">{updateAttachments.map(file => file.name).join(" · ")}</p> : null}</div>
+          </section>
           {task.originalCapture && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Original Capture</h3>
@@ -1251,6 +1799,11 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
           {task.blockedBy && (
             <div className="rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-4">
               <div className="flex items-start gap-2.5"><GitBranch className="mt-0.5 h-4 w-4 flex-shrink-0 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Real dependency</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">This task is blocked by {task.blockedBy.label}{task.blockedBy.owner ? ` · next action: ${task.blockedBy.owner}` : ""}. It will stay visible separately from work that can still move.</p></div></div>
+            </div>
+          )}
+          {task.completionBlockedBy && task.completionBlockedBy.length > 0 && (
+            <div className="rounded-2xl border border-info/20 bg-info/[0.045] p-4">
+              <div className="flex items-start gap-2.5"><GitBranch className="mt-0.5 h-4 w-4 flex-shrink-0 text-info" /><div><p className="text-[12px] font-semibold text-foreground">Can start now</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Final completion is waiting on {task.completionBlockedBy.map(dependency => dependency.label).join(" · ")}. Keep moving the work that is available now.</p></div></div>
             </div>
           )}
           {task.activity && task.activity.length > 0 && (
@@ -1279,20 +1832,25 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
             </div>
           )}
         </div>
-        {waitingCheckOpen && <div className="mx-4 mb-1 rounded-2xl border border-info/20 bg-info/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Does this stop the task from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting can still leave room for other progress. Only use Blocked for a real dependency.</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => markWaiting(true)} className="rounded-lg border border-info/20 bg-card px-3 py-2 text-[11px] font-medium text-info">No, I can still continue</button><button onClick={() => markWaiting(false)} className="rounded-lg bg-overdue px-3 py-2 text-[11px] font-medium text-white">Yes, this task is blocked</button><select value={blockingKind} onChange={event => setBlockingKind(event.target.value as DependencyKind)} aria-label="Blocking dependency type" className="rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-muted-foreground"><option value="task">Another task</option><option value="department">Another department</option><option value="decision">Waiting for approval</option><option value="external">External dependency</option><option value="other">Other</option></select></div></div>}
+        {actionMessage && <p role="status" className="mx-4 mb-2 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue sm:mx-5">{actionMessage}</p>}
+        {revisionRequestOpen && <div className="mx-4 mb-2 rounded-2xl border border-warning/20 bg-warning/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">What needs revision?</p><textarea value={revisionNote} onChange={event => setRevisionNote(event.target.value)} rows={2} placeholder="Add a concise revision note…" className="mt-2 w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><div className="mt-2 flex justify-end gap-2"><button onClick={() => setRevisionRequestOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">Cancel</button><button onClick={() => void requestRevision()} className="rounded-lg bg-warning px-2.5 py-1.5 text-[10px] font-medium text-white">Send back for revision</button></div></div>}
+        {task.status === "in_progress" && taskStoreUsesServer && <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-review/20 bg-review/[0.045] p-3 sm:mx-5"><span className="text-[11px] font-medium text-foreground">Submit for review</span><select value={reviewTarget} onChange={event => setReviewTarget(event.target.value)} className="min-w-36 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] text-foreground"><option value="">Choose reviewer</option>{PEOPLE_DIRECTORY.filter(person => person.type === "person" && person.active).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><button onClick={() => void submitForReview()} disabled={!reviewTarget} className="rounded-lg bg-review px-2.5 py-1.5 text-[10px] font-medium text-white disabled:opacity-45">Submit</button></div>}
+        {waitingCheckOpen && <div className="mx-4 mb-1 rounded-2xl border border-info/20 bg-info/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Does this stop the task from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting can still leave room for other progress. Only use Blocked for a real dependency.</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void markWaiting(true)} className="rounded-lg border border-info/20 bg-card px-3 py-2 text-[11px] font-medium text-info">No, I can still continue</button><button onClick={() => void markWaiting(false)} className="rounded-lg bg-overdue px-3 py-2 text-[11px] font-medium text-white">Yes, this task is blocked</button><select value={blockingKind} onChange={event => setBlockingKind(event.target.value as DependencyKind)} aria-label="Blocking dependency type" className="rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-muted-foreground"><option value="task">Another task</option><option value="department">Another department</option><option value="decision">Waiting for approval</option><option value="external">External dependency</option><option value="other">Other</option></select></div></div>}
         <div className="flex flex-wrap gap-2 border-t border-border p-4 sm:p-5">
           {task.status === "done"
-            ? <button onClick={reopen} className="flex-1 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15">Reopen</button>
-            : <button onClick={markDone} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">{task.status === "review" ? "Approve" : "Mark Done"}</button>}
+            ? <button onClick={() => void reopen()} className="flex-1 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15">Reopen</button>
+            : <button onClick={() => void markDone()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">{task.status === "review" ? "Approve" : "Mark Done"}</button>}
           {task.status === "review" && (
-            <button onClick={requestRevision} className="flex-1 rounded-xl border border-border bg-secondary px-4 py-2.5 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">
+            <button onClick={() => taskStoreUsesServer ? setRevisionRequestOpen(current => !current) : void requestRevision()} className="flex-1 rounded-xl border border-border bg-secondary px-4 py-2.5 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">
               Request Revision
             </button>
           )}
+          {taskStoreUsesServer && task.status !== "done" && task.assignee && getDirectoryPerson(task.assignee)?.id !== DEFAULT_CURRENT_USER_ID && getTaskAssignees(task).some(assignee => assignee.type === "team") && <button onClick={() => void claimTask()} className="rounded-xl border border-primary/20 bg-primary/[0.06] px-3 py-2.5 text-[11px] font-medium text-primary">Claim task</button>}
           {task.status !== "done" && <button onClick={() => setWaitingCheckOpen(current => !current)} className="rounded-xl border border-info/20 bg-info/[0.06] px-3 py-2.5 text-[11px] font-medium text-info transition-colors hover:bg-info/10">Mark waiting</button>}
-          <button aria-label="Reschedule for tomorrow" onClick={reschedule} className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <button aria-label="Reschedule for tomorrow" onClick={() => void reschedule()} className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
             <Calendar className="w-4 h-4" />
           </button>
+          <button onClick={() => void archiveTask()} className="rounded-xl border border-overdue/20 bg-overdue/[0.04] px-3 py-2.5 text-[11px] font-medium text-overdue">Archive</button>
         </div>
         </div>
       </div>
@@ -1402,10 +1960,12 @@ function parseCaptureDate(text: string): { label: string; iso: string; kind: Cap
   const today = getWorkspaceCalendarDate();
   const date = new Date(today);
   let found = false;
-  const isTarget = /\b(?:target|aim for|try by|around|hopefully)\b/.test(normalized);
-  const isDeadline = !isTarget && /\b(?:deadline|due|must finish(?: by)?|before|latest|by)\b/.test(normalized);
-  const kind: CaptureDateKind = isDeadline ? "deadline" : "target";
-  const semanticScope = normalized.match(/\b(?:deadline|due|must finish(?: by)?|before|latest|target|aim for|try by|around|hopefully)\b[^.;\n]*/i)?.[0] || normalized;
+  const isFollowUp = /\b(?:follow\s*up|check in|nudge)\b/.test(normalized);
+  const isStart = !isFollowUp && /\b(?:start|begin|mulai)\b/.test(normalized);
+  const isTarget = !isFollowUp && !isStart && /\b(?:target|aim for|try by|around|hopefully)\b/.test(normalized);
+  const isDeadline = !isTarget && !isFollowUp && !isStart && /\b(?:deadline|due|must finish(?: by)?|before|latest|by)\b/.test(normalized);
+  const kind: CaptureDateKind = isFollowUp ? "follow_up" : isStart ? "start" : isDeadline ? "deadline" : "target";
+  const semanticScope = normalized.match(/\b(?:deadline|due|must finish(?: by)?|before|latest|target|aim for|try by|around|hopefully|follow\s*up|check in|nudge|start|begin|mulai)\b[^.;\n]*/i)?.[0] || normalized;
   if (/\btomorrow\b/.test(semanticScope)) { date.setUTCDate(date.getUTCDate() + 1); found = true; }
   else if (/\btoday\b/.test(semanticScope)) found = true;
   else if (/\bend of (?:this )?(?:month|the month)\b/.test(semanticScope)) { date.setUTCMonth(date.getUTCMonth() + 1, 0); found = true; }
@@ -1454,7 +2014,7 @@ function captureMetadataParts(raw: string) {
   const parts = (useCommas ? commaParts : raw.split(/\s*(?:→|\||\/|;)\s*/)).map(part => part.trim()).filter(Boolean);
   // A date often comes first in a quick thought: “deadline tomorrow, ask
   // Marketing to…”. Treat it as metadata, never as the task's title.
-  if (parts.length > 1 && /^(?:deadline|due|target|before|by|latest)\b/i.test(parts[0])) {
+  if (parts.length > 1 && /^(?:deadline|due|target|before|by|latest|follow\s*up|start|begin)\b/i.test(parts[0])) {
     return { description: parts.slice(1).join(" "), metadata: parts[0] };
   }
   return { description: parts[0] || raw.trim(), metadata: parts.slice(1).join(" ") };
@@ -1463,7 +2023,7 @@ function captureMetadataParts(raw: string) {
 function splitCaptureTasks(input: string) {
   const areaNames = Array.from(new Set(ORGS_META.flatMap(org => org.areas))).map(area => area.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((left, right) => right.length - left.length);
   const actionWords = "prepare|update|confirm|review|check|reconcile|create|draft|fix|finalize|improve|approve|publish|plan|send|coordinate|organize|bikin|buat|urus|cek|cari|catat|design|rancang|follow up";
-  const metadataOnly = /^(?:deadline|due|target|before|by|latest|must finish|end(?:\s+of)?|besok|tomorrow|minggu depan|next week)\b/i;
+  const metadataOnly = /^(?:deadline|due|target|before|by|latest|follow\s*up|start|begin|must finish|end(?:\s+of)?|besok|tomorrow|minggu depan|next week)\b/i;
   const sentences = input.split(/\n|;/).map(part => part.trim()).filter(Boolean).reduce<string[]>((items, part) => {
     if (metadataOnly.test(part) && items.length) items[items.length - 1] = `${items[items.length - 1]}; ${part}`;
     else items.push(part);
@@ -1639,6 +2199,18 @@ function cleanCaptureTitle(description: string) {
   return title[0].toUpperCase() + title.slice(1);
 }
 
+/** A quiet, deterministic duplicate hint for capture review; it never merges work on its own. */
+function similarActiveCaptureTask(title: string) {
+  const words = (value: string) => new Set(value.toLowerCase().replace(/https?:\/\/\S+/g, "").replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(word => word.length > 2));
+  const source = words(title);
+  if (!source.size) return undefined;
+  return TASKS
+    .filter(task => task.status !== "done" && !task.archived)
+    .map(task => ({ task, score: [...source].filter(word => words(task.title).has(word)).length / source.size }))
+    .filter(candidate => candidate.score >= 0.6)
+    .sort((left, right) => right.score - left.score)[0]?.task;
+}
+
 function captureIsForCurrentUser(raw: string) {
   return /\b(?:for\s+me|my\s+task|i\s+need\s+to|remind\s+me\s+to|i\s+should|buat\s+saya|tugas\s+saya|untuk\s+saya|aku\s+harus|saya\s+harus)\b/i.test(raw);
 }
@@ -1661,6 +2233,7 @@ function createCapturePreviews(input: string, organization?: OrgName, defaultAre
     const assigneeMatch = raw.match(/\b(?:ask|assign(?:\s+to)?|follow up with)\s+(.+?)\s+to\b/i);
     const namedAssigneeIds = PEOPLE_DIRECTORY.filter(person => hasCaptureTerm(raw, person.name)).map(person => person.id);
     const askedAssignee = resolveDirectoryAssignee(assigneeMatch?.[1]);
+    const unmatchedAssigneeName = assigneeMatch?.[1]?.trim() && !askedAssignee ? assigneeMatch[1].trim() : undefined;
     const askedAssigneeId = askedAssignee ? getDirectoryPerson(askedAssignee)?.id : undefined;
     const explicitAssigneeIds = Array.from(new Set([
       ...namedAssigneeIds,
@@ -1692,11 +2265,14 @@ function createCapturePreviews(input: string, organization?: OrgName, defaultAre
       notes: captureNotesForAreas(involvedAreas),
       deadline: date?.kind === "deadline" ? date.label : undefined,
       targetDate: date?.kind === "target" ? date.label : undefined,
+      startDate: date?.kind === "start" ? date.iso : undefined,
+      followUpDate: date?.kind === "follow_up" ? date.iso : undefined,
       dateISO: date?.iso, dateKind: date?.kind,
       orgConfidence, areaConfidence, assigneeConfidence: inferredAssignees.confidence, dateConfidence: date?.confidence || "unknown", overallConfidence: confidence,
       orgReason: learned?.org ? "Suggested from a previous correction" : inferredOrg.reason,
       areaReason: learned?.area ? "Suggested from a previous correction" : inferredArea.reason,
       assigneeReason: inferredAssignees.reason,
+      unmatchedAssigneeName,
       uncertain: [],
     };
   });
@@ -1735,6 +2311,7 @@ function saveCapturedTask(capture: ParsedTask, attachments: string[] = [], conte
     nextActionBy: primaryAssignee || "Unassigned",
     deadline: capture.deadline,
     deadlineDate: capture.dateKind === "deadline" ? capture.dateISO : undefined,
+    startDate: capture.dateKind === "start" ? capture.dateISO : undefined,
     targetDate: capture.dateKind === "target" ? capture.dateISO : undefined,
     responseDue: capture.followUpDate,
     isDelegated,
@@ -1750,6 +2327,53 @@ function saveCapturedTask(capture: ParsedTask, attachments: string[] = [], conte
     lastUpdate: "Just now",
     activity: [{ type: "assigned", actor: "You", text: assignedNames.length ? `Created from Smart Inbox and assigned to ${assignedNames.join(" · ")}` : "Created from Smart Inbox", time: "Just now" }],
   });
+}
+
+async function saveCapturedTaskToServer(capture: ParsedTask, context?: { project?: string; projectId?: string; org?: OrgName; area?: AreaName }, attachments: File[] = []) {
+  const org = capture.org || context?.org;
+  const leadArea = capture.area || context?.area;
+  const leadDepartmentId = leadArea && org ? getRemoteDepartmentId(org, leadArea) : undefined;
+  const involvedDepartmentIds = (capture.involvedAreas || []).map(area => org ? getRemoteDepartmentId(org, area) : undefined).filter((id): id is string => Boolean(id));
+  const assigneeIds = Array.from(new Set(capture.assigneeIds || []));
+  const result = await createTaskAction({
+    title: capture.title,
+    description: capture.notes,
+    organizationId: org ? remoteOrganizationIds.get(org) : undefined,
+    leadDepartmentId,
+    projectId: context?.projectId,
+    involvedDepartmentIds,
+    assignments: assigneeIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })),
+    nextAction: assigneeIds[0] ? { kind: "principal" as const, principalId: assigneeIds[0] } : { kind: "ready" as const },
+    priority: capture.priority,
+    startDate: capture.dateKind === "start" ? capture.dateISO : undefined,
+    targetDate: capture.dateKind === "target" ? capture.dateISO : undefined,
+    deadlineDate: capture.dateKind === "deadline" ? capture.dateISO : undefined,
+    followUpDate: capture.followUpDate,
+    dependencies: capture.suggestedStatus === "blocked" && capture.blockedByTitle ? [{ type: "start_blocker" as const, label: capture.blockedByTitle }] : undefined,
+    originalCapture: capture.originalText,
+  });
+  if (result.ok) {
+    const saved = applyCanonicalTask(result.data, result.revision);
+    if (capture.link) {
+      const linked = await addTaskLinkAction({ taskId: saved.id, expectedVersion: saved.version, url: capture.link, label: "Captured link" });
+      if (linked.ok) applyCanonicalTask(linked.data, linked.revision);
+    }
+    let current = TASKS.find(task => task.id === saved.id) || saved;
+    for (const file of attachments) {
+      const formData = new FormData();
+      formData.set("taskId", saved.id);
+      formData.set("expectedVersion", String(current.version));
+      formData.set("file", file);
+      const uploaded = await uploadTaskFileAction(formData);
+      if (uploaded.ok) current = applyCanonicalTask(uploaded.data, uploaded.revision);
+    }
+    if (capture.suggestedStatus === "blocked") {
+      const transition = await transitionTaskAction({ taskId: saved.id, expectedVersion: current.version, status: "blocked" });
+      if (transition.ok) return applyCanonicalTask(transition.data, transition.revision);
+    }
+    return saved;
+  }
+  throw new Error(result.message);
 }
 
 function CapturedWorkReviewCard({
@@ -1780,11 +2404,16 @@ function CapturedWorkReviewCard({
     .map(person => person.id === currentUserId ? "Me" : person.name);
   const areasToShow = preview.involvedAreas?.length ? preview.involvedAreas : preview.area ? [preview.area] : [];
   const statusLabel = PLANNING_COLUMNS.find(column => column.id === (preview.suggestedStatus || "ready"))?.label || "Ready";
+  const duplicate = similarActiveCaptureTask(preview.title);
   const updateDate = (kind: CaptureDateKind, iso: string) => onChange({
+    // The date currently being parsed is kept for backwards-compatible capture
+    // rendering, but editing one date must never erase the other date meanings.
     dateKind: kind,
     dateISO: iso || undefined,
-    deadline: kind === "deadline" && iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined,
-    targetDate: kind === "target" && iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined,
+    deadline: kind === "deadline" ? (iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined) : preview.deadline,
+    targetDate: kind === "target" ? (iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined) : preview.targetDate,
+    startDate: kind === "start" ? (iso || undefined) : preview.startDate,
+    followUpDate: kind === "follow_up" ? (iso || undefined) : preview.followUpDate,
   });
   const chooseOrganization = (org: OrgName) => onChange({ org, orgConfidence: "high" });
   const toggleArea = (area: AreaName) => {
@@ -1797,6 +2426,17 @@ function CapturedWorkReviewCard({
     if (!id) return;
     const assigneeIds = Array.from(new Set([...(preview.assigneeIds || []), id]));
     onChange({ assigneeIds, assignee: directoryNames(assigneeIds)[0], assigneeConfidence: "high" });
+  };
+  const addUnmatchedPerson = async () => {
+    const name = preview.unmatchedAssigneeName?.trim();
+    if (!name || !taskStoreUsesServer) return onToggleEdit();
+    const organizationId = preview.org ? remoteOrganizationIds.get(preview.org) : undefined;
+    const departmentId = preview.org && preview.area ? getRemoteDepartmentId(preview.org, preview.area) : undefined;
+    const result = await createPrincipalAction({ name, type: "person", memberships: organizationId ? [{ organizationId, departmentId }] : undefined });
+    if (!result.ok) return;
+    const person = applyCanonicalDirectoryPerson(result.data);
+    addAssignee(person.id);
+    onChange({ unmatchedAssigneeName: undefined, assigneeIds: Array.from(new Set([...(preview.assigneeIds || []), person.id])), assignee: person.name, assigneeConfidence: "high" });
   };
 
   return (
@@ -1813,6 +2453,8 @@ function CapturedWorkReviewCard({
             <span>{statusLabel}</span>
             {preview.deadline && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Deadline: {preview.deadline}</span>}
             {preview.targetDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Target: {preview.targetDate}</span>}
+            {preview.startDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Start: {captureDateLabel(new Date(`${preview.startDate}T00:00:00Z`))}</span>}
+            {preview.followUpDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Follow up: {captureDateLabel(new Date(`${preview.followUpDate}T00:00:00Z`))}</span>}
             {preview.suggestedStatus === "blocked" && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Blocked by {preview.blockedByTitle || "a dependency"}</span>}
             {preview.link && <span className="inline-flex items-center gap-1 text-info"><Link2 className="h-3 w-3" />Link attached</span>}
           </div>
@@ -1821,6 +2463,16 @@ function CapturedWorkReviewCard({
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-medium text-muted-foreground">Which organization is this for?</span>
               {candidateOrganizations.map(org => <button key={org.name} onClick={() => chooseOrganization(org.name)} className="rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary">{org.name}</button>)}
+            </div>
+          )}
+
+          {preview.unmatchedAssigneeName && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-warning/20 bg-warning/[0.05] px-2.5 py-2 text-[10px] text-muted-foreground"><span><strong className="text-foreground">{preview.unmatchedAssigneeName}</strong> isn&apos;t in Binnie yet.</span><button onClick={() => onChange({ unmatchedAssigneeName: undefined, assigneeIds: [], assignee: undefined })} className="font-medium text-primary">Leave unassigned</button><button onClick={() => void addUnmatchedPerson()} className="font-medium text-primary">Add person</button></div>
+          )}
+
+          {duplicate && (
+            <div className="mt-3 rounded-lg border border-warning/25 bg-warning/[0.055] px-2.5 py-2 text-[10px] leading-4 text-muted-foreground">
+              <span className="font-medium text-foreground">This looks similar to an active task:</span> {duplicate.title}. Confirming keeps it as separate work; open the existing task to compare before adding it.
             </div>
           )}
 
@@ -1836,7 +2488,8 @@ function CapturedWorkReviewCard({
               <label className="text-[10px] font-medium text-muted-foreground">Priority<select value={preview.priority} onChange={event => onChange({ priority: event.target.value as Priority, priorityExplicit: true })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{Object.entries(PRIORITY_CONFIG).map(([value, config]) => <option key={value} value={value}>{config.label}</option>)}</select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Target date<input type="date" value={preview.dateKind === "target" ? preview.dateISO || "" : ""} onChange={event => updateDate("target", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Deadline<input type="date" value={preview.dateKind === "deadline" ? preview.dateISO || "" : ""} onChange={event => updateDate("deadline", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
-              <label className="text-[10px] font-medium text-muted-foreground">Follow-up date<input type="date" value={preview.followUpDate || ""} onChange={event => onChange({ followUpDate: event.target.value || undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Start date<input type="date" value={preview.dateKind === "start" ? preview.dateISO || "" : preview.startDate || ""} onChange={event => updateDate("start", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Follow-up date<input type="date" value={preview.dateKind === "follow_up" ? preview.dateISO || "" : preview.followUpDate || ""} onChange={event => updateDate("follow_up", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Blocked by <span className="font-normal">(optional)</span><input value={preview.blockedByTitle || ""} onChange={event => onChange({ blockedByTitle: event.target.value || undefined, suggestedStatus: event.target.value ? "blocked" : "ready" })} placeholder="Another task or decision" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Notes <span className="font-normal">(optional)</span><input value={preview.notes || ""} onChange={event => onChange({ notes: event.target.value || undefined })} placeholder="Add context" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
             </div>
@@ -1861,6 +2514,7 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
   const [previews, setPreviews] = useState<InlineCapturePreview[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [undoTaskIds, setUndoTaskIds] = useState<string[]>([]);
   const [linkDraft, setLinkDraft] = useState("");
@@ -1872,7 +2526,19 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
     setProcessing(true);
     setMessage("");
     setTimeout(() => {
-      setPreviews(createCapturePreviews(input, organization, area, project, currentUserId));
+      const next = createCapturePreviews(input, organization, area, project, currentUserId);
+      if (!next.length || next.every(preview => !preview.title.trim())) {
+        if (taskStoreUsesServer) void saveInboxCaptureAction({ rawText: input }).then(result => {
+          if (result.ok) {
+            applyCanonicalInboxCapture(result.data.capture, result.revision);
+            setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+          } else setMessage(result.message);
+        });
+        else setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+        setProcessing(false);
+        return;
+      }
+      setPreviews(next);
       setEditing(null);
       setProcessing(false);
     }, 700);
@@ -1887,8 +2553,18 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
     }, 5000);
   }
 
-  function undoSave() {
+  async function undoSave() {
+    if (taskStoreUsesServer && undoTaskIds.length) {
+      const result = await undoCaptureAction({ taskIds: undoTaskIds });
+      if (!result.ok) { setMessage(result.message); return; }
+      const removed = new Set(result.data.deletedTaskIds);
+      TASKS = TASKS.filter(task => !removed.has(task.id));
+      ARCHIVED_TASKS = ARCHIVED_TASKS.filter(task => !removed.has(task.id));
+      taskStoreServerRevision = result.revision || taskStoreServerRevision;
+      publishTaskStore();
+    } else {
     undoTaskIds.forEach(deleteTask);
+    }
     onSaved?.();
     setUndoTaskIds([]);
     setMessage("Undone");
@@ -1899,20 +2575,31 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
     setPreviews(current => current.map((preview, previewIndex) => previewIndex === index ? { ...preview, ...patch } : preview));
   }
 
-  function save(index: number) {
+  async function save(index: number) {
     const preview = previews[index];
     if (!preview?.title.trim()) return;
     rememberCaptureCorrection(preview.originalText, { org: preview.org, area: preview.area, assignee: preview.assignee });
-    const created = saveCapturedTask(preview, attachments, { project, area }, currentUserId);
+    let created: Task;
+    try {
+      created = taskStoreUsesServer ? await saveCapturedTaskToServer(preview, { project, area }, attachmentFiles) : saveCapturedTask(preview, attachments, { project, area }, currentUserId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Binnie could not save this task yet.");
+      return;
+    }
     onSaved?.();
     setPreviews(current => current.filter((_, previewIndex) => previewIndex !== index));
     setEditing(null);
     showSaveMessage(`Added to Binnie${preview.org ? ` · ${preview.org}` : " · Inbox"}${preview.area ? ` · ${preview.area}` : ""}`, [created.id]);
   }
 
-  function saveAll() {
+  async function saveAll() {
     const confirmable = previews.filter(preview => preview.title.trim());
-    const created = confirmable.map(preview => { rememberCaptureCorrection(preview.originalText, { org: preview.org, area: preview.area, assignee: preview.assignee }); const task = saveCapturedTask(preview, attachments, { project, area }, currentUserId); onSaved?.(); return task; });
+    const created: Task[] = [];
+    for (const preview of confirmable) {
+      rememberCaptureCorrection(preview.originalText, { org: preview.org, area: preview.area, assignee: preview.assignee });
+      try { created.push(taskStoreUsesServer ? await saveCapturedTaskToServer(preview, { project, area }, attachmentFiles) : saveCapturedTask(preview, attachments, { project, area }, currentUserId)); onSaved?.(); }
+      catch (error) { setMessage(error instanceof Error ? error.message : "Binnie could not save every task yet."); break; }
+    }
     setPreviews([]);
     setInput("");
     setEditing(null);
@@ -1921,7 +2608,9 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
 
   function addAttachments(files: FileList | null) {
     if (!files?.length) return;
-    setAttachments(current => [...current, ...Array.from(files).map(file => file.name)].slice(0, 4));
+    const next = Array.from(files).slice(0, 4);
+    setAttachments(current => [...current, ...next.map(file => file.name)].slice(0, 4));
+    setAttachmentFiles(current => [...current, ...next].slice(0, 4));
   }
 
   function addLink() {
@@ -1947,7 +2636,7 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
             </div>
             {organization && <OrgBadge org={organization} />}{project && <span className="rounded-full bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground">{project}</span>}
           </div>
-          {message && <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">{message}{undoTaskIds.length > 0 && <button onClick={undoSave} className="font-semibold underline underline-offset-2">Undo</button>}</span>}
+          {message && <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">{message}{undoTaskIds.length > 0 && <button onClick={() => void undoSave()} className="font-semibold underline underline-offset-2">Undo</button>}</span>}
         </div>
         <textarea
           ref={captureInputRef}
@@ -1981,7 +2670,7 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
           <div className="mt-4 space-y-2.5 border-t border-[var(--theme-capture-divider)] pt-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] font-medium text-secondary-foreground">Binnie found {previews.length} {previews.length === 1 ? "task" : "tasks"}</p>
-              {previews.length > 1 && <button onClick={saveAll} className="text-[11px] font-medium text-primary hover:text-primary/80">Confirm All</button>}
+              {previews.length > 1 && <button onClick={() => void saveAll()} className="text-[11px] font-medium text-primary hover:text-primary/80">Confirm All</button>}
             </div>
             {previews.map((preview, index) => <CapturedWorkReviewCard
               key={`${preview.originalText}-${index}`}
@@ -1989,7 +2678,7 @@ function QuickCapture({ organization, project, area, onSaved }: { organization?:
               editing={editing === index}
               currentUserId={currentUserId}
               onChange={patch => updatePreview(index, patch)}
-              onConfirm={() => save(index)}
+              onConfirm={() => void save(index)}
               onDiscard={() => setPreviews(current => current.filter((_, previewIndex) => previewIndex !== index))}
               onToggleEdit={() => setEditing(editing === index ? null : index)}
             />)}
@@ -2402,7 +3091,7 @@ function HomeView({
 // ─── SMART INBOX VIEW ─────────────────────────────────────────────────────────
 
 type CaptureConfidence = "high" | "medium" | "low" | "unknown";
-type CaptureDateKind = "deadline" | "target";
+type CaptureDateKind = "deadline" | "target" | "follow_up" | "start";
 interface ParsedTask {
   title: string;
   org?: OrgName;
@@ -2413,6 +3102,7 @@ interface ParsedTask {
   contributorIds?: string[];
   deadline?: string;
   targetDate?: string;
+  startDate?: string;
   followUpDate?: string;
   dateISO?: string;
   dateKind?: CaptureDateKind;
@@ -2432,14 +3122,16 @@ interface ParsedTask {
   orgReason?: string;
   areaReason?: string;
   assigneeReason?: string;
+  unmatchedAssigneeName?: string;
 }
 
-function InboxView() {
+function InboxView({ projectContext }: { projectContext?: ProjectDTO }) {
   const currentUserId = useContext(CurrentUserContext);
   const [input, setInput] = useState("");
   const [processing, setProcessing] = useState(false);
   const [parsed, setParsed] = useState<InlineCapturePreview[]>([]);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [linkDraft, setLinkDraft] = useState("");
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
@@ -2449,7 +3141,22 @@ function InboxView() {
   function handleProcess() {
     if (!input.trim()) return;
     setProcessing(true);
-    setTimeout(() => { setEditing(null); setProcessing(false); setParsed(createCapturePreviews(input, undefined, undefined, undefined, currentUserId)); }, 700);
+    setTimeout(() => {
+      const previews = createCapturePreviews(input, projectContext?.organization as OrgName | undefined, projectContext?.leadArea as AreaName | undefined, projectContext?.name, currentUserId);
+      setEditing(null);
+      setProcessing(false);
+      if (!previews.length || previews.every(preview => !preview.title.trim())) {
+        if (taskStoreUsesServer) void saveInboxCaptureAction({ rawText: input }).then(result => {
+          if (result.ok) {
+            applyCanonicalInboxCapture(result.data.capture, result.revision);
+            setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+          } else setMessage(result.message);
+        });
+        else setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+        return;
+      }
+      setParsed(previews);
+    }, 700);
   }
 
   function showSaveMessage(notice: string, taskIds: string[]) {
@@ -2461,8 +3168,19 @@ function InboxView() {
     }, 5000);
   }
 
-  function undoSave() {
-    undoTaskIds.forEach(deleteTask);
+  async function undoSave() {
+    if (taskStoreUsesServer && undoTaskIds.length) {
+      const result = await undoCaptureAction({ taskIds: undoTaskIds });
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      const deleted = new Set(result.data.deletedTaskIds);
+      TASKS = TASKS.filter(task => !deleted.has(task.id));
+      publishTaskStore();
+    } else {
+      undoTaskIds.forEach(deleteTask);
+    }
     setUndoTaskIds([]);
     setMessage("Undone");
     window.setTimeout(() => setMessage(""), 1800);
@@ -2470,7 +3188,9 @@ function InboxView() {
 
   function addAttachments(files: FileList | null) {
     if (!files?.length) return;
-    setAttachments(current => [...current, ...Array.from(files).map(file => file.name)].slice(0, 4));
+    const next = Array.from(files).slice(0, 4);
+    setAttachments(current => [...current, ...next.map(file => file.name)].slice(0, 4));
+    setAttachmentFiles(current => [...current, ...next].slice(0, 4));
   }
 
   function addLink() {
@@ -2485,22 +3205,43 @@ function InboxView() {
     setParsed(current => current.map((task, taskIndex) => taskIndex === index ? { ...task, ...patch } : task));
   }
 
-  function confirmTask(index: number) {
+  async function confirmTask(index: number) {
     const task = parsed[index];
     if (!task?.title.trim()) return;
     rememberCaptureCorrection(task.originalText, { org: task.org, area: task.area, assignee: task.assignee });
-    const created = saveCapturedTask(task, attachments, undefined, currentUserId);
+    let created: Task;
+    try { created = taskStoreUsesServer ? await saveCapturedTaskToServer(task, projectContext ? { projectId: projectContext.id, project: projectContext.name, org: projectContext.organization as OrgName, area: projectContext.leadArea as AreaName | undefined } : undefined, attachmentFiles) : saveCapturedTask(task, attachments, projectContext ? { project: projectContext.name, area: projectContext.leadArea as AreaName | undefined } : undefined, currentUserId); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Binnie could not save this task yet."); return; }
+    if (taskStoreUsesServer && CANONICAL_INBOX_CAPTURES.some(capture => capture.rawText === task.originalText)) {
+      const capture = CANONICAL_INBOX_CAPTURES.find(item => item.rawText === task.originalText);
+      if (capture) {
+        const resolved = await resolveInboxCaptureAction({ captureId: capture.id });
+        if (resolved.ok) removeCanonicalInboxCapture(capture.id, resolved.revision);
+      }
+    }
     setParsed(current => current.filter((_, taskIndex) => taskIndex !== index));
     setEditing(null);
     showSaveMessage(`Added to Binnie${task.org ? ` · ${task.org}` : " · Inbox"}${task.area ? ` · ${task.area}` : ""}`, [created.id]);
   }
 
-  function confirmAll() {
+  async function confirmAll() {
     const tasks = parsed.filter(task => task.title.trim());
-    const created = tasks.map(task => { rememberCaptureCorrection(task.originalText, { org: task.org, area: task.area, assignee: task.assignee }); return saveCapturedTask(task, attachments, undefined, currentUserId); });
+    const created: Task[] = [];
+    for (const task of tasks) {
+      rememberCaptureCorrection(task.originalText, { org: task.org, area: task.area, assignee: task.assignee });
+      try { created.push(taskStoreUsesServer ? await saveCapturedTaskToServer(task, projectContext ? { projectId: projectContext.id, project: projectContext.name, org: projectContext.organization as OrgName, area: projectContext.leadArea as AreaName | undefined } : undefined, attachmentFiles) : saveCapturedTask(task, attachments, projectContext ? { project: projectContext.name, area: projectContext.leadArea as AreaName | undefined } : undefined, currentUserId)); }
+      catch (error) { setMessage(error instanceof Error ? error.message : "Binnie could not save every task yet."); break; }
+    }
     setParsed([]);
     setInput("");
     setEditing(null);
+    if (taskStoreUsesServer && created.length) {
+      const relatedCaptures = CANONICAL_INBOX_CAPTURES.filter(capture => tasks.some(task => task.originalText === capture.rawText));
+      for (const capture of relatedCaptures) {
+        const resolved = await resolveInboxCaptureAction({ captureId: capture.id });
+        if (resolved.ok) removeCanonicalInboxCapture(capture.id, resolved.revision);
+      }
+    }
     showSaveMessage(`${tasks.length} tasks added to your workspace.`, created.map(task => task.id));
   }
 
@@ -2511,9 +3252,11 @@ function InboxView() {
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Smart Inbox</p>
         <h1 className="binnie-heading text-3xl font-bold text-foreground">A place to set it down.</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">Write whatever is on your mind. Tasks, reminders, ideas, follow-ups, or anything you want to remember. Binnie will turn it into clear next steps.</p>
+        {projectContext && <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary"><FolderKanban className="h-3 w-3" />Adding work to {projectContext.name}</p>}
         </div>
-        {message && <span role="status" className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success">{message}{undoTaskIds.length > 0 && <button onClick={undoSave} className="font-semibold underline underline-offset-2">Undo</button>}</span>}
+        {message && <span role="status" className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success">{message}{undoTaskIds.length > 0 && <button onClick={() => void undoSave()} className="font-semibold underline underline-offset-2">Undo</button>}</span>}
       </div>
+      {taskStoreUsesServer && CANONICAL_INBOX_CAPTURES.length > 0 && <section className="mb-5 rounded-2xl border border-info/20 bg-info/[0.035] p-4"><div className="flex items-start gap-3"><Inbox className="mt-0.5 h-4 w-4 text-info" /><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Saved thoughts</p><p className="mt-0.5 text-[10px] text-muted-foreground">Binnie kept these exactly as written until you are ready to organize them.</p></div></div><div className="mt-3 space-y-2">{CANONICAL_INBOX_CAPTURES.slice(0, 5).map(capture => <div key={capture.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"><p className="min-w-0 flex-1 truncate text-[11px] text-foreground">{capture.rawText}</p><button onClick={() => { setInput(capture.rawText); setMessage("Thought opened. Edit it if needed, then organize it when ready."); }} className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary">Open</button></div>)}</div></section>}
       <div className="binnie-card mb-6 overflow-hidden focus-within:border-primary/40">
         <textarea value={input} onChange={e => setInput(e.target.value)}
           placeholder="Write whatever is on your mind…"
@@ -2561,7 +3304,7 @@ function InboxView() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <p className="text-[11px] font-medium text-muted-foreground">Binnie found {parsed.length} {parsed.length === 1 ? "task" : "tasks"}</p>
-            {parsed.length > 1 && <button onClick={confirmAll} className="text-[11px] font-medium text-primary transition-colors hover:text-primary/80">Confirm All</button>}
+            {parsed.length > 1 && <button onClick={() => void confirmAll()} className="text-[11px] font-medium text-primary transition-colors hover:text-primary/80">Confirm All</button>}
           </div>
           <div className="space-y-3">
             {parsed.map((preview, index) => <CapturedWorkReviewCard
@@ -2570,7 +3313,7 @@ function InboxView() {
               editing={editing === index}
               currentUserId={currentUserId}
               onChange={patch => updateParsed(index, patch)}
-              onConfirm={() => confirmTask(index)}
+              onConfirm={() => void confirmTask(index)}
               onDiscard={() => setParsed(current => current.filter((_, taskIndex) => taskIndex !== index))}
               onToggleEdit={() => setEditing(editing === index ? null : index)}
             />)}
@@ -2647,12 +3390,26 @@ function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick
 function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [, setRevision] = useState(0);
   const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
-  function approve(task: Task) {
+  async function approve(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: true });
+      if (result.ok) applyCanonicalTask(result.data, result.revision);
+      setRevision(current => current + 1);
+      return;
+    }
     markTaskDone(task, "Approved just now");
     commitTaskStore();
     setRevision(current => current + 1);
   }
-  function requestRevision(task: Task) {
+  async function requestRevision(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const note = window.prompt("What needs revision?")?.trim();
+      if (!note) return;
+      const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: false, revisionNote: note });
+      if (result.ok) applyCanonicalTask(result.data, result.revision);
+      setRevision(current => current + 1);
+      return;
+    }
     Object.assign(task, { status: "ready" as TaskStatus, isWaiting: false, nextActionBy: task.assignee || "me", lastUpdate: "Revision requested just now" });
     commitTaskStore();
     setRevision(current => current + 1);
@@ -2698,8 +3455,8 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button onClick={() => approve(task)} className="flex items-center gap-1.5 rounded-xl bg-success/10 px-4 py-2 text-[13px] font-medium text-success transition-colors hover:bg-success/15"><Check className="w-4 h-4" /> Approve</button>
-                  <button onClick={() => requestRevision(task)} className="flex items-center gap-1.5 rounded-xl bg-warning/10 px-4 py-2 text-[13px] font-medium text-warning transition-colors hover:bg-warning/15"><RotateCcw className="w-4 h-4" /> Request Revision</button>
+                  <button onClick={() => void approve(task)} className="flex items-center gap-1.5 rounded-xl bg-success/10 px-4 py-2 text-[13px] font-medium text-success transition-colors hover:bg-success/15"><Check className="w-4 h-4" /> Approve</button>
+                  <button onClick={() => void requestRevision(task)} className="flex items-center gap-1.5 rounded-xl bg-warning/10 px-4 py-2 text-[13px] font-medium text-warning transition-colors hover:bg-warning/15"><RotateCcw className="w-4 h-4" /> Request Revision</button>
                   <button onClick={() => onTaskClick(task)} className="ml-auto flex items-center gap-1.5 rounded-xl bg-muted px-4 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Eye className="w-4 h-4" /> Open Details</button>
                 </div>
               </div>
@@ -3240,6 +3997,43 @@ function AllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) =>
   const longStaleTasks = carriedTasks.filter(task => (task.staleDays || 0) > 30);
   const activeFilterCount = Number(Boolean(filterOrg)) + Number(Boolean(filterArea)) + Number(Boolean(filterProject)) + Number(Boolean(filterAssignee)) + Number(filterState !== "all") + Number(filterPriority !== "all") + Number(filterDeadline !== "all") + Number(hasFilesOnly);
   const clearFilters = () => { setFilterOrg(null); setFilterArea(null); setFilterProject(null); setFilterAssignee(null); setFilterState("all"); setFilterPriority("all"); setFilterDeadline("all"); setHasFilesOnly(false); };
+  const currentViewFilters = () => ({ scope, filterOrg, filterArea, filterProject, filterAssignee, filterState, filterPriority, filterDeadline, hasFilesOnly, sortBy });
+  const applySavedView = (filters: Record<string, unknown>) => {
+    if (typeof filters.scope === "string") setScope(filters.scope as TaskScope);
+    setFilterOrg(typeof filters.filterOrg === "string" ? filters.filterOrg as OrgName : null);
+    setFilterArea(typeof filters.filterArea === "string" ? filters.filterArea as AreaName : null);
+    setFilterProject(typeof filters.filterProject === "string" ? filters.filterProject : null);
+    setFilterAssignee(typeof filters.filterAssignee === "string" ? filters.filterAssignee : null);
+    if (typeof filters.filterState === "string") setFilterState(filters.filterState as TaskStateFilter);
+    if (typeof filters.filterPriority === "string") setFilterPriority(filters.filterPriority as Priority | "all");
+    if (typeof filters.filterDeadline === "string") setFilterDeadline(filters.filterDeadline as TaskDeadlineFilter);
+    if (typeof filters.hasFilesOnly === "boolean") setHasFilesOnly(filters.hasFilesOnly);
+    if (typeof filters.sortBy === "string") setSortBy(filters.sortBy as SortBy);
+  };
+  useEffect(() => {
+    const apply = (event: Event) => {
+      const filters = (event as CustomEvent<{ filters?: Record<string, unknown> }>).detail?.filters;
+      if (filters) applySavedView(filters);
+    };
+    const save = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (!name || !taskStoreUsesServer) return;
+      void saveViewAction({ name, filters: currentViewFilters() }).then(result => {
+        if (result.ok) { CANONICAL_SAVED_VIEWS = [result.data, ...CANONICAL_SAVED_VIEWS.filter(view => view.id !== result.data.id)]; publishTaskStore(); }
+      });
+    };
+    const remove = (event: Event) => {
+      const viewId = (event as CustomEvent<{ viewId?: string }>).detail?.viewId;
+      if (!viewId || !taskStoreUsesServer) return;
+      void deleteViewAction({ viewId }).then(result => {
+        if (result.ok) { CANONICAL_SAVED_VIEWS = CANONICAL_SAVED_VIEWS.filter(view => view.id !== viewId); publishTaskStore(); }
+      });
+    };
+    window.addEventListener("binnie:apply-saved-view", apply);
+    window.addEventListener("binnie:save-saved-view", save);
+    window.addEventListener("binnie:delete-saved-view", remove);
+    return () => { window.removeEventListener("binnie:apply-saved-view", apply); window.removeEventListener("binnie:save-saved-view", save); window.removeEventListener("binnie:delete-saved-view", remove); };
+  });
   const scopeTabs: { id: TaskScope; label: string; count: number }[] = [
     { id: "month", label: "This Month", count: TASKS.filter(task => isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task)).length },
     { id: "carried", label: "Carried Over", count: carriedTasks.length },
@@ -3286,14 +4080,33 @@ function PersonManagerDrawer({ open, onClose, onSaved, organizationContext, init
   const updateMembership = (index: number, patch: Partial<OrganizationMembership>) => setMemberships(current => current.map((membership, membershipIndex) => membershipIndex === index ? { ...membership, ...patch } : membership));
   const addMembership = () => setMemberships(current => [...current, { organization: "", role: "", area: "" }]);
   const removeMembership = (index: number) => setMemberships(current => current.length === 1 ? current : current.filter((_, membershipIndex) => membershipIndex !== index));
-  const attachExisting = (person: DirectoryPerson) => {
+  const canonicalMemberships = (values: OrganizationMembership[]) => values
+    .filter(membership => membership.organization)
+    .map(membership => ({
+      organizationId: remoteOrganizationIds.get(membership.organization),
+      departmentId: membership.area ? getRemoteDepartmentId(membership.organization, membership.area) : undefined,
+    }));
+  const attachExisting = async (person: DirectoryPerson) => {
     if (!organizationContext) return;
     if (person.memberships.some(membership => membership.organization === organizationContext)) { setError(`${person.name} is already connected to ${organizationContext}.`); return; }
+    if (taskStoreUsesServer) {
+      const result = await updatePrincipalAction({
+        principalId: person.id,
+        name: person.name,
+        type: person.type,
+        email: person.email,
+        memberships: canonicalMemberships([...person.memberships, { organization: organizationContext, role: "", area: "" }]),
+      });
+      if (!result.ok) { setError(result.message); return; }
+      onSaved(applyCanonicalDirectoryPerson(result.data));
+      onClose();
+      return;
+    }
     const updated = replaceDirectoryPerson(person.id, current => ({ ...current, memberships: [...current.memberships, { organization: organizationContext, role: "", area: "" }] }));
     if (updated) onSaved(updated);
     onClose();
   };
-  const save = () => {
+  const save = async () => {
     const cleanName = name.trim();
     const cleanMemberships = memberships.filter(membership => membership.organization).map(membership => ({ ...membership, role: membership.role?.trim(), area: membership.area || undefined }));
     if (!cleanName) { setError("Add a name before saving."); return; }
@@ -3302,6 +4115,31 @@ function PersonManagerDrawer({ open, onClose, onSaved, organizationContext, init
     const duplicate = PEOPLE_DIRECTORY.find(person => person.name.toLowerCase() === cleanName.toLowerCase() && person.id !== initialPerson?.id);
     if (duplicate) { setError(`${duplicate.name} already exists in Binnie. Add them to an organization instead of creating a duplicate.`); return; }
     const values = { name: cleanName, type, memberships: cleanMemberships, email: email.trim() || undefined, phone: phone.trim() || undefined, notes: notes.trim() || undefined };
+    if (taskStoreUsesServer && !initialPerson) {
+      const result = await createPrincipalAction({
+        name: cleanName,
+        type,
+        email: values.email,
+        memberships: canonicalMemberships(cleanMemberships),
+      });
+      if (!result.ok) { setError(result.message); return; }
+      onSaved(applyCanonicalDirectoryPerson(result.data));
+      onClose();
+      return;
+    }
+    if (taskStoreUsesServer && initialPerson) {
+      const result = await updatePrincipalAction({
+        principalId: initialPerson.id,
+        name: cleanName,
+        type,
+        email: values.email,
+        memberships: canonicalMemberships(cleanMemberships),
+      });
+      if (!result.ok) { setError(result.message); return; }
+      onSaved(applyCanonicalDirectoryPerson(result.data));
+      onClose();
+      return;
+    }
     const next = initialPerson
       ? replaceDirectoryPerson(initialPerson.id, current => ({ ...current, ...values }))
       : { id: `person-${Date.now()}`, ...values, active: true, accountStatus: "no_account" as DirectoryAccountStatus };
@@ -3544,51 +4382,113 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   const activeFilterCount = Number(taskFilter !== "all") + Number(taskPriority !== "all") + Number(Boolean(taskProject)) + Number(dateFilter !== "all");
   const accentColor = orgAccent === "Dusty sage" ? "var(--success)" : orgAccent === "Warm stone" ? "var(--warning)" : "var(--org-villa-dot)";
 
-  function completeTask(task: Task) {
+  async function completeTask(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "done" });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Task completed");
+    }
     markTaskDone(task);
     refreshWorkspace("Task completed");
   }
 
-  function rescheduleTask(task: Task) {
+  async function rescheduleTask(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const tomorrow = getWorkspaceCalendarDate();
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, deadlineDate: captureISODate(tomorrow) });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Rescheduled for tomorrow");
+    }
     Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
     refreshWorkspace("Rescheduled for tomorrow");
   }
 
-  function reassignTask(task: Task) {
+  async function reassignTask(task: Task) {
     const people = scopedPeople.map(person => person.name);
     const next = people[(Math.max(people.indexOf(task.assignee || ""), -1) + 1) % Math.max(people.length, 1)] || "Bu Desti";
     const nextId = getDirectoryPerson(next)?.id;
+    if (taskStoreUsesServer && task.version) {
+      if (!nextId) return setMessage(`${next} is not available in Binnie.`);
+      const assignments = await setTaskAssignmentsAction({ taskId: task.id, expectedVersion: task.version, assignments: [{ principalId: nextId, role: "primary_owner" }] });
+      if (!assignments.ok) return setMessage(assignments.message);
+      const taskWithAssignments = applyCanonicalTask(assignments.data, assignments.revision);
+      const status = await transitionTaskAction({ taskId: taskWithAssignments.id, expectedVersion: taskWithAssignments.version, status: "ready" });
+      if (!status.ok) return setMessage(status.message);
+      applyCanonicalTask(status.data, status.revision);
+      return refreshWorkspace(`Assigned to ${next}`);
+    }
     setTaskAssignees(task, nextId ? [nextId] : []);
     Object.assign(task, { nextActionBy: next, status: "ready" as TaskStatus, isWaiting: false, blockedBy: undefined, lastUpdate: `Assigned to ${next}` });
     refreshWorkspace(`Assigned to ${next}`);
   }
 
-  function duplicateTask(task: Task) {
+  async function duplicateTask(task: Task) {
+    if (taskStoreUsesServer) {
+      const result = await createTaskAction({
+        title: `Copy of ${task.title}`, description: task.description, organizationId: task.organizationId,
+        leadDepartmentId: task.leadDepartmentId, projectId: task.projectId, involvedDepartmentIds: task.involvedDepartmentIds,
+        priority: task.priority, startDate: task.startDate, targetDate: task.targetDate, deadlineDate: task.deadlineDate,
+        followUpDate: task.followUpDate, checklistItems: task.checklistItems?.map(item => item.title),
+      });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Task duplicated");
+    }
     createTask({ ...task, title: `Copy of ${task.title}`, status: "ready", isWaiting: false, isOverdue: false, nextActionBy: "me", assignee: undefined, assigneeIds: [], isDelegated: false, lastUpdate: "Just now", blockedBy: undefined });
     refreshWorkspace("Task duplicated");
   }
 
-  function moveTaskToProject(task: Task) {
+  async function moveTaskToProject(task: Task) {
     const target = projects.find(project => project.name !== task.project);
     if (!target) return refreshWorkspace("Create another project to move this task");
+    if (taskStoreUsesServer && task.version) {
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, projectId: target.id });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace(`Moved to ${target.name}`);
+    }
     Object.assign(task, { project: target.name, area: PROJECT_DETAILS[target.id]?.area || task.area, lastUpdate: `Moved to ${target.name}` });
     refreshWorkspace(`Moved to ${target.name}`);
   }
 
-  function moveTaskToNextArea(task: Task) {
+  async function moveTaskToNextArea(task: Task) {
     const next = areas[(areas.indexOf(task.area) + 1) % Math.max(areas.length, 1)] || task.area;
+    if (taskStoreUsesServer && task.version) {
+      const departmentId = getRemoteDepartmentId(task.org, next);
+      if (!departmentId) return setMessage(`${next} is not configured for this organization.`);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, leadDepartmentId: departmentId });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace(`Moved to ${next}`);
+    }
     Object.assign(task, { area: next, lastUpdate: `Moved to ${next}` });
     refreshWorkspace(`Moved to ${next}`);
   }
 
-  function archiveTask(task: Task) {
+  async function archiveTask(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await archiveTaskAction({ taskId: task.id, expectedVersion: task.version });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Task archived");
+    }
     archiveCanonicalTask(task.id);
     refreshWorkspace("Task archived");
   }
 
-  function saveTaskTitle(task: Task) {
+  async function saveTaskTitle(task: Task) {
     const title = editingTaskTitle.trim();
     if (!title) return;
+    if (taskStoreUsesServer && task.version) {
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, title });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      setEditingTaskId(null);
+      return refreshWorkspace("Task updated");
+    }
     updateTask(task.id, { title, lastUpdate: "Edited just now" });
     setEditingTaskId(null);
     refreshWorkspace("Task updated");
@@ -3816,16 +4716,66 @@ function MilestonePlanner({ tasks, onRefresh }: { tasks: Task[]; onRefresh: () =
   const [name, setName] = useState("");
   const [date, setDate] = useState("2026-08-26");
   const [owner, setOwner] = useState(tasks[0]?.area || "Project owner");
-  const [status, setStatus] = useState<Milestone["status"]>("planned");
   const project = tasks[0]?.project;
-  const milestones = MILESTONES.filter(milestone => milestone.project === project);
-  const addMilestone = () => {
+  const projectId = tasks[0]?.projectId;
+  const canonicalProject = projectId ? getCanonicalProject(projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || "", project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const }))
+    : MILESTONES.filter(milestone => milestone.project === project);
+  const addMilestone = async () => {
     if (!project || !name.trim() || !date) return;
-    MILESTONES.push({ id: `milestone-${Date.now()}`, name: name.trim(), date, project, owner: owner.trim() || "Project owner", status });
+    if (taskStoreUsesServer && projectId) {
+      const ownerPrincipalId = PEOPLE_DIRECTORY.find(person => person.name === owner)?.id;
+      const result = await addProjectMilestoneAction({ projectId, milestone: { title: name.trim(), targetDate: date, ownerPrincipalId } });
+      if (!result.ok) return;
+      setName(""); setAdding(false); onRefresh();
+      return;
+    }
+    MILESTONES.push({ id: `milestone-${Date.now()}`, name: name.trim(), date, project, owner: owner.trim() || "Project owner", status: "planned" });
     setName(""); setAdding(false); onRefresh();
   };
+  const toggleMilestone = async (milestone: typeof milestones[number]) => {
+    if (taskStoreUsesServer && projectId) {
+      const result = await updateProjectMilestoneAction({ projectId, milestoneId: milestone.id, status: milestone.status === "done" ? "planned" : "done" });
+      if (result.ok) applyCanonicalProject(result.data, result.revision);
+      onRefresh();
+      return;
+    }
+    const local = MILESTONES.find(item => item.id === milestone.id);
+    if (local) local.status = local.status === "done" ? "planned" : "done";
+    onRefresh();
+  };
+  const renameMilestone = async (milestone: typeof milestones[number]) => {
+    const title = window.prompt("Milestone name", milestone.name)?.trim();
+    if (!title || title === milestone.name) return;
+    if (taskStoreUsesServer && projectId) {
+      const result = await updateProjectMilestoneAction({ projectId, milestoneId: milestone.id, title });
+      if (result.ok) applyCanonicalProject(result.data, result.revision);
+      onRefresh();
+      return;
+    }
+    const local = MILESTONES.find(item => item.id === milestone.id);
+    if (local) local.name = title;
+    onRefresh();
+  };
+  const removeMilestone = async (milestone: typeof milestones[number]) => {
+    if (!window.confirm(`Remove milestone “${milestone.name}”?`)) return;
+    if (taskStoreUsesServer && projectId) {
+      const result = await deleteProjectMilestoneAction({ projectId, milestoneId: milestone.id });
+      if (result.ok) applyCanonicalProject(result.data, result.revision);
+      onRefresh();
+      return;
+    }
+    const index = MILESTONES.findIndex(item => item.id === milestone.id);
+    if (index >= 0) MILESTONES.splice(index, 1);
+    onRefresh();
+  };
   if (!project) return null;
-  return <section className="mb-4 rounded-2xl border border-border bg-card p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Milestones</p><p className="text-[10px] text-muted-foreground">Major deliveries shared across timeline and roadmap.</p></div><button onClick={() => setAdding(current => !current)} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add Milestone</button></div><div className="mt-2 flex flex-wrap gap-1.5"><span className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Project: {project}</span>{milestones.map(milestone => <span key={milestone.id} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px]", milestone.status === "at_risk" ? "border-overdue/20 bg-overdue/[0.05] text-overdue" : "border-primary/15 bg-primary/[0.04] text-primary")}><Target className="h-3 w-3" />{milestone.name} · {milestone.date.slice(5)}</span>)}{!milestones.length && <span className="text-[10px] text-muted-foreground">No milestones yet.</span>}</div>{adding && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_9rem_10rem_8rem_auto]"><label className="text-[10px] font-medium text-muted-foreground">Milestone name<input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && addMilestone()} placeholder="Website ready" className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Owner<input value={owner} onChange={event => setOwner(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Status<select value={status} onChange={event => setStatus(event.target.value as Milestone["status"])} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="planned">Planned</option><option value="at_risk">At risk</option><option value="done">Done</option></select></label><div className="flex items-end gap-2"><button onClick={addMilestone} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setAdding(false)} className="rounded-lg px-2 py-2 text-[11px] text-muted-foreground">Cancel</button></div></div>}</section>;
+  return <section className="mb-4 rounded-2xl border border-border bg-card p-3">
+    <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Milestones</p><p className="text-[10px] text-muted-foreground">Major deliveries shared across timeline and roadmap.</p></div><button onClick={() => setAdding(current => !current)} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add Milestone</button></div>
+    <div className="mt-2 flex flex-wrap gap-1.5"><span className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Project: {project}</span>{milestones.map(milestone => <span key={milestone.id} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px]", milestone.status === "done" ? "border-success/20 bg-success/[0.05] text-success" : "border-primary/15 bg-primary/[0.04] text-primary")}><button onClick={() => void toggleMilestone(milestone)} title={milestone.status === "done" ? "Mark planned" : "Mark complete"} className="inline-flex items-center gap-1"><Target className="h-3 w-3" />{milestone.name} · {milestone.date ? milestone.date.slice(5) : "No date"}</button><button onClick={() => void renameMilestone(milestone)} aria-label={`Rename ${milestone.name}`} className="ml-1 opacity-65 hover:opacity-100"><Pencil className="h-2.5 w-2.5" /></button><button onClick={() => void removeMilestone(milestone)} aria-label={`Remove ${milestone.name}`} className="opacity-65 hover:text-overdue hover:opacity-100"><X className="h-2.5 w-2.5" /></button></span>)}{!milestones.length && <span className="text-[10px] text-muted-foreground">No milestones yet.</span>}</div>
+    {adding && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_9rem_10rem_auto]"><label className="text-[10px] font-medium text-muted-foreground">Milestone name<input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && void addMilestone()} placeholder="Website ready" className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Owner<input value={owner} onChange={event => setOwner(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><div className="flex items-end gap-2"><button onClick={() => void addMilestone()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setAdding(false)} className="rounded-lg px-2 py-2 text-[11px] text-muted-foreground">Cancel</button></div></div>}
+  </section>;
 }
 
 type PlanningFilter = { status: TaskStatus | "all"; priority: Priority | "all"; project: string; assignee: string; blockedOnly: boolean; waitingOnly: boolean; reviewOnly: boolean };
@@ -3849,15 +4799,25 @@ function PlanningBoard({ tasks, areas, selectedArea, onAreaChange, onTaskClick, 
   const [filters, setFilters] = useState<PlanningFilter>(DEFAULT_PLANNING_FILTER);
   const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => matchesPlanningFilter(task, filters));
   const bottlenecks = getBottlenecks(tasks);
-  const setStatus = (task: Task, status: TaskStatus) => {
+  const setStatus = async (task: Task, status: TaskStatus) => {
     if (status === "waiting" || status === "blocked") { setPendingWaiting(task); return; }
+    if (taskStoreUsesServer && task.version) {
+      const result = await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status });
+      if (result.ok) { applyCanonicalTask(result.data, result.revision); onRefresh(); }
+      return;
+    }
     Object.assign(task, { status, isWaiting: false, blockedBy: undefined, lastUpdate: "Updated just now" });
     commitTaskStore();
     onRefresh();
   };
-  const confirmWaiting = (blocked: boolean) => {
+  const confirmWaiting = async (blocked: boolean) => {
     if (!pendingWaiting) return;
     const blocker = tasks.find(task => task.id === blockerId);
+    if (taskStoreUsesServer && pendingWaiting.version) {
+      const result = await transitionTaskAction({ taskId: pendingWaiting.id, expectedVersion: pendingWaiting.version, status: blocked ? "blocked" : "waiting", blocker: blocked ? { type: "start_blocker", label: blocker?.title || "A decision or approval", prerequisiteTaskId: blocker?.id, ownerDepartmentId: blocker ? getRemoteDepartmentId(blocker.org, blocker.area) : undefined } : undefined });
+      if (result.ok) { applyCanonicalTask(result.data, result.revision); setPendingWaiting(null); setBlockerId(""); onRefresh(); }
+      return;
+    }
     Object.assign(pendingWaiting, blocked ? {
       status: "blocked" as TaskStatus, isWaiting: false, nextActionBy: blocker?.area || pendingWaiting.nextActionBy,
       blockedBy: blocker ? { kind: "task" as DependencyKind, type: "blocking" as DependencyType, label: blocker.title, taskId: blocker.id, owner: blocker.area } : { kind: "decision" as DependencyKind, type: "blocking" as DependencyType, label: "A decision or approval", owner: pendingWaiting.nextActionBy },
@@ -3873,7 +4833,7 @@ function PlanningBoard({ tasks, areas, selectedArea, onAreaChange, onTaskClick, 
     {bottlenecks.length > 0 && <div className="mb-4 rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-3"><div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Bottlenecks</p><p className="text-[10px] text-muted-foreground">Only work blocking multiple downstream tasks is surfaced here.</p></div></div><div className="mt-2 flex flex-wrap gap-2">{bottlenecks.map(({ task, dependents }) => <button key={task.id} onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{task.area} · {task.title} <span className="text-overdue">→ {dependents.length} blocked</span></button>)}</div></div>}
     <div className="mb-4 rounded-2xl border border-border bg-card p-3"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Team workload</p><p className="text-[10px] text-muted-foreground">A light capacity view for active work—enough to spot uneven load without turning it into timesheets.</p></div><BarChart2 className="h-4 w-4 text-primary" /></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from(new Set(tasks.filter(task => task.status !== "done").map(task => task.assignee || task.area))).map(owner => { const ownerTasks = tasks.filter(task => task.status !== "done" && (task.assignee || task.area) === owner); const hours = ownerTasks.reduce((total, task) => total + (task.estimatedHours || 1), 0); const blocked = ownerTasks.filter(task => task.status === "blocked").length; return <div key={owner} className="rounded-xl bg-muted/45 p-2.5"><div className="flex items-center gap-2"><Avatar name={owner} size="xs" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-foreground">{owner}</span><span className={cn("text-[10px]", blocked ? "text-overdue" : "text-muted-foreground")}>{blocked ? `${blocked} blocked` : `${hours}h planned`}</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-card"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, hours * 12)}%` }} /></div></div>; })}</div></div>
     {pendingWaiting && <div className="mb-4 rounded-2xl border border-info/20 bg-info/[0.055] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end"><div className="flex-1"><p className="text-[12px] font-semibold text-foreground">Does this stop “{pendingWaiting.title}” from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting means someone owes an input; Blocked means there is a real dependency.</p></div><label className="text-[10px] font-medium text-muted-foreground">Blocked by<select value={blockerId} onChange={event => setBlockerId(event.target.value)} className="mt-1 block rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Decision or approval</option>{tasks.filter(task => task.id !== pendingWaiting.id).map(task => <option key={task.id} value={task.id}>{task.area} · {task.title}</option>)}</select></label><div className="flex gap-2"><button onClick={() => confirmWaiting(false)} className="rounded-xl border border-info/25 bg-card px-3 py-2 text-[11px] font-medium text-info">Can still continue</button><button onClick={() => confirmWaiting(true)} className="rounded-xl bg-overdue px-3 py-2 text-[11px] font-medium text-white">Task is blocked</button></div></div></div>}
-    <div className="grid gap-3 xl:grid-cols-6">{PLANNING_COLUMNS.map(column => { const columnTasks = visibleTasks.filter(task => task.status === column.id); return <div key={column.id} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); const task = TASKS.find(item => item.id === id); if (task) setStatus(task, column.id); }} className={cn("min-h-56 rounded-2xl border border-border p-2.5", column.tint)}><div className="mb-2 flex items-start gap-2 px-1"><StatusDot status={column.id} /><div className="min-w-0"><p className={cn("text-[12px] font-semibold", column.text)}>{column.label}</p><p className="text-[10px] text-muted-foreground">{column.help}</p></div><span className="ml-auto rounded-full bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground">{columnTasks.length}</span></div><div className="space-y-2">{columnTasks.map(task => <div key={task.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", task.id)} onClick={() => onTaskClick(task)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter") onTaskClick(task); }} className="cursor-grab rounded-xl border border-border bg-card p-3 text-left shadow-[0_2px_8px_var(--theme-shadow)] transition hover:-translate-y-px hover:border-primary/35 active:cursor-grabbing"><div className="flex gap-2"><p className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-foreground">{task.title}</p>{(task.priority === "urgent" || task.priority === "high") && <PriorityDot priority={task.priority} />}</div><div className="mt-2 flex items-center justify-between gap-2"><AreaBadge area={task.area} />{task.assignee && <Avatar name={task.assignee} size="xs" />}</div><div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground"><span>{task.targetDate || task.deadline || "No target"}</span>{task.blockedBy && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Dependency</span>}</div></div>)}{columnTasks.length === 0 && <p className="px-1 py-6 text-center text-[10px] text-muted-foreground">Drop work here</p>}</div></div>; })}</div>
+    <div className="grid gap-3 xl:grid-cols-6">{PLANNING_COLUMNS.map(column => { const columnTasks = visibleTasks.filter(task => task.status === column.id); return <div key={column.id} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); const task = TASKS.find(item => item.id === id); if (task) void setStatus(task, column.id); }} className={cn("min-h-56 rounded-2xl border border-border p-2.5", column.tint)}><div className="mb-2 flex items-start gap-2 px-1"><StatusDot status={column.id} /><div className="min-w-0"><p className={cn("text-[12px] font-semibold", column.text)}>{column.label}</p><p className="text-[10px] text-muted-foreground">{column.help}</p></div><span className="ml-auto rounded-full bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground">{columnTasks.length}</span></div><div className="space-y-2">{columnTasks.map(task => <div key={task.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", task.id)} onClick={() => onTaskClick(task)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter") onTaskClick(task); }} className="cursor-grab rounded-xl border border-border bg-card p-3 text-left shadow-[0_2px_8px_var(--theme-shadow)] transition hover:-translate-y-px hover:border-primary/35 active:cursor-grabbing"><div className="flex gap-2"><p className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-foreground">{task.title}</p>{(task.priority === "urgent" || task.priority === "high") && <PriorityDot priority={task.priority} />}</div><div className="mt-2 flex items-center justify-between gap-2"><AreaBadge area={task.area} />{task.assignee && <Avatar name={task.assignee} size="xs" />}</div><div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground"><span>{task.targetDate || task.deadline || "No target"}</span>{task.blockedBy && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Dependency</span>}</div></div>)}{columnTasks.length === 0 && <p className="px-1 py-6 text-center text-[10px] text-muted-foreground">Drop work here</p>}</div></div>; })}</div>
   </div>;
 }
 
@@ -3896,7 +4856,10 @@ function PlanningTimelineLegacyV2({ tasks, areas, selectedArea, onAreaChange, on
   const todayPosition = Math.max(1, Math.min(98, (3 / range.windowDays) * 100));
   const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done" && matchesPlanningFilter(task, filters));
   const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
-  const milestones = MILESTONES.filter(milestone => visibleTasks.some(task => task.project === milestone.project));
+  const canonicalProject = tasks[0]?.projectId ? getCanonicalProject(tasks[0].projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || isoDate(getWorkspaceCalendarDate()), project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const, description: undefined }))
+    : MILESTONES.filter(milestone => visibleTasks.some(task => task.project === milestone.project));
   const lanes = visibleAreas.map((area, laneIndex) => {
     const laneTasks = visibleTasks.filter(task => taskInvolvesArea(task, area));
     const height = Math.max(92, 32 + laneTasks.length * 42);
@@ -4027,7 +4990,37 @@ function createTimelineWorkDrafts(input: string, fallbackArea: AreaName, attachm
   }).filter(draft => draft.title !== "New work");
 }
 
-function saveTimelineWorkDrafts(drafts: TimelineWorkDraft[], project: string, org: OrgName) {
+async function saveTimelineWorkDrafts(drafts: TimelineWorkDraft[], project: string, org: OrgName) {
+  if (taskStoreUsesServer) {
+    const canonicalProject = CANONICAL_PROJECTS.find(candidate => candidate.name === project && candidate.organization === org);
+    const organizationId = remoteOrganizationIds.get(org);
+    const created: Task[] = [];
+    for (const draft of drafts) {
+      const leadDepartmentId = getRemoteDepartmentId(org, draft.area);
+      const assigneeId = draft.assignee ? getDirectoryPerson(draft.assignee)?.id : undefined;
+      const result = await createTaskAction({
+        title: draft.title, organizationId, projectId: canonicalProject?.id, leadDepartmentId,
+        priority: draft.priority, startDate: draft.startDate, targetDate: draft.targetDate,
+        deadlineDate: draft.targetDate, originalCapture: draft.notes,
+        assignments: assigneeId ? [{ principalId: assigneeId, role: "primary_owner" }] : undefined,
+        nextAction: assigneeId ? { kind: "principal", principalId: assigneeId } : leadDepartmentId ? { kind: "department", departmentId: leadDepartmentId } : { kind: "ready" },
+      });
+      if (!result.ok) continue;
+      created.push(applyCanonicalTask(result.data, result.revision));
+    }
+    for (const draft of drafts) {
+      if (draft.status !== "blocked" || !draft.dependencyTitle) continue;
+      const task = created.find(candidate => candidate.title === draft.title);
+      if (!task?.version) continue;
+      const dependency = findTimelineDependency(draft.dependencyTitle, [...created, ...TASKS.filter(candidate => candidate.projectId === canonicalProject?.id)]);
+      const dependencyResult = await addTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependency: { type: "start_blocker", label: draft.dependencyTitle, prerequisiteTaskId: dependency?.id } });
+      if (!dependencyResult.ok) continue;
+      const blocked = applyCanonicalTask(dependencyResult.data, dependencyResult.revision);
+      const status = await transitionTaskAction({ taskId: blocked.id, expectedVersion: blocked.version, status: "blocked" });
+      if (status.ok) applyCanonicalTask(status.data, status.revision);
+    }
+    return created;
+  }
   const created: Task[] = drafts.map((draft, index) => ({
     id: `timeline-${Date.now()}-${TASKS.length + index}`, title: draft.title, org, area: draft.area, project,
     priority: draft.priority, status: draft.status, assignee: draft.assignee, nextActionBy: draft.assignee || draft.area,
@@ -4057,14 +5050,42 @@ function TimelineWorkComposer({ mode, project, org, areas, defaultArea, onCreate
   const organize = () => setDrafts(createTimelineWorkDrafts(input, defaultArea || areas[0] || "Operations", attachments));
   const readyCount = drafts.filter(draft => draft.status !== "blocked").length;
   const blockedCount = drafts.filter(draft => draft.status === "blocked").length;
-  const addManual = () => {
+  const addManual = async () => {
     if (!manual.title.trim()) return;
     const blocker = allProjectTasks.find(task => task.id === manual.blockedBy);
+    if (taskStoreUsesServer) {
+      const canonicalProject = CANONICAL_PROJECTS.find(candidate => candidate.name === project && candidate.organization === org);
+      const leadDepartmentId = getRemoteDepartmentId(org, manual.area);
+      const assigneeId = manual.assignee ? getDirectoryPerson(manual.assignee)?.id : undefined;
+      const result = await createTaskAction({ title: manual.title.trim(), description: manual.notes || undefined, organizationId: remoteOrganizationIds.get(org), projectId: canonicalProject?.id, leadDepartmentId, priority: manual.priority, startDate: manual.startDate, targetDate: manual.targetDate, deadlineDate: manual.targetDate, assignments: assigneeId ? [{ principalId: assigneeId, role: "primary_owner" }] : undefined, nextAction: assigneeId ? { kind: "principal", principalId: assigneeId } : leadDepartmentId ? { kind: "department", departmentId: leadDepartmentId } : { kind: "ready" } });
+      if (!result.ok) return;
+      let saved = applyCanonicalTask(result.data, result.revision);
+      if (manual.status === "blocked") {
+        const dependency = await addTaskDependencyAction({ taskId: saved.id, expectedVersion: saved.version!, dependency: { type: "start_blocker", label: blocker?.title || "A decision or approval", prerequisiteTaskId: blocker?.id } });
+        if (dependency.ok) {
+          saved = applyCanonicalTask(dependency.data, dependency.revision);
+          const status = await transitionTaskAction({ taskId: saved.id, expectedVersion: saved.version!, status: "blocked" });
+          if (status.ok) saved = applyCanonicalTask(status.data, status.revision);
+        }
+      } else if (manual.status !== "ready") {
+        const status = await transitionTaskAction({ taskId: saved.id, expectedVersion: saved.version!, status: manual.status });
+        if (status.ok) applyCanonicalTask(status.data, status.revision);
+      }
+      onCreated(); onClose(); return;
+    }
     createTask({ title: manual.title.trim(), org, area: manual.area, project, priority: manual.priority, status: manual.status, assignee: manual.assignee || undefined, nextActionBy: manual.assignee || manual.area, startDate: manual.startDate, targetDate: manual.targetDate, deadline: manual.targetDate, isDelegated: Boolean(manual.assignee), isWaiting: manual.status === "waiting", blockedBy: manual.status === "blocked" ? blocker ? { kind: "task", type: "blocking", label: blocker.title, taskId: blocker.id, owner: blocker.area } : { kind: "decision", type: "blocking", label: "A decision or approval" } : undefined, originalCapture: manual.notes || undefined, lastUpdate: "Just now", activity: [{ type: "assigned", actor: "You", text: "Added manually from the project timeline", time: "Just now" }] });
     onCreated(); onClose();
   };
-  const addMilestone = () => {
+  const addMilestone = async () => {
     if (!milestone.name.trim() || !milestone.date) return;
+    if (taskStoreUsesServer) {
+      const canonicalProject = CANONICAL_PROJECTS.find(candidate => candidate.name === project && candidate.organization === org);
+      if (!canonicalProject) return;
+      const result = await addProjectMilestoneAction({ projectId: canonicalProject.id, milestone: { title: milestone.name.trim(), targetDate: milestone.date } });
+      if (!result.ok) return;
+      applyCanonicalProject(result.data, result.revision);
+      onCreated(); onClose(); return;
+    }
     MILESTONES.push({ id: nextTimelineCreationId("milestone"), name: milestone.name.trim(), date: milestone.date, project, owner: milestone.owner.trim() || "Project owner", status: "planned", description: milestone.description.trim() || undefined });
     onCreated(); onClose();
   };
@@ -4089,7 +5110,10 @@ function PlanningTimeline({ tasks, areas, selectedArea, onAreaChange, onTaskClic
   const todayPosition = Math.max(1, Math.min(98, (3 / range.windowDays) * 100));
   const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done" && matchesPlanningFilter(task, filters));
   const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
-  const milestones = MILESTONES.filter(milestone => visibleTasks.some(task => task.project === milestone.project));
+  const canonicalProject = tasks[0]?.projectId ? getCanonicalProject(tasks[0].projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || isoDate(getWorkspaceCalendarDate()), project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const, description: undefined }))
+    : MILESTONES.filter(milestone => visibleTasks.some(task => task.project === milestone.project));
   const lanes = visibleAreas.map((area, laneIndex) => {
     const laneTasks = visibleTasks.filter(task => taskInvolvesArea(task, area));
     const height = Math.max(104, 38 + laneTasks.length * 44);
@@ -4113,7 +5137,12 @@ function PlanningTimeline({ tasks, areas, selectedArea, onAreaChange, onTaskClic
   const project = tasks[0]?.project;
   const projectOrg = tasks[0]?.org;
   const refresh = () => { commitTaskStore(); setRevision(current => current + 1); onRefresh?.(); };
-  const applyReschedule = (task: Task, start: number, target: number) => {
+  const applyReschedule = async (task: Task, start: number, target: number) => {
+    if (taskStoreUsesServer && task.version) {
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, startDate: planningIsoDate(start), targetDate: planningIsoDate(target), deadlineDate: planningIsoDate(target) });
+      if (result.ok) { applyCanonicalTask(result.data, result.revision); setRescheduleConflict(null); refresh(); }
+      return;
+    }
     Object.assign(task, { startDate: planningIsoDate(start), targetDate: planningIsoDate(target), deadline: new Date(target).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }), lastUpdate: "Rescheduled on timeline just now" });
     setRescheduleConflict(null); refresh();
   };
@@ -4130,7 +5159,7 @@ function PlanningTimeline({ tasks, areas, selectedArea, onAreaChange, onTaskClic
     const blocker = task.blockedBy?.taskId ? TASKS.find(item => item.id === task.blockedBy?.taskId) : undefined;
     const blockerTarget = blocker ? taskSchedule(blocker, TASKS.indexOf(blocker), range.windowDays).targetMs : undefined;
     if (blockerTarget && start < blockerTarget) { setRescheduleConflict({ task, start, target }); return; }
-    applyReschedule(task, start, target);
+    void applyReschedule(task, start, target);
   };
   const openComposer = (mode: TimelineComposerMode, area?: AreaName) => { setComposerArea(area); setComposer(mode); setAddMenuOpen(false); setRowMenuArea(null); };
   const openTask = (task: Task) => { setSelectedTaskId(task.id); setHoveredTask(task); onTaskClick(task); };
@@ -4149,14 +5178,21 @@ function PlanningRoadmap({ tasks, areas, selectedArea, onAreaChange, onTaskClick
   const [scale, setScale] = useState<"weeks" | "months" | "quarters">("months");
   const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done");
   const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
+  const roadmapDependencies = deriveRoadmapDependencies(visibleTasks.map(task => ({ id: task.id, title: task.title, dependencies: task.dependencyRecords })));
+  const unresolvedDependencies = roadmapDependencies.filter(dependency => !dependency.resolved && dependency.type !== "related");
+  const dependenciesFor = (taskId: string) => unresolvedDependencies.filter(dependency => dependency.toTaskId === taskId);
+  const taskName = (taskId: string) => visibleTasks.find(task => task.id === taskId)?.title || "Related work";
   const headings = scale === "weeks" ? ["Aug 10", "Aug 17", "Aug 24", "Aug 31", "Sep 7", "Sep 14"] : scale === "months" ? ["August", "September", "October"] : ["Q3 2026", "Q4 2026", "Q1 2027"];
-  const milestoneNames = new Set(MILESTONES.filter(milestone => tasks.some(task => task.project === milestone.project)).map(milestone => milestone.name));
+  const canonicalProject = tasks[0]?.projectId ? getCanonicalProject(tasks[0].projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || isoDate(getWorkspaceCalendarDate()), project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const, description: undefined }))
+    : MILESTONES.filter(milestone => tasks.some(task => task.project === milestone.project));
+  const milestoneNames = new Set(milestones.map(milestone => milestone.name));
   const columnFor = (task: Task) => {
     const schedule = taskSchedule(task, tasks.indexOf(task));
     const days = Math.max(0, Math.round((schedule.startMs - Date.UTC(2026, 7, 10)) / 86400000));
     return scale === "weeks" ? Math.min(5, Math.floor(days / 7)) : scale === "months" ? Math.min(2, Math.floor(days / 30)) : Math.min(2, Math.floor(days / 90));
   };
-  const milestones = MILESTONES.filter(milestone => tasks.some(task => task.project === milestone.project));
   return (
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -4171,6 +5207,7 @@ function PlanningRoadmap({ tasks, areas, selectedArea, onAreaChange, onTaskClick
           <PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} />
         </div>
       </div>
+      {roadmapDependencies.length > 0 && <section className="mb-4 rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Work relationships</p><p className="mt-0.5 text-[10px] text-muted-foreground">Only actual dependencies appear here. Completion blockers preserve parallel work.</p></div><div className="flex flex-wrap gap-1.5 text-[9px] font-medium"><span className="rounded-full bg-overdue/10 px-2 py-1 text-overdue">{unresolvedDependencies.filter(item => item.type === "start_blocker").length} start blockers</span><span className="rounded-full bg-info/10 px-2 py-1 text-info">{unresolvedDependencies.filter(item => item.type === "completion_blocker").length} finish blockers</span><span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">{roadmapDependencies.filter(item => item.type === "related").length} related</span></div></div><div className="mt-3 grid gap-1.5 lg:grid-cols-2">{roadmapDependencies.slice(0, 8).map(dependency => <div key={`${dependency.fromTaskId}-${dependency.toTaskId}-${dependency.type}`} className={cn("flex items-center gap-2 rounded-xl border px-2.5 py-2 text-[10px]", dependency.resolved ? "border-success/15 bg-success/[0.035] text-muted-foreground" : dependency.type === "start_blocker" ? "border-overdue/15 bg-overdue/[0.035] text-foreground" : dependency.type === "completion_blocker" ? "border-info/15 bg-info/[0.035] text-foreground" : "border-border bg-card text-muted-foreground")}><GitBranch className="h-3 w-3 flex-shrink-0" /><span className="min-w-0 flex-1 truncate">{taskName(dependency.fromTaskId)} <span className="text-muted-foreground">→</span> {taskName(dependency.toTaskId)}</span><span className="rounded-full bg-card/70 px-1.5 py-0.5 text-[8px]">{dependency.type === "start_blocker" ? "Start" : dependency.type === "completion_blocker" ? "Finish" : "Related"}</span></div>)}</div></section>}
       <div className="overflow-x-auto rounded-2xl border border-border bg-card">
         <div className="min-w-[760px]">
           <div className={cn("grid border-b border-border bg-muted/35 text-[10px] font-medium text-muted-foreground", headings.length === 6 ? "grid-cols-[155px_repeat(6,1fr)]" : "grid-cols-[155px_repeat(3,1fr)]")}>
@@ -4184,7 +5221,7 @@ function PlanningRoadmap({ tasks, areas, selectedArea, onAreaChange, onTaskClick
               <div className="bg-muted/20 px-4 py-4"><p className={cn("text-[12px] font-semibold", style.label)}>{area}</p><p className="mt-1 text-[10px] text-muted-foreground">{areaTasks.length} initiatives</p></div>
               <div className={cn("grid gap-2 p-3", headings.length === 6 ? "grid-cols-6" : "grid-cols-3")}>
                 {headings.map((heading, index) => <div key={heading} className="min-h-18 space-y-2 border-l border-border/70 pl-2 first:border-l-0">
-                  {areaTasks.filter(task => columnFor(task) === index).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className={cn("w-full rounded-xl border p-2.5 text-left transition hover:border-primary/35", style.bar)}><p className="truncate text-[10px] font-semibold">{task.title}</p><p className="mt-1 text-[9px] opacity-75">{task.targetDate || task.deadline || "Planned"}</p><div className="mt-2 h-1 overflow-hidden rounded-full bg-card/70"><div className="h-full rounded-full bg-primary/70" style={{ width: task.status === "in_progress" ? "55%" : task.status === "blocked" ? "18%" : "32%" }} /></div></button>)}
+                  {areaTasks.filter(task => columnFor(task) === index).map(task => { const dependencies = dependenciesFor(task.id); const startBlocker = dependencies.find(dependency => dependency.type === "start_blocker"); const completionBlocker = dependencies.find(dependency => dependency.type === "completion_blocker"); return <button key={task.id} onClick={() => onTaskClick(task)} className={cn("w-full rounded-xl border p-2.5 text-left transition hover:border-primary/35", style.bar)}><p className="truncate text-[10px] font-semibold">{task.title}</p><p className="mt-1 text-[9px] opacity-75">{task.targetDate || task.deadline || "Planned"}</p>{startBlocker ? <p className="mt-1 truncate text-[8px] text-overdue">Starts after {taskName(startBlocker.fromTaskId)}</p> : completionBlocker ? <p className="mt-1 truncate text-[8px] text-info">Can move now · finish after {taskName(completionBlocker.fromTaskId)}</p> : <p className="mt-1 text-[8px] opacity-70">Ready to move independently</p>}<div className="mt-2 h-1 overflow-hidden rounded-full bg-card/70"><div className="h-full rounded-full bg-primary/70" style={{ width: task.status === "in_progress" ? "55%" : task.status === "blocked" ? "18%" : "32%" }} /></div></button>; })}
                 </div>)}
               </div>
             </div>;
@@ -4239,7 +5276,7 @@ function LinksAndFiles({ links, files, onLinksChange, onFilesChange }: { links: 
   return <div className="grid gap-5 lg:grid-cols-2"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Links</h2><p className="mt-1 text-[11px] text-muted-foreground">Useful project references, without an account connection.</p></div><button onClick={() => setLinkFormOpen(current => !current)} className="rounded-xl bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">+ Add Link</button></div>{linkFormOpen && <div className="mt-4 grid gap-2 rounded-xl border border-border bg-muted/30 p-3"><label className="text-[10px] font-medium text-muted-foreground">Name<input autoFocus value={linkDraft.label} onChange={event => setLinkDraft(current => ({ ...current, label: event.target.value }))} placeholder="Website Revamp Figma" className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">URL<input value={linkDraft.url} onChange={event => setLinkDraft(current => ({ ...current, url: event.target.value }))} placeholder="https://…" className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Description<input value={linkDraft.description} onChange={event => setLinkDraft(current => ({ ...current, description: event.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><div className="flex justify-end gap-2"><button onClick={() => setLinkFormOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[11px] text-muted-foreground">Cancel</button><button onClick={addLink} disabled={!linkDraft.label.trim() || !linkDraft.url.trim()} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Save Link</button></div></div>}<div className="mt-4 space-y-2">{links.map((link, index) => <div key={`${link.label}-${index}`} className="flex items-center gap-3 rounded-xl border border-border p-3"><LinkIcon type={link.type} /><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-foreground">{link.label}</p><p className="truncate text-[10px] text-muted-foreground">{link.url.replace(/^https?:\/\//, "")}</p></div><a href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">Open <ExternalLink className="h-3 w-3" /></a></div>)}{!links.length && <p className="py-8 text-center text-[11px] text-muted-foreground">Keep the references this project needs close by.</p>}</div></section><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Files</h2><p className="mt-1 text-[11px] text-muted-foreground">Project documents and working files.</p></div><label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary"><Paperclip className="h-3.5 w-3.5" />Upload File<input type="file" multiple className="sr-only" onChange={event => addFiles(event.target.files)} /></label></div><div className="mt-4 space-y-2">{files.map((file, index) => { const id = file.id || `${file.name}-${index}`; const isEditing = editingFileId === id; return <div key={id} className="relative flex items-center gap-3 rounded-xl border border-border p-3"><FileText className={cn("h-4 w-4", file.type === "pdf" ? "text-overdue" : file.type === "excel" ? "text-success" : file.type === "screenshot" ? "text-info" : "text-primary")} /><div className="min-w-0 flex-1">{isEditing ? <input autoFocus value={fileName} onChange={event => setFileName(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && fileName.trim()) { onFilesChange(files.map((item, itemIndex) => itemIndex === index ? { ...item, name: fileName.trim() } : item)); setEditingFileId(null); } }} className="w-full rounded-lg border border-border px-2 py-1 text-[11px] text-foreground" /> : <p className="truncate text-[12px] font-medium text-foreground">{file.name}</p>}<p className="text-[10px] text-muted-foreground">{fileTypeLabel[file.type]}{file.size ? ` · ${file.size}` : " · Attached"}</p></div><button onClick={() => openFile(file)} disabled={!file.url} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10 disabled:opacity-40">Open</button><button onClick={() => setFileMenuId(current => current === id ? null : id)} aria-label={`More actions for ${file.name}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><MoreHorizontal className="h-4 w-4" /></button>{fileMenuId === id && <div className="absolute right-2 top-10 z-20 w-32 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_var(--theme-shadow)]"><button onClick={() => { downloadFile(file); setFileMenuId(null); }} disabled={!file.url} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] text-foreground hover:bg-muted disabled:opacity-40"><Download className="h-3 w-3" />Download</button><button onClick={() => { setEditingFileId(id); setFileName(file.name); setFileMenuId(null); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] text-foreground hover:bg-muted"><Pencil className="h-3 w-3" />Rename</button><button onClick={() => { onFilesChange(files.filter((_, itemIndex) => itemIndex !== index)); setFileMenuId(null); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] text-overdue hover:bg-overdue/10"><Trash2 className="h-3 w-3" />Remove</button></div>}</div>; })}{!files.length && <p className="py-8 text-center text-[11px] text-muted-foreground">Upload a file when the project needs a shared reference.</p>}</div></section></div>;
 }
 
-function ProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
+function LegacyProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
   const detail = PROJECT_DETAILS[projectId];
   const basicProj = STRATEGIC_PROJECTS.find(project => project.id === projectId);
   const [tab, setTab] = useState<ProjectTab>("overview");
@@ -4270,7 +5307,85 @@ const FOLLOWUP_STATUS_CONFIG: Record<FollowUpItem["status"], { label: string; co
   no_update: { label: "No Update", color: "text-slate-400", bg: "bg-slate-400/10" },
 };
 
-function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function CanonicalProjectDetail({ project, onBack, onTaskClick, onAddWork }: { project: ProjectDTO; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  const [tab, setTab] = useState<ProjectTab>("overview");
+  const [selectedArea, setSelectedArea] = useState<AreaName | "all">("all");
+  const [milestoneTitle, setMilestoneTitle] = useState("");
+  const [milestoneDate, setMilestoneDate] = useState("");
+  const [focusText, setFocusText] = useState("");
+  const [resourceLink, setResourceLink] = useState("");
+  const [memberEditorOpen, setMemberEditorOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
+  const projectTasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
+  const statusCounts: Record<TaskStatus, number> = { ready: 0, in_progress: 0, waiting: 0, blocked: 0, review: 0, done: 0 };
+  projectTasks.forEach(task => { statusCounts[task.status] += 1; });
+  const done = statusCounts.done;
+  const progress = projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0;
+  const readyTasks = projectTasks.filter(task => (task.status === "ready" || task.status === "in_progress") && task.canStartNow !== false && !task.blockedBy);
+  const waitingOnTeams = projectTasks.filter(task => task.status === "blocked" && task.blockedBy);
+  const projectAreas = Array.from(new Set([project.leadArea, ...project.involvedDepartments.map(department => department.name), ...projectTasks.flatMap(task => getTaskAreas(task))].filter((area): area is AreaName => Boolean(area))));
+  const people = Array.from(new Map([
+    ...project.members.map(member => [member.principalId, member] as const),
+    ...projectTasks.flatMap(task => getTaskAssignees(task).map(person => [person.id, { principalId: person.id, name: person.name, type: person.type, role: "collaborator" as const }] as const)),
+  ]).values());
+  const attention = projectTasks.some(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && done < projectTasks.length);
+  const tabs: { id: ProjectTab; label: string }[] = [{ id: "overview", label: "Overview" }, { id: "board", label: "Board" }, { id: "timeline", label: "Timeline" }, { id: "roadmap", label: "Roadmap" }, { id: "people", label: "People" }, { id: "links-files", label: "Links & Files" }, { id: "activity", label: "Activity" }];
+  async function addMilestone() {
+    const result = await addProjectMilestoneAction({ projectId: project.id, milestone: { title: milestoneTitle, targetDate: milestoneDate || undefined } });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setMilestoneTitle(""); setMilestoneDate("");
+  }
+  async function addFocus() {
+    const result = await addProjectFocusItemAction({ projectId: project.id, text: focusText });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setFocusText("");
+  }
+  async function removeFocus(focusItemId: string) {
+    const result = await deleteProjectFocusItemAction({ projectId: project.id, focusItemId });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+  }
+  async function toggleProjectMember(principalId: string) {
+    const existing = project.members.find(member => member.principalId === principalId);
+    const members = existing
+      ? project.members.filter(member => member.principalId !== principalId)
+      : [...project.members, { principalId, role: "collaborator" as const }];
+    const result = await setProjectMembersAction({ projectId: project.id, members: members.map(member => ({ principalId: member.principalId, role: member.role })) });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+  }
+  async function addProjectLink() {
+    const result = await addProjectLinkAction({ projectId: project.id, url: resourceLink });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setResourceLink("");
+  }
+  async function uploadProjectFiles(files: FileList | null) {
+    if (!files?.length) return;
+    for (const file of Array.from(files)) {
+      const body = new FormData(); body.set("projectId", project.id); body.set("file", file);
+      const result = await uploadProjectFileAction(body);
+      if (!result.ok) { setMessage(result.message); return; }
+      applyCanonicalProject(result.data, result.revision);
+    }
+  }
+  async function removeProjectResource(resourceId: string) {
+    const result = await deleteProjectResourceAction({ projectId: project.id, resourceId });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+  }
+  return <div className="mx-auto max-w-[1180px] p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card mb-5 overflow-hidden"><div className="p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="mb-2 flex flex-wrap items-center gap-2"><OrgBadge org={project.organization} />{project.leadArea && <AreaBadge area={project.leadArea} />}{attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div><h1 className="binnie-heading text-2xl font-bold text-foreground">{project.name}</h1>{project.description && <p className="mt-1 max-w-2xl text-[12px] text-muted-foreground">{project.description}</p>}<p className="mt-2 text-[11px] text-muted-foreground">{project.targetDate ? `Target ${taskDateLabel(project.targetDate)}` : "No target date"} · {projectAreas.length} teams involved</p></div><div className="min-w-32 text-left sm:text-right"><p className="text-3xl font-bold text-primary">{projectTasks.length ? `${progress}%` : "Not started"}</p><p className="text-[10px] text-muted-foreground">{projectTasks.length ? `${done} of ${projectTasks.length} tasks complete` : "No active work yet"}</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} /></div><div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">{PLANNING_COLUMNS.map(column => <div key={column.id} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-bold", column.text)}>{statusCounts[column.id]}</p><p className="text-[9px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{column.label}</p></div>)}</div></div><div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-1.5">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/70 hover:text-foreground")}>{item.label}</button>)}</div></div>{message && <p role="status" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}{tab === "overview" && <div className="grid gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project progress</h2><p className="mt-1 text-[11px] text-muted-foreground">Derived from the work in this project.</p></div>{projectTasks.length ? <span className="text-[12px] font-medium text-primary">{done} / {projectTasks.length} complete</span> : null}</div>{!projectTasks.length && <div className="mt-5 rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">No active work yet.</p><button onClick={() => onAddWork?.(project)} className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button></div>}</section><section className="binnie-card p-5"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-semibold text-foreground">What can move now</h2><p className="mt-1 text-[11px] text-muted-foreground">Work that is ready or in progress without a start blocker.</p></div><span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{readyTasks.length} available</span></div>{readyTasks.length ? <div className="space-y-2">{readyTasks.slice(0, 5).map(task => <TaskCard key={task.id} task={task} compact onClick={() => onTaskClick(task)} />)}</div> : <div className="rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">Nothing here yet. Add work to start moving this project forward.</p><div className="mt-3 flex gap-2"><button onClick={() => onAddWork?.(project)} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button><button onClick={() => onAddWork?.(project)} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary">Capture with Binnie</button></div></div>}</section><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Current focus</h2><p className="mt-1 text-[11px] text-muted-foreground">A short summary, separate from tasks.</p></div></div>{project.focusItems.length ? <div className="mt-4 space-y-2">{project.focusItems.map((item, index) => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.035] p-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{index + 1}</span><p className="min-w-0 flex-1 text-[12px] text-foreground">{item.text}</p><button onClick={() => void removeFocus(item.id)} className="rounded-lg p-1 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove focus ${item.text}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No focus areas added yet.</p>}<div className="mt-3 flex gap-2"><input value={focusText} onChange={event => setFocusText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addFocus()} placeholder="Add focus" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addFocus()} disabled={!focusText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Focus</button></div></section></div><div className="space-y-5"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Milestones</h2><p className="mt-1 text-[10px] text-muted-foreground">Project-level deliveries, not task cards.</p></div></div>{project.milestones.length ? <div className="mt-4 space-y-2">{project.milestones.map(milestone => <div key={milestone.id} className="rounded-xl border border-border p-3"><p className="text-[12px] font-medium text-foreground">{milestone.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{milestone.targetDate ? taskDateLabel(milestone.targetDate) : "No target date"}{milestone.owner ? ` · ${milestone.owner}` : ""}</p></div>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No milestones yet.</p>}<div className="mt-3 grid gap-2"><input value={milestoneTitle} onChange={event => setMilestoneTitle(event.target.value)} placeholder="Website Ready" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="flex gap-2"><input type="date" value={milestoneDate} onChange={event => setMilestoneDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addMilestone()} disabled={!milestoneTitle.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Milestone</button></div></div></section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Other teams waiting on this project</h2><p className="mt-1 text-[10px] text-muted-foreground">Only real task dependencies appear here.</p>{waitingOnTeams.length ? <div className="mt-3 space-y-2">{waitingOnTeams.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-overdue/15 bg-overdue/[0.035] p-3 text-left"><p className="text-[12px] font-medium text-foreground">{task.area} is waiting on {task.blockedBy?.owner || "a dependency"}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.title} · {task.blockedBy?.label}</p></button>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No blockers yet.</p>}</section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Teams involved</h2><div className="mt-3 flex flex-wrap gap-2">{projectAreas.length ? projectAreas.map(area => <span key={area} className="rounded-full border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground">{area}</span>) : <p className="text-[11px] text-muted-foreground">No teams added yet.</p>}</div></section></div></div>}{tab === "board" && <PlanningBoard tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "timeline" && <PlanningTimeline tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "roadmap" && <PlanningRoadmap tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} />}{tab === "people" && <div className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project people</h2><p className="mt-1 text-[11px] text-muted-foreground">Project members and people actively assigned to this work.</p></div><button onClick={() => setMemberEditorOpen(current => !current)} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">{memberEditorOpen ? "Done" : "+ Add people"}</button></div>{memberEditorOpen && <div className="mt-4 rounded-xl border border-border bg-muted/25 p-3"><p className="text-[10px] text-muted-foreground">Project members support visibility and ownership; task assignees remain unchanged.</p><div className="mt-2 flex flex-wrap gap-1.5">{PEOPLE_DIRECTORY.filter(person => person.active && person.memberships.some(membership => membership.organization === project.organization)).map(person => <button key={person.id} onClick={() => void toggleProjectMember(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", project.members.some(member => member.principalId === person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}>{project.members.some(member => member.principalId === person.id) ? "✓ " : ""}{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div></div>}{people.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2">{people.map(person => <div key={person.principalId} className="flex items-center gap-3 rounded-xl border border-border p-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-foreground">{person.name}</p><p className="text-[10px] text-muted-foreground">{person.role === "owner" ? "Project owner" : person.type === "team" ? "Team" : "Contributor"}</p></div></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No additional people or teams added yet.</p>}</div>}{tab === "links-files" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Links &amp; Files</h2><p className="mt-1 text-[11px] text-muted-foreground">Shared project resources.</p>{project.resources.length ? <div className="mt-4 space-y-2">{project.resources.map(resource => <div key={resource.id} className="flex items-center gap-3 rounded-xl border border-border p-3"><a href={resource.url} target={resource.url?.startsWith("/api/") ? undefined : "_blank"} rel={resource.url?.startsWith("/api/") ? undefined : "noopener noreferrer"} className="min-w-0 flex-1 truncate text-[12px] text-primary"><Link2 className="mr-1 inline h-3.5 w-3.5" />{resource.label}</a><button onClick={() => void removeProjectResource(resource.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove ${resource.label}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-5 text-[12px] text-muted-foreground">No links or files yet.</p>}<div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4"><input value={resourceLink} onChange={event => setResourceLink(event.target.value)} onKeyDown={event => event.key === "Enter" && void addProjectLink()} placeholder="Paste a shared link" className="min-w-48 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addProjectLink()} disabled={!resourceLink.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Add link</button><input ref={projectFileInputRef} type="file" multiple className="hidden" onChange={event => void uploadProjectFiles(event.target.files)} /><button onClick={() => projectFileInputRef.current?.click()} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary"><Paperclip className="mr-1 inline h-3.5 w-3.5" />Attach file</button></div></div>}{tab === "activity" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Activity</h2><div className="mt-4 space-y-3"><div className="flex gap-3"><Avatar name="Binnie" size="xs" /><div><p className="text-[12px] text-foreground">Project created</p><p className="mt-0.5 text-[10px] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(project.createdAt))}</p></div></div>{projectTasks.flatMap(task => (task.activity || []).slice(0, 2).map(activity => ({ task, activity }))).slice(0, 12).map(({ task, activity }, index) => <div key={`${task.id}-${index}`} className="flex gap-3"><Avatar name={activity.actor} size="xs" /><div><p className="text-[12px] text-foreground">{activity.text}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.title} · {activity.time}</p></div></div>)}</div></div>}</div>;
+}
+
+function ProjectDetailView({ projectId, onBack, onTaskClick, onAddWork }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  const canonical = taskStoreUsesServer ? getCanonicalProject(projectId) : undefined;
+  return canonical ? <CanonicalProjectDetail project={canonical} onBack={onBack} onTaskClick={onTaskClick} onAddWork={onAddWork} /> : <LegacyProjectDetailView projectId={projectId} onBack={onBack} onTaskClick={onTaskClick} />;
+}
+
+function LegacyFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [tab, setTab] = useState<FollowUpTab>("today");
   const [generated, setGenerated] = useState<Set<string>>(new Set());
   const [followedUp, setFollowedUp] = useState<Set<string>>(new Set());
@@ -4452,6 +5567,10 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   );
 }
 
+function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  return taskStoreUsesServer ? <CanonicalFollowUpView onTaskClick={onTaskClick} /> : <LegacyFollowUpView onTaskClick={onTaskClick} />;
+}
+
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
 
 function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void }) {
@@ -4533,7 +5652,7 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
 
 // ─── PROJECTS VIEW ────────────────────────────────────────────────────────────
 
-function ProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void }) {
+function LegacyProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void }) {
   const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isAdding, setIsAdding] = useState(false);
@@ -4626,19 +5745,274 @@ function ProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void
   );
 }
 
+type ProjectCreationStep = 1 | 2 | 3;
+type ProjectMilestoneDraft = { title: string; targetDate: string };
+
+function CreateProjectDrawer({ onClose, onCreated, defaultOrganization }: {
+  onClose: () => void;
+  onCreated: (project: ProjectDTO, addWork: boolean) => void;
+  defaultOrganization?: OrgName;
+}) {
+  const router = useRouter();
+  const [step, setStep] = useState<ProjectCreationStep>(1);
+  const [name, setName] = useState("");
+  const [organization, setOrganization] = useState<OrgName>(defaultOrganization || "");
+  const [description, setDescription] = useState("");
+  const [leadArea, setLeadArea] = useState<AreaName | "">("");
+  const [targetDate, setTargetDate] = useState("");
+  const [ownerId, setOwnerId] = useState("");
+  const [involvedAreas, setInvolvedAreas] = useState<AreaName[]>([]);
+  const [personIds, setPersonIds] = useState<string[]>([]);
+  const [milestones, setMilestones] = useState<ProjectMilestoneDraft[]>([]);
+  const [focusItems, setFocusItems] = useState<string[]>([]);
+  const [firstTask, setFirstTask] = useState({ title: "", area: "" as AreaName | "", assigneeId: "", targetDate: "" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [similarProject, setSimilarProject] = useState<ProjectDTO | null>(null);
+  const areas = organization ? captureOrgAreas(organization) : [];
+  const organizationId = organization ? remoteOrganizationIds.get(organization) : undefined;
+  const allSelectedAreas = Array.from(new Set([...(leadArea ? [leadArea] : []), ...involvedAreas]));
+  const directory = PEOPLE_DIRECTORY.filter(person => person.active && (!organization || person.memberships.some(membership => membership.organization === organization)));
+
+  function changeOrganization(next: OrgName) {
+    setOrganization(next);
+    setLeadArea("");
+    setInvolvedAreas([]);
+    setOwnerId("");
+    setPersonIds([]);
+    setFirstTask(current => ({ ...current, area: "", assigneeId: "" }));
+    setError("");
+  }
+
+  function toggleArea(area: AreaName) {
+    setInvolvedAreas(current => current.includes(area) ? current.filter(item => item !== area) : [...current, area]);
+  }
+
+  function togglePerson(id: string) {
+    setPersonIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+
+  function addMilestone() {
+    setMilestones(current => [...current, { title: "", targetDate: "" }]);
+  }
+
+  function addFocus() {
+    setFocusItems(current => [...current, ""]);
+  }
+
+  function validateBasics() {
+    if (!name.trim()) { setError("Project name is required."); return false; }
+    if (!organizationId) { setError("Organization is required."); return false; }
+    setError("");
+    return true;
+  }
+
+  async function create(addWork: boolean, createDespiteSimilar = false) {
+    if (!validateBasics()) { setStep(1); return; }
+    const similar = CANONICAL_PROJECTS.find(project => project.organizationId === organizationId && project.name.toLowerCase() !== name.trim().toLowerCase() && project.name.toLowerCase().split(/\W+/).filter(word => word.length > 2).some(word => name.toLowerCase().includes(word)));
+    if (similar && !createDespiteSimilar) { setSimilarProject(similar); return; }
+    const leadDepartmentId = leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined;
+    const involvedDepartmentIds = allSelectedAreas.map(area => getRemoteDepartmentId(organization, area)).filter((id): id is string => Boolean(id));
+    const teamMemberIds = allSelectedAreas.map(area => getAreaTeam(organization, area)?.id).filter((id): id is string => Boolean(id));
+    const memberIds = Array.from(new Set([...teamMemberIds, ...personIds, ...(ownerId ? [ownerId] : [])]));
+    setSaving(true);
+    const result = await createProjectAction({
+      name: name.trim(),
+      organizationId,
+      description: description.trim() || undefined,
+      leadDepartmentId,
+      involvedDepartmentIds,
+      targetDate: targetDate || undefined,
+      members: memberIds.map(principalId => ({ principalId, role: principalId === ownerId ? "owner" as const : teamMemberIds.includes(principalId) ? "member" as const : "collaborator" as const })),
+      milestones: milestones.filter(item => item.title.trim()).map(item => ({ title: item.title.trim(), targetDate: item.targetDate || undefined })),
+      focusItems: focusItems.map(item => item.trim()).filter(Boolean),
+      firstTask: firstTask.title.trim() ? {
+        title: firstTask.title.trim(),
+        leadDepartmentId: firstTask.area ? getRemoteDepartmentId(organization, firstTask.area) : leadDepartmentId,
+        assignments: firstTask.assigneeId ? [{ principalId: firstTask.assigneeId, role: "primary_owner" as const }] : undefined,
+        targetDate: firstTask.targetDate || undefined,
+      } : undefined,
+    });
+    setSaving(false);
+    if (!result.ok) { setError(result.message); return; }
+    applyCanonicalProject(result.data, result.revision);
+    // A project may have created its first canonical task in the same
+    // transaction; refresh the snapshot so progress and board counts update.
+    router.refresh();
+    onCreated(result.data, addWork);
+  }
+
+  const steps = [{ id: 1 as const, label: "Basics" }, { id: 2 as const, label: "Teams" }, { id: 3 as const, label: "Plan" }];
+  return <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create Project" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="border-b border-border px-5 py-5 sm:px-6"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Create Project</p><h2 className="binnie-heading mt-1 text-2xl font-bold text-foreground">Set the foundation.</h2><p className="mt-1 text-[12px] text-muted-foreground">You can refine everything later.</p></div><button onClick={onClose} aria-label="Close project creation" className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="mt-5 flex gap-1.5">{steps.map(item => <button key={item.id} onClick={() => item.id < step || validateBasics() ? setStep(item.id) : undefined} className={cn("flex-1 rounded-lg px-2 py-2 text-[10px] font-medium", step === item.id ? "bg-primary/10 text-primary" : item.id < step ? "bg-muted text-foreground" : "text-muted-foreground")}><span className="mr-1 opacity-70">{item.id}</span>{item.label}</button>)}</div></div><div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{step === 1 && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={name} onChange={event => { setName(event.target.value); setError(""); }} placeholder="Website Revamp" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => changeOrganization(event.target.value as OrgName)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground"><option value="">Choose organization</option>{ORGS_META.filter(org => remoteOrganizationIds.has(org.name)).map(org => <option key={org.name} value={org.name}>{org.name}</option>)}</select></label><label className="block text-[11px] font-medium text-muted-foreground">Project description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project trying to accomplish?" rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">Lead area <span className="font-normal">(recommended)</span><select value={leadArea} onChange={event => { const area = event.target.value as AreaName; setLeadArea(area); setInvolvedAreas(current => area && !current.includes(area) ? [area, ...current] : current); }} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input type="date" value={targetDate} onChange={event => setTargetDate(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground" /></label></div><label className="block text-[11px] font-medium text-muted-foreground">Project owner <span className="font-normal">(optional)</span><select value={ownerId} onChange={event => setOwnerId(event.target.value)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div>}{step === 2 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Who&apos;s involved?</h3><p className="mt-1 text-[12px] text-muted-foreground">Add the teams that will contribute. You can change this anytime.</p></div><div><p className="mb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Teams / areas involved</p><div className="flex flex-wrap gap-2">{areas.map(area => <button key={area} onClick={() => toggleArea(area)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", allSelectedAreas.includes(area) ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}>{allSelectedAreas.includes(area) && <Check className="mr-1 inline h-3 w-3" />}{area}</button>)}</div>{leadArea && <p className="mt-2 text-[10px] text-muted-foreground">{leadArea} is included as the lead area.</p>}</div><div className="border-t border-border pt-4"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">People</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add existing people without duplicating records.</p></div><span className="text-[10px] text-muted-foreground">Optional</span></div><div className="mt-3 flex flex-wrap gap-1.5">{directory.filter(person => person.type === "person").map(person => <button key={person.id} onClick={() => togglePerson(person.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[10px]", personIds.includes(person.id) ? "border-primary/25 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{personIds.includes(person.id) && <Check className="mr-1 inline h-3 w-3" />}{person.name}</button>)}</div></div></div>}{step === 3 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Give the project a starting point</h3><p className="mt-1 text-[12px] text-muted-foreground">Optional. Start with a milestone, a focus, first work—or an empty project.</p></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">First milestone</p><p className="text-[10px] text-muted-foreground">A meaningful delivery, not another task.</p></div><button onClick={addMilestone} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add milestone</button></div>{milestones.map((milestone, index) => <div key={index} className="mt-3 grid gap-2 sm:grid-cols-[1fr_9rem]"><input value={milestone.title} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Website Ready" className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /><input type="date" value={milestone.targetDate} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetDate: event.target.value } : item))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Current focus</p><p className="text-[10px] text-muted-foreground">A short summary of where attention is concentrated.</p></div><button onClick={addFocus} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add focus</button></div>{focusItems.map((focus, index) => <input key={index} value={focus} onChange={event => setFocusItems(current => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Mobile booking flow redesign" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><p className="text-[12px] font-semibold text-foreground">First task</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. This creates normal Binnie work inside the project.</p><input value={firstTask.title} onChange={event => setFirstTask(current => ({ ...current, title: event.target.value }))} placeholder="Add the first piece of work" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />{firstTask.title && <div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={firstTask.area} onChange={event => setFirstTask(current => ({ ...current, area: event.target.value as AreaName }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Lead area</option>{allSelectedAreas.map(area => <option key={area}>{area}</option>)}</select><select value={firstTask.assigneeId} onChange={event => setFirstTask(current => ({ ...current, assigneeId: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Assignee / team</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={firstTask.targetDate} onChange={event => setFirstTask(current => ({ ...current, targetDate: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>}</section></div>}{error && <p role="alert" className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{error}</p>}</div><div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4 sm:px-6"><button onClick={() => step === 1 ? onClose() : setStep(current => (current - 1) as ProjectCreationStep)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">{step === 1 ? "Cancel" : "← Back"}</button><div className="ml-auto flex flex-wrap gap-2">{step === 1 && <button onClick={() => void create(false)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create now</button>}{step < 3 ? <button onClick={() => validateBasics() && setStep(current => (current + 1) as ProjectCreationStep)} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Continue →</button> : <><button onClick={() => void create(true)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create &amp; Add Work</button><button onClick={() => void create(false)} disabled={saving} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50">{saving ? "Creating…" : "Create Project"}</button></>}</div></div>{similarProject && <div className="absolute inset-0 flex items-center justify-center bg-foreground/10 p-5"><div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl"><p className="text-sm font-semibold text-foreground">A similar project already exists.</p><button onClick={() => { onClose(); onCreated(similarProject, false); }} className="mt-2 w-full rounded-xl border border-border bg-muted/35 p-3 text-left text-[12px] font-medium text-primary hover:bg-muted">{similarProject.name}<span className="mt-1 block text-[10px] font-normal text-muted-foreground">Open existing</span></button><div className="mt-4 flex justify-end gap-2"><button onClick={() => setSimilarProject(null)} className="rounded-lg px-2.5 py-2 text-[11px] text-muted-foreground">Cancel</button><button onClick={() => { setSimilarProject(null); void create(false, true); }} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Create Anyway</button></div></div></div>}</div></div>;
+}
+
+/* The compact JSX card renderer intentionally uses several inline expressions. */
+/* eslint-disable @typescript-eslint/no-unused-expressions */
+function CanonicalProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void }) {
+  const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [creating, setCreating] = useState(false);
+  const projects = CANONICAL_PROJECTS.filter(project => project.status !== "archived");
+  const taskSummary = (project: ProjectDTO) => {
+    const tasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
+    const done = tasks.filter(task => task.status === "done").length;
+    const attention = tasks.some(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && done < tasks.length);
+    return { tasks, done, progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, attention };
+  };
+  const completedProjects = projects.filter(project => project.status === "completed" || (taskSummary(project).tasks.length > 0 && taskSummary(project).done === taskSummary(project).tasks.length));
+  const activeProjects = projects.filter(project => project.status === "active" && !taskSummary(project).attention && !completedProjects.some(candidate => candidate.id === project.id));
+  const attentionProjects = projects.filter(project => taskSummary(project).attention);
+  const visible = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : projects;
+  const gridClass = viewMode === "grid" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 gap-3";
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button></div></div><div className="mb-5 flex flex-wrap items-center gap-1.5">{[{ id: "all" as const, label: "All", count: projects.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}</div>{visible.length ? <div className={gridClass}>{visible.map(project => { const summary = taskSummary(project); const color = ORG_COLORS[project.organization] || ORG_COLORS.Personal; const next = summary.tasks.find(task => task.status !== "done"); return <button key={project.id} onClick={() => onProjectClick(project.id)} className={cn("binnie-card binnie-card-hover min-h-64 p-5 text-left", color.card)}><div className="flex items-start gap-3"><span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color.bg, color.text)}><FolderKanban className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-[15px] font-semibold text-foreground">{project.name}</h2>{summary.attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[9px] font-medium text-warning">Needs attention</span>}</div><p className="mt-1 text-[11px] text-muted-foreground">{project.organization}{project.leadArea ? ` · ${project.leadArea}` : ""}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground" /></div><div className="mt-6 flex items-end gap-3"><p className={cn("text-2xl font-bold", color.text)}>{summary.tasks.length ? `${summary.progress}%` : "Not started"}</p><div className="min-w-0 flex-1 pb-1"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${summary.progress}%` }} /></div></div></div><div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground"><span>{summary.done} / {summary.tasks.length} tasks</span><span>{project.targetDate ? `Target: ${taskDateLabel(project.targetDate)}` : "No target date"}</span></div><div className="mt-4 border-t border-border/80 pt-3"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Current focus</p><p className="mt-1 truncate text-[12px] text-foreground">{project.focusItems[0]?.text || "No work added yet"}</p><p className="mt-3 truncate text-[10px] text-muted-foreground">{next ? `Next: ${next.title}` : "No active work yet"}</p></div></button>; })}</div> : <div className="binnie-card py-16 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No projects here yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Create a focused space for work that belongs together.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Project</button></div>}{creating && <CreateProjectDrawer onClose={() => setCreating(false)} onCreated={(project, addWork) => { setCreating(false); addWork ? onAddWork(project) : onProjectClick(project.id); }} />}</div>;
+}
+
+function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  return taskStoreUsesServer ? <CanonicalProjectsView onProjectClick={onProjectClick} onAddWork={onAddWork || (() => {})} /> : <LegacyProjectsView onProjectClick={onProjectClick} />;
+}
+/* eslint-enable @typescript-eslint/no-unused-expressions */
+
+// ─── PHASE 3: WORKLOAD, NUDGES, AND TEMPLATES ─────────────────────────────────
+
+function WorkloadView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  useTaskStoreVersion();
+  const [kind, setKind] = useState<"all" | "person" | "team">("all");
+  const today = isoDate(getWorkspaceCalendarDate());
+  const activeTasks = TASKS.filter(task => !task.archived && task.status !== "done");
+  const workload = deriveWorkload(activeTasks.map(task => ({
+    id: task.id,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
+    assigneeIds: task.assigneeIds,
+    primaryOwnerId: task.assigneeIds?.[0],
+    blockedDependentCount: activeTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
+  })), PEOPLE_DIRECTORY.map(person => ({ id: person.id, name: person.name, type: person.type, active: person.active })));
+  const visible = workload.filter(item => kind === "all" || item.type === kind);
+  const focus = visible.filter(item => item.needsAttention > 0 || item.load === "full");
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workload</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">See where work is landing.</h1><p className="mt-1.5 text-sm text-muted-foreground">A directional view of active work, attention, reviews, and blockers—not capacity forecasting.</p></div><div className="flex rounded-xl border border-border bg-card p-1">{([{ id: "all", label: "Everyone" }, { id: "person", label: "People" }, { id: "team", label: "Teams" }] as const).map(option => <button key={option.id} onClick={() => setKind(option.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", kind === option.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div></div><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Active work</p><p className="mt-1 text-2xl font-bold text-primary">{activeTasks.length}</p><p className="mt-1 text-[10px] text-muted-foreground">shared task records, counted once</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-warning">{visible.reduce((sum, item) => sum + item.needsAttention, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">overdue, follow-up, blocked, or review work</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Blocking others</p><p className="mt-1 text-2xl font-bold text-overdue">{visible.reduce((sum, item) => sum + item.blockingOthers, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">downstream work waiting on a primary owner</p></div></div>{focus.length > 0 && <section className="mb-5 rounded-2xl border border-warning/20 bg-warning/[0.055] p-4"><p className="text-[12px] font-semibold text-foreground">Where a conversation could help</p><p className="mt-1 text-[10px] text-muted-foreground">These are signals to look at, not automatic judgments about people.</p><div className="mt-3 flex flex-wrap gap-2">{focus.slice(0, 6).map(item => <span key={item.principalId} className="rounded-full border border-warning/15 bg-card px-2.5 py-1.5 text-[10px] text-foreground">{item.name} · {item.needsAttention ? `${item.needsAttention} attention` : "full focus"}</span>)}</div></section>}<div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="hidden grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] border-b border-border bg-muted/35 px-4 py-3 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid"><span>Owner / team</span><span>Ready</span><span>Moving</span><span>Waiting</span><span>Blocked</span><span>Review</span><span>Overdue</span><span>Signal</span></div>{visible.length ? visible.map(item => { const assigned = activeTasks.filter(task => task.assigneeIds?.includes(item.principalId)); return <div key={item.principalId} className="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] lg:items-center"><div><p className="text-[12px] font-semibold text-foreground">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.type === "team" ? "Team queue" : "Individual"} · {item.primaryOwned} primary</p>{assigned.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{assigned.slice(0, 2).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="max-w-40 truncate rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-primary">{task.title}</button>)}</div>}</div>{[[item.ready, "Ready"], [item.inProgress, "Moving"], [item.waiting, "Waiting"], [item.blocked, "Blocked"], [item.review, "Review"], [item.overdue, "Overdue"]].map(([count, label]) => <div key={String(label)} className="flex items-center justify-between text-[11px] text-muted-foreground lg:block"><span className="lg:hidden">{label}</span><span className={cn("font-semibold", Number(count) > 0 && (label === "Blocked" || label === "Overdue") ? "text-overdue" : label === "Review" && Number(count) > 0 ? "text-review" : "text-foreground")}>{count}</span></div>)}<span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", item.load === "full" ? "bg-warning/10 text-warning" : item.load === "steady" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.load === "full" ? "Full focus" : item.load === "steady" ? "Steady" : "Light"}</span></div>; }) : <div className="px-5 py-12 text-center text-[12px] text-muted-foreground">No active work is assigned yet.</div>}</div></div>;
+}
+
+function CanonicalFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  const router = useRouter();
+  useTaskStoreVersion();
+  const [draftFor, setDraftFor] = useState<string | null>(null);
+  const [today] = useState(() => isoDate(getWorkspaceCalendarDate()));
+  const [nudgeStates, setNudgeStates] = useState<NudgeStateDTO[]>(() => CANONICAL_NUDGE_STATES);
+  const todayMs = Date.parse(`${today}T00:00:00.000Z`);
+  const allTasks = TASKS.filter(task => !task.archived && task.status !== "done");
+  const candidates = deriveWorkNudges(allTasks.map(task => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
+    daysWithoutUpdate: task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 86400000)) : undefined,
+    reviewWaitingHours: task.status === "review" && task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 3600000)) : undefined,
+    blockedDependentCount: allTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
+    nextActionBy: task.nextActionBy,
+    deadlineDate: task.deadlineDate,
+    priority: task.priority,
+  }))).filter(candidate => {
+    const state = nudgeStates.find(item => item.dedupKey === candidate.dedupKey);
+    return !state || (state.disposition === "snoozed" && (!state.snoozedUntil || state.snoozedUntil <= `${today}T23:59:59.999Z`));
+  });
+  async function setState(candidate: typeof candidates[number], disposition: "dismissed" | "snoozed") {
+    const snoozeDate = new Date(`${today}T00:00:00.000Z`);
+    snoozeDate.setUTCDate(snoozeDate.getUTCDate() + 3);
+    const snoozedUntil = disposition === "snoozed" ? isoDate(snoozeDate) : undefined;
+    const result = await setNudgeStateAction({ dedupKey: candidate.dedupKey, taskId: candidate.taskId, disposition, snoozedUntil });
+    if (!result.ok) return;
+    const nextState: NudgeStateDTO = { dedupKey: candidate.dedupKey, taskId: candidate.taskId, disposition, snoozedUntil };
+    setNudgeStates(current => [...current.filter(item => item.dedupKey !== candidate.dedupKey), nextState]);
+    applyCanonicalNudgeState(nextState, result.revision);
+    router.refresh();
+  }
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><div className="mb-6"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Follow up with purpose.</h1><p className="mt-1.5 text-sm text-muted-foreground">Only work with a meaningful next move appears here. Waiting by itself is never a nudge.</p></div><div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[{ label: "Needs attention", value: candidates.length, color: "text-warning" }, { label: "Overdue", value: candidates.filter(item => item.kind === "overdue").length, color: "text-overdue" }, { label: "Blocking others", value: candidates.filter(item => item.kind === "blocker").length, color: "text-primary" }, { label: "Follow-ups due", value: candidates.filter(item => item.kind === "follow_up").length, color: "text-info" }].map(item => <div key={item.label} className="binnie-card p-3.5"><p className={cn("text-2xl font-bold", item.color)}>{item.value}</p><p className="mt-1 text-[10px] text-muted-foreground">{item.label}</p></div>)}</div><div className="space-y-3">{candidates.map(candidate => { const task = allTasks.find(item => item.id === candidate.taskId); const draft = task ? `Hi ${task.nextActionBy || "there"}, just checking in on “${task.title}”. ${candidate.detail} Could you share the next update when you have a moment?` : ""; return <article key={candidate.dedupKey} className="binnie-card p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start"><span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", candidate.kind === "overdue" || candidate.kind === "blocker" ? "bg-overdue/10 text-overdue" : candidate.kind === "review" ? "bg-review/10 text-review" : "bg-primary/10 text-primary")}>{candidate.kind.replace(/_/g, " ")}</span><div className="min-w-0 flex-1"><button onClick={() => task && onTaskClick(task)} className="max-w-full truncate text-left text-[13px] font-semibold text-foreground hover:text-primary">{candidate.title}</button><p className="mt-1 text-[11px] text-muted-foreground">{candidate.detail}</p></div><div className="flex flex-wrap gap-1.5"><button onClick={() => setDraftFor(current => current === candidate.dedupKey ? null : candidate.dedupKey)} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">Draft</button><button onClick={() => void setState(candidate, "snoozed")} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Snooze 3d</button><button onClick={() => void setState(candidate, "dismissed")} className="rounded-lg px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-muted" aria-label={`Dismiss ${candidate.title}`}><X className="h-3.5 w-3.5" /></button></div></div>{draftFor === candidate.dedupKey && <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3"><p className="text-[11px] leading-5 text-foreground">{draft}</p><button onClick={() => navigator.clipboard?.writeText(draft).catch(() => {})} className="mt-2 rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm"><Copy className="mr-1 inline h-3 w-3" />Copy message</button></div>}</article>; })}{!candidates.length && <div className="binnie-card py-14 text-center"><CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-success/50" /><p className="text-sm font-medium text-foreground">Nothing needs a nudge right now.</p><p className="mt-1 text-[12px] text-muted-foreground">Binnie will surface real follow-up signals when they matter.</p></div>}</div></div>;
+}
+
+type TemplateTaskDraft = { title: string; area: AreaName | ""; assigneeId: string; targetOffsetDays: string; checklist: string; dependencyIndex: string; dependencyType: "start_blocker" | "completion_blocker" };
+
+function CanonicalTemplatesView({ onProjectClick }: { onProjectClick: (projectId: string) => void }) {
+  const router = useRouter();
+  useTaskStoreVersion();
+  const [creating, setCreating] = useState(false);
+  const [applying, setApplying] = useState<WorkflowTemplateDTO | null>(null);
+  const [organization, setOrganization] = useState<OrgName>("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [leadArea, setLeadArea] = useState<AreaName | "">("");
+  const [tasks, setTasks] = useState<TemplateTaskDraft[]>([]);
+  const [milestone, setMilestone] = useState("");
+  const [focus, setFocus] = useState("");
+  const [message, setMessage] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectStart, setProjectStart] = useState(isoDate(getWorkspaceCalendarDate()));
+  const organizationId = organization ? remoteOrganizationIds.get(organization) : undefined;
+  const areas = organization ? captureOrgAreas(organization) : [];
+  const directory = PEOPLE_DIRECTORY.filter(person => person.active && (!organization || person.memberships.some(membership => membership.organization === organization)));
+  function reset() { setOrganization(""); setName(""); setDescription(""); setLeadArea(""); setTasks([]); setMilestone(""); setFocus(""); setMessage(""); setCreating(false); }
+  async function createTemplate() {
+    if (!name.trim() || !organizationId) return setMessage(!name.trim() ? "Template name is required." : "Organization is required.");
+    const numberedTasks = tasks.map((task, originalIndex) => ({ task, originalIndex })).filter(({ task }) => task.title.trim());
+    const compactIndex = new Map(numberedTasks.map(({ originalIndex }, index) => [originalIndex, index]));
+    const taskInputs = numberedTasks.map(({ task }) => {
+      const prerequisiteTaskIndex = task.dependencyIndex === "" ? undefined : compactIndex.get(Number(task.dependencyIndex));
+      return {
+        title: task.title.trim(), leadDepartmentId: task.area ? getRemoteDepartmentId(organization, task.area) : undefined, defaultAssigneeId: task.assigneeId || undefined,
+        targetOffsetDays: task.targetOffsetDays === "" ? undefined : Number(task.targetOffsetDays), checklistItems: task.checklist.split(",").map(item => item.trim()).filter(Boolean),
+        dependencies: prerequisiteTaskIndex === undefined ? undefined : [{ prerequisiteTaskIndex, type: task.dependencyType, label: task.dependencyType === "start_blocker" ? "Start after prerequisite" : "Finish after prerequisite" }],
+      };
+    });
+    const involvedDepartmentIds = Array.from(new Set([leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined, ...taskInputs.map(task => task.leadDepartmentId)].filter((id): id is string => Boolean(id))));
+    const result = await createWorkflowTemplateAction({ organizationId, name: name.trim(), description: description.trim() || undefined, leadDepartmentId: leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined, involvedDepartmentIds, tasks: taskInputs, milestones: milestone.trim() ? [{ title: milestone.trim() }] : undefined, focusItems: focus.trim() ? [focus.trim()] : undefined });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalWorkflowTemplate(result.data, result.revision);
+    router.refresh(); reset();
+  }
+  async function applyTemplate() {
+    if (!applying || !projectName.trim()) return setMessage("Project name is required.");
+    const result = await applyWorkflowTemplateAction({ templateId: applying.id, name: projectName.trim(), startDate: projectStart || undefined });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    router.refresh(); setApplying(null); setProjectName(""); setMessage(""); onProjectClick(result.data.id);
+  }
+  async function archiveTemplate(template: WorkflowTemplateDTO) {
+    if (!window.confirm(`Archive “${template.name}”? Existing projects stay intact.`)) return;
+    const result = await archiveWorkflowTemplateAction({ templateId: template.id });
+    if (!result.ok) return setMessage(result.message);
+    removeCanonicalWorkflowTemplate(template.id, result.revision); router.refresh();
+  }
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workflow templates</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Start familiar work well.</h1><p className="mt-1.5 text-sm text-muted-foreground">Templates create normal projects and tasks—never a parallel task database.</p></div><button onClick={() => setCreating(true)} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />New template</button></div>{message && <p role="alert" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{CANONICAL_WORKFLOW_TEMPLATES.map(template => <article key={template.id} className="binnie-card flex min-h-56 flex-col p-5"><div className="flex items-start gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Layers className="h-4 w-4" /></span><div className="min-w-0 flex-1"><h2 className="truncate text-[14px] font-semibold text-foreground">{template.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{template.organization}{template.leadArea ? ` · ${template.leadArea}` : ""}</p></div></div><p className="mt-4 line-clamp-2 text-[11px] text-muted-foreground">{template.description || "A reusable starting point for recurring work."}</p><div className="mt-4 flex flex-wrap gap-1.5">{template.involvedDepartments.map(area => <span key={area.id} className="rounded-full bg-muted px-2 py-1 text-[9px] text-muted-foreground">{area.name}</span>)}</div><p className="mt-4 text-[10px] text-muted-foreground">{template.tasks.length} suggested task{template.tasks.length === 1 ? "" : "s"} · {template.milestones.length} milestone{template.milestones.length === 1 ? "" : "s"}</p><div className="mt-auto flex items-center gap-2 pt-5"><button onClick={() => { setApplying(template); setProjectName(""); setProjectStart(isoDate(getWorkspaceCalendarDate())); setMessage(""); }} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground">Use template</button><button onClick={() => void archiveTemplate(template)} className="rounded-lg px-2.5 py-2 text-[10px] text-muted-foreground hover:bg-muted">Archive</button></div></article>)}{!CANONICAL_WORKFLOW_TEMPLATES.length && <div className="binnie-card col-span-full py-14 text-center"><Layers className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No templates yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Turn a common project flow into a calm, reusable starting point.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ New template</button></div>}</div>{creating && <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create workflow template" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="flex items-start justify-between border-b border-border px-5 py-5"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">New template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Give familiar work a head start.</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep it light: setup can grow later.</p></div><button onClick={reset} className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5"><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Template name <span className="text-overdue">*</span><input value={name} onChange={event => setName(event.target.value)} placeholder="New promotion launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => { setOrganization(event.target.value as OrgName); setLeadArea(""); setTasks([]); }} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Choose organization</option>{Array.from(remoteOrganizationIds.keys()).map(org => <option key={org}>{org}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Lead area<select value={leadArea} onChange={event => setLeadArea(event.target.value as AreaName)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Not set</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} rows={2} placeholder="What this workflow helps the team deliver" className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Suggested work</p><p className="mt-0.5 text-[10px] text-muted-foreground">These become regular project tasks when used.</p></div><button onClick={() => setTasks(current => [...current, { title: "", area: leadArea, assigneeId: "", targetOffsetDays: "", checklist: "", dependencyIndex: "", dependencyType: "completion_blocker" }])} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add task</button></div>{tasks.map((task, index) => <div key={index} className="mt-3 rounded-xl border border-border bg-card p-3"><div className="flex gap-2"><input value={task.title} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Prepare campaign artwork" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => setTasks(current => current.filter((_, itemIndex) => itemIndex !== index).map(item => ({ ...item, dependencyIndex: item.dependencyIndex === String(index) ? "" : item.dependencyIndex })))} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><Trash2 className="h-3.5 w-3.5" /></button></div><div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={task.area} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, area: event.target.value as AreaName } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Area</option>{areas.map(area => <option key={area}>{area}</option>)}</select><select value={task.assigneeId} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, assigneeId: event.target.value } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Default owner</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><label className="text-[9px] text-muted-foreground">Target days from start<input type="number" min="0" value={task.targetOffsetDays} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetOffsetDays: event.target.value } : item))} className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground" /></label></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={task.checklist} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checklist: event.target.value } : item))} placeholder="Checklist, separated by commas" className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground" /><div className="grid grid-cols-2 gap-2"><select value={task.dependencyIndex} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyIndex: event.target.value } : item))} disabled={index === 0} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="">No dependency</option>{tasks.slice(0, index).map((item, itemIndex) => <option key={itemIndex} value={itemIndex}>{item.title || `Task ${itemIndex + 1}`}</option>)}</select><select value={task.dependencyType} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyType: event.target.value as TemplateTaskDraft["dependencyType"] } : item))} disabled={!task.dependencyIndex} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="completion_blocker">Finish after</option><option value="start_blocker">Start after</option></select></div></div></div>)}</section><div className="grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">First milestone <span className="font-normal">(optional)</span><input value={milestone} onChange={event => setMilestone(event.target.value)} placeholder="Campaign launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={focus} onChange={event => setFocus(event.target.value)} placeholder="Launch readiness" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label></div></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><button onClick={reset} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void createTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save template</button></div></div></div>}{applying && <div className="fixed inset-0 z-[95] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Use workflow template" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="flex items-start justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Use template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{applying.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">Creates one project and canonical tasks with their relationships intact.</p></div><button onClick={() => setApplying(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="mt-5 block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} placeholder={applying.name} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="mt-3 block text-[11px] font-medium text-muted-foreground">Start date <span className="font-normal">(optional)</span><input type="date" value={projectStart} onChange={event => setProjectStart(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><div className="mt-5 flex justify-end gap-2"><button onClick={() => setApplying(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={() => void applyTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create project</button></div></div></div>}</div>;
+}
+
 // ─── SEARCH VIEW ─────────────────────────────────────────────────────────────
 
 function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [query, setQuery] = useState("");
   const searchableTasks = [...TASKS, ...ARCHIVED_TASKS];
-  const results = query.length > 1
-    ? searchableTasks.filter(t =>
-        t.title.toLowerCase().includes(query.toLowerCase()) ||
-        t.org.toLowerCase().includes(query.toLowerCase()) ||
-        t.area.toLowerCase().includes(query.toLowerCase()) ||
-        taskAssigneeNames(t).join(" ").toLowerCase().includes(query.toLowerCase())
-      )
-    : [];
+  const natural = parseNaturalTaskSearch(query, {
+    organizations: Array.from(new Set(searchableTasks.map(task => task.org))),
+    departments: Array.from(new Set(searchableTasks.flatMap(getTaskAreas))),
+    assignees: Array.from(new Set(searchableTasks.flatMap(taskAssigneeNames))),
+    projects: Array.from(new Set(searchableTasks.map(task => task.project).filter((value): value is string => Boolean(value)))),
+  }, getWorkspaceCalendarDate());
+  const results = query.length > 1 ? searchableTasks.filter(task => matchesNaturalTaskSearch({
+    title: task.title,
+    description: task.description || task.notes,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    org: task.org,
+    areas: getTaskAreas(task),
+    assignees: taskAssigneeNames(task),
+    project: task.project,
+    nextActionBy: task.nextActionBy,
+    dependencyOwners: (task.dependencyRecords || []).map(dependency => dependency.owner).filter((owner): owner is string => Boolean(owner)),
+    deadlineDate: task.deadlineDate,
+    targetDate: task.targetDate,
+    startDate: task.startDate,
+    assigneeIds: task.assigneeIds,
+  }, natural, CANONICAL_ACTOR_ID)) : [];
   return (
     <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
       <div className="mb-6">
@@ -4646,7 +6020,7 @@ function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
         <div className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3 focus-within:border-primary/40 transition-colors">
           <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search tasks, people, organizations…"
+            placeholder="Try “waiting on purchasing” or “marketing this month”"
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder-muted-foreground" />
           {query && <button onClick={() => setQuery("")}><X className="w-4 h-4 text-muted-foreground" /></button>}
         </div>
@@ -4661,7 +6035,8 @@ function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       {query.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Type to search across all tasks and people</p>
+          <p className="text-sm">Search naturally, or use the structured filters on Tasks.</p>
+          <p className="mt-2 text-[11px]">Examples: overdue khayangan work · marketing tasks this month · waiting on purchasing</p>
         </div>
       )}
     </div>
@@ -4698,6 +6073,7 @@ const NAV_GROUPS = [
       { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && t.nextActionBy === "me").length },
       { id: "overdue" as NavView, label: "Overdue", icon: <AlertTriangle className="w-4 h-4" />, badge: TASKS.filter(t => t.isOverdue).length, urgent: true },
       { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" />, badge: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length },
+      { id: "workload" as NavView, label: "Workload", icon: <BarChart2 className="w-4 h-4" /> },
     ]
   },
   {
@@ -4705,6 +6081,7 @@ const NAV_GROUPS = [
     items: [
       { id: "organizations" as NavView, label: "Organizations", icon: <Building2 className="w-4 h-4" /> },
       { id: "projects" as NavView, label: "Projects", icon: <FolderKanban className="w-4 h-4" /> },
+      { id: "templates" as NavView, label: "Templates", icon: <Layers className="w-4 h-4" /> },
     ]
   },
 ];
@@ -4814,6 +6191,18 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
             })}
           </div>
         ))}
+        {!collapsed && taskStoreUsesServer && (
+          <div className="mt-5 border-t border-sidebar-border px-2 pt-4">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Saved views</p>
+            {CANONICAL_SAVED_VIEWS.slice(0, 5).map(savedView => (
+              <div key={savedView.id} className="group flex items-center rounded-xl hover:bg-sidebar-accent/65">
+                <button onClick={() => { choose("all-tasks"); window.setTimeout(() => window.dispatchEvent(new CustomEvent("binnie:apply-saved-view", { detail: { filters: savedView.filters } })), 0); }} className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[12px] text-sidebar-foreground">{savedView.name}</button>
+                <button onClick={() => window.dispatchEvent(new CustomEvent("binnie:delete-saved-view", { detail: { viewId: savedView.id } }))} aria-label={`Delete ${savedView.name}`} className="mr-1 rounded-lg p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-overdue/10 hover:text-overdue group-hover:opacity-100"><X className="h-3 w-3" /></button>
+              </div>
+            ))}
+            <button onClick={() => { if (view !== "all-tasks") return choose("all-tasks"); const name = window.prompt("Name this view"); if (name?.trim()) window.dispatchEvent(new CustomEvent("binnie:save-saved-view", { detail: { name } })); }} className="mt-1 w-full rounded-xl px-3 py-2 text-left text-[11px] font-medium text-primary hover:bg-primary/8">+ Save current filters</button>
+          </div>
+        )}
       </nav>
       <div className={cn("border-t border-sidebar-border py-4", collapsed ? "px-2" : "px-4")}>
         <button onClick={onProfileClick} title={collapsed ? "Profile & settings" : undefined} className={cn("group relative flex rounded-xl text-left transition-colors hover:bg-sidebar-accent/60", collapsed ? "mx-auto h-10 w-10 items-center justify-center" : "w-full items-center gap-2.5 px-2 py-2")}>
@@ -4832,24 +6221,69 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-export default function BinnieApp() {
+function SharedWorkspaceRequired() {
+  return <main className="flex min-h-dvh items-center justify-center bg-background p-5"><section className="w-full max-w-lg rounded-[1.75rem] border border-border bg-card p-6 shadow-[0_18px_54px_rgb(35_41_61_/_0.10)] sm:p-8"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Database className="h-5 w-5" /></div><p className="mt-5 text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Shared workspace setup</p><h1 className="binnie-heading mt-2 text-2xl font-bold text-foreground">Connect Binnie&apos;s workspace.</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">Binnie keeps one shared record for every task and project. Add a PostgreSQL connection before creating work, so status, ownership, history, and project progress survive refreshes and stay in sync for everyone.</p><div className="mt-5 rounded-2xl bg-muted/45 p-4"><p className="text-[11px] font-medium text-foreground">Local setup</p><ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] leading-5 text-muted-foreground"><li>Copy <code className="rounded bg-card px-1.5 py-0.5 text-foreground">.env.example</code> to <code className="rounded bg-card px-1.5 py-0.5 text-foreground">.env</code> and set <code className="rounded bg-card px-1.5 py-0.5 text-foreground">DATABASE_URL</code>.</li><li>Start PostgreSQL (the included <code className="rounded bg-card px-1.5 py-0.5 text-foreground">docker-compose.yml</code> is ready for this).</li><li>Run <code className="rounded bg-card px-1.5 py-0.5 text-foreground">npm run db:deploy</code> then <code className="rounded bg-card px-1.5 py-0.5 text-foreground">npm run db:seed</code>, and restart the app.</li></ol></div><p className="mt-4 text-[11px] text-muted-foreground">Binnie has not created any temporary local projects or tasks while this connection is unavailable.</p></section></main>;
+}
+
+export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: WorkspaceSnapshotDTO }) {
+  const router = useRouter();
+  const initialActor = initialSnapshot?.directory.find(person => person.id === initialSnapshot.actorId);
   const taskStoreRevision = useTaskStoreVersion();
   const [view, setView] = useState<NavView>("home");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<OrgName | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [projectCaptureContext, setProjectCaptureContext] = useState<ProjectDTO | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>("soft");
-  const [profile, setProfile] = useState<UserProfile>({ directoryId: "person-charlotte", displayName: "Charlotte", role: "Owner", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026" });
+  const [profile, setProfile] = useState<UserProfile>(() => ({ directoryId: initialActor?.id || "person-charlotte", displayName: initialActor?.name || "Charlotte", role: initialActor?.memberships.some(membership => membership.role === "owner") ? "Owner" : "Employee", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026" }));
   const [profileOpen, setProfileOpen] = useState(false);
   const [accountMessage, setAccountMessage] = useState("");
+  const [legacyTasksToImport, setLegacyTasksToImport] = useState<Task[] | null>(null);
+  const [importingLegacyTasks, setImportingLegacyTasks] = useState(false);
 
   useEffect(() => {
-    initializeTaskStore();
-  }, []);
+    if (initialSnapshot) {
+      hydrateCanonicalTaskStore(initialSnapshot);
+    } else {
+      initializeTaskStore();
+    }
+  }, [initialSnapshot]);
   void taskStoreRevision;
+
+  useEffect(() => {
+    if (!initialSnapshot) return;
+    const timer = window.setTimeout(() => {
+      try {
+        const local = JSON.parse(window.localStorage.getItem(BINNIE_TASK_STORE_STORAGE_KEY) || "null") as { tasks?: Task[] } | null;
+        if (local?.tasks?.length) setLegacyTasksToImport(local.tasks);
+      } catch {
+        // Browser-local work is left untouched when it cannot be read safely.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialSnapshot]);
+
+  useEffect(() => {
+    if (!initialSnapshot) return;
+    let cancelled = false;
+    const refreshIfChanged = async () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      try {
+        const response = await fetch("/api/workspace/revision", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json() as { revision?: number };
+        if (typeof data.revision === "number" && data.revision > taskStoreServerRevision) router.refresh();
+      } catch {
+        // Offline work remains visible; the next successful poll refreshes it.
+      }
+    };
+    const interval = window.setInterval(refreshIfChanged, 3000);
+    window.addEventListener("focus", refreshIfChanged);
+    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener("focus", refreshIfChanged); };
+  }, [initialSnapshot, router]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -4896,12 +6330,50 @@ export default function BinnieApp() {
     window.setTimeout(() => setAccountMessage(""), 2400);
   }
 
+  async function importLegacyTaskStore() {
+    if (!legacyTasksToImport?.length) return;
+    setImportingLegacyTasks(true);
+    const fingerprint = legacyTasksToImport.reduce((hash, task) => {
+      const source = `${task.id}:${task.updatedAt || task.createdAt || ""}`;
+      return source.split("").reduce((value, character) => Math.imul(31, value) + character.charCodeAt(0) | 0, hash);
+    }, 17);
+    const tasks = legacyTasksToImport.filter(task => task.title.trim()).map(task => {
+      const organizationId = task.organizationId || remoteOrganizationIds.get(task.org);
+      const leadDepartmentId = task.leadDepartmentId || (organizationId ? getRemoteDepartmentId(task.org, task.area) : undefined);
+      const involvedDepartmentIds = (task.involvedDepartmentIds || task.involvedAreas?.map(area => getRemoteDepartmentId(task.org, area)).filter((id): id is string => Boolean(id)) || []).filter(id => Boolean(id));
+      const assignmentIds = (task.assigneeIds || []).filter(id => PEOPLE_DIRECTORY.some(person => person.id === id));
+      return {
+        legacyLocalId: task.id,
+        title: task.title,
+        description: task.description || task.notes,
+        organizationId,
+        leadDepartmentId,
+        involvedDepartmentIds,
+        assignments: assignmentIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })),
+        nextAction: { kind: "ready" as const },
+        priority: task.priority,
+        startDate: task.startDate,
+        targetDate: task.targetDate,
+        deadlineDate: task.deadlineDate,
+        followUpDate: task.followUpDate,
+        status: task.status === "review" ? "in_progress" as const : task.status,
+      };
+    });
+    const result = await importLocalTasksAction({ fingerprint: `local-${Math.abs(fingerprint)}`, tasks });
+    setImportingLegacyTasks(false);
+    if (!result.ok) return setAccountMessage(result.message);
+    setLegacyTasksToImport(null);
+    setAccountMessage(`Imported ${result.data.importedCount} local ${result.data.importedCount === 1 ? "task" : "tasks"}`);
+    router.refresh();
+  }
+
   function navTo(v: NavView, opts?: { org?: OrgName; project?: string; person?: string }) {
     setView(v);
     setSelectedTask(null);
     if (opts?.org !== undefined) setSelectedOrg(opts.org);
     if (opts?.project !== undefined) setSelectedProject(opts.project);
     if (opts?.person !== undefined) setSelectedPerson(opts.person);
+    if (v !== "inbox") setProjectCaptureContext(null);
   }
 
   function renderView() {
@@ -4909,13 +6381,14 @@ export default function BinnieApp() {
       case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
       case "today": return <TodayView onTaskClick={setSelectedTask} />;
       case "this-week": return <ThisWeekView onTaskClick={setSelectedTask} />;
-      case "inbox": return <InboxView />;
+      case "inbox": return <InboxView projectContext={projectCaptureContext || undefined} />;
       case "delegated": return <DelegatedView onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onPersonClick={person => navTo("person-detail", { person })} />;
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
       case "review": return <ReviewView onTaskClick={setSelectedTask} />;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
       case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} />;
       case "people": return <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
+      case "workload": return <WorkloadView onTaskClick={setSelectedTask} />;
       case "person-detail": return selectedPerson
         ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} />
         : <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
@@ -4924,14 +6397,19 @@ export default function BinnieApp() {
       case "org-detail": return selectedOrg
         ? <OrgDetailView orgName={selectedOrg} onBack={() => setView("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} />
         : <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
-      case "projects": return <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
+      case "projects": return <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />;
+      case "templates": return <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} />;
       case "project-detail": return selectedProject
-        ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} />
+        ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />
         : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
       case "search": return <SearchView onTaskClick={setSelectedTask} />;
       default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
     }
   }
+
+  // Never drop back to browser-local project/task creation. That would create a
+  // second source of truth and make the shared-work promises unreliable.
+  if (!initialSnapshot) return <SharedWorkspaceRequired />;
 
   return (
     <CurrentUserContext.Provider value={profile.directoryId}>
@@ -4943,6 +6421,7 @@ export default function BinnieApp() {
           <BinnieMark compact />
           <button aria-label="Search your workspace" onClick={() => navTo("search")} className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><Search className="h-5 w-5" /></button>
         </header>
+        {legacyTasksToImport && <div className="mx-4 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-info/20 bg-info/[0.055] px-3 py-2 text-[11px] text-muted-foreground"><span className="flex-1"><span className="font-medium text-foreground">Local work found.</span> Import {legacyTasksToImport.length} browser-local {legacyTasksToImport.length === 1 ? "task" : "tasks"} into this shared workspace?</span><button onClick={() => void importLegacyTaskStore()} disabled={importingLegacyTasks} className="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{importingLegacyTasks ? "Importing…" : "Import"}</button><button onClick={() => setLegacyTasksToImport(null)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-card">Not now</button></div>}
         <main className="min-h-0 flex-1 overflow-y-auto">
           {renderView()}
         </main>

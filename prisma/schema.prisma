@@ -1,0 +1,716 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+  ORGANIZATION_MANAGER
+  DEPARTMENT_MANAGER
+  EMPLOYEE
+}
+
+enum PrincipalType {
+  PERSON
+  TEAM
+}
+
+enum TaskStatus {
+  READY
+  IN_PROGRESS
+  WAITING
+  BLOCKED
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AssignmentRole {
+  PRIMARY_OWNER
+  COLLABORATOR
+}
+
+enum AssignmentSource {
+  MANUAL
+  DEPARTMENT_ROUTING
+  SMART_INBOX
+  CLAIM
+  IMPORT
+}
+
+enum NextActionKind {
+  PRINCIPAL
+  DEPARTMENT
+  EXTERNAL
+  READY
+}
+
+enum DependencyType {
+  START_BLOCKER
+  COMPLETION_BLOCKER
+  RELATED
+}
+
+enum ReviewDecision {
+  APPROVED
+  REVISION_REQUESTED
+}
+
+enum ResourceScope {
+  TASK
+  PROJECT
+  ORGANIZATION
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProjectMemberRole {
+  OWNER
+  MEMBER
+  COLLABORATOR
+}
+
+enum MilestoneStatus {
+  PLANNED
+  DONE
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  MONTHS
+}
+
+enum CaptureStatus {
+  NEEDS_ORGANIZATION
+  REVIEWING
+  CONFIRMED
+  UNDONE
+}
+
+enum WorkflowTemplateStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum NudgeDisposition {
+  DISMISSED
+  SNOOZED
+}
+
+enum TaskEventType {
+  CREATED
+  TITLE_CHANGED
+  ORGANIZATION_CHANGED
+  LEAD_DEPARTMENT_CHANGED
+  INVOLVED_DEPARTMENTS_CHANGED
+  ASSIGNED
+  CLAIMED
+  REASSIGNED
+  NEXT_ACTION_CHANGED
+  DATES_CHANGED
+  STATUS_CHANGED
+  WAITING_MARKED
+  BLOCKED_MARKED
+  DEPENDENCY_CHANGED
+  UPDATE_POSTED
+  REVIEW_SUBMITTED
+  REVIEW_APPROVED
+  REVISION_REQUESTED
+  COMPLETED
+  REOPENED
+  ARCHIVED
+  IMPORTED
+}
+
+model Workspace {
+  id                String             @id @default(uuid())
+  name              String
+  revision          Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organizations     Organization[]
+  principals        Principal[]
+  tasks             Task[]
+  projects          Project[]
+  captures          InboxCapture[]
+  legacyImports     LegacyImport[]
+  taskRecurrences   TaskRecurrence[]
+  savedViews        SavedView[]
+  workflowTemplates WorkflowTemplate[]
+  nudgeStates       WorkNudge[]
+}
+
+model Organization {
+  id                String                @id @default(uuid())
+  workspaceId       String
+  name              String
+  aliases           String[]              @default([])
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  departments       Department[]
+  projects          Project[]
+  memberships       PrincipalMembership[]
+  tasks             Task[]
+  resources         TaskResource[]
+  workflowTemplates WorkflowTemplate[]
+
+  @@unique([workspaceId, name])
+}
+
+model Department {
+  id                   String                               @id @default(uuid())
+  organizationId       String
+  name                 String
+  aliases              String[]                             @default([])
+  organization         Organization                         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships          PrincipalMembership[]
+  leadTasks            Task[]                               @relation("LeadDepartment")
+  involvedTasks        TaskInvolvedDepartment[]
+  nextActionTasks      Task[]                               @relation("NextActionDepartment")
+  dependencyOwners     TaskDependency[]                     @relation("DependencyOwnerDepartment")
+  leadProjects         Project[]                            @relation("ProjectLeadDepartment")
+  projectInvolvement   ProjectInvolvedDepartment[]
+  templateLeadTasks    WorkflowTemplateTask[]               @relation("TemplateTaskLeadDepartment")
+  templateLeadProjects WorkflowTemplate[]                   @relation("TemplateLeadDepartment")
+  templateInvolvement  WorkflowTemplateInvolvedDepartment[]
+
+  @@unique([organizationId, name])
+}
+
+model Project {
+  id                   String                      @id @default(uuid())
+  workspaceId          String
+  organizationId       String
+  leadDepartmentId     String?
+  name                 String
+  description          String?
+  targetDate           DateTime?                   @db.Date
+  status               ProjectStatus               @default(ACTIVE)
+  createdByPrincipalId String?
+  sourceTemplateId     String?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  workspace            Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization         Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadDepartment       Department?                 @relation("ProjectLeadDepartment", fields: [leadDepartmentId], references: [id], onDelete: SetNull)
+  createdBy            Principal?                  @relation("ProjectCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
+  involvedDepartments  ProjectInvolvedDepartment[]
+  members              ProjectMember[]
+  milestones           ProjectMilestone[]
+  focusItems           ProjectFocusItem[]
+  tasks                Task[]
+  resources            TaskResource[]
+  sourceTemplate       WorkflowTemplate?           @relation("TemplateProjects", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, name])
+  @@index([workspaceId, status])
+  @@index([leadDepartmentId])
+  @@index([sourceTemplateId])
+}
+
+model ProjectInvolvedDepartment {
+  projectId    String
+  departmentId String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, departmentId])
+  @@index([departmentId, projectId])
+}
+
+model ProjectMember {
+  id          String            @id @default(uuid())
+  projectId   String
+  principalId String
+  role        ProjectMemberRole @default(MEMBER)
+  addedAt     DateTime          @default(now())
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  principal   Principal         @relation(fields: [principalId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, principalId])
+  @@index([principalId, role])
+}
+
+model ProjectMilestone {
+  id               String          @id @default(uuid())
+  projectId        String
+  title            String
+  targetDate       DateTime?       @db.Date
+  status           MilestoneStatus @default(PLANNED)
+  ownerPrincipalId String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner            Principal?      @relation(fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, targetDate])
+}
+
+model ProjectFocusItem {
+  id        String   @id @default(uuid())
+  projectId String
+  text      String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, position])
+}
+
+model Principal {
+  id                         String                      @id @default(uuid())
+  workspaceId                String
+  type                       PrincipalType
+  name                       String
+  email                      String?
+  active                     Boolean                     @default(true)
+  workspace                  Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships                PrincipalMembership[]
+  assignments                TaskAssignment[]            @relation("AssignedPrincipal")
+  assignedBy                 TaskAssignment[]            @relation("AssignedByPrincipal")
+  createdTasks               Task[]                      @relation("TaskCreator")
+  createdProjects            Project[]                   @relation("ProjectCreator")
+  projectMemberships         ProjectMember[]
+  milestoneOwnership         ProjectMilestone[]
+  nextActionTasks            Task[]                      @relation("NextActionPrincipal")
+  dependencyOwners           TaskDependency[]            @relation("DependencyOwnerPrincipal")
+  submittedReviews           TaskReviewCycle[]           @relation("SubmittedBy")
+  requestedReviews           TaskReviewCycle[]           @relation("ReviewRequestedFrom")
+  reviewedReviews            TaskReviewCycle[]           @relation("ReviewedBy")
+  updates                    TaskUpdate[]
+  events                     TaskEvent[]
+  captures                   InboxCapture[]
+  completedChecklistItems    TaskChecklistItem[]
+  savedViews                 SavedView[]
+  createdTemplates           WorkflowTemplate[]          @relation("TemplateCreator")
+  templateAssignments        WorkflowTemplateTask[]      @relation("TemplateTaskAssignee")
+  templateMilestoneOwnership WorkflowTemplateMilestone[]
+  nudgeStates                WorkNudge[]
+
+  @@unique([workspaceId, name])
+}
+
+model PrincipalMembership {
+  id             String        @id @default(uuid())
+  principalId    String
+  organizationId String?
+  departmentId   String?
+  role           WorkspaceRole @default(EMPLOYEE)
+  principal      Principal     @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department     Department?   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([principalId, organizationId, departmentId])
+}
+
+model Task {
+  id                      String                   @id @default(uuid())
+  workspaceId             String
+  organizationId          String?
+  leadDepartmentId        String?
+  projectId               String?
+  parentTaskId            String?
+  sourceTaskId            String?
+  recurrenceId            String?
+  mergedIntoTaskId        String?
+  createdByPrincipalId    String?
+  title                   String
+  description             String?
+  status                  TaskStatus               @default(READY)
+  priority                TaskPriority             @default(MEDIUM)
+  startDate               DateTime?                @db.Date
+  targetDate              DateTime?                @db.Date
+  deadline                DateTime?                @db.Date
+  followUpDate            DateTime?                @db.Date
+  waitingSince            DateTime?
+  nextActionKind          NextActionKind           @default(READY)
+  nextActionPrincipalId   String?
+  nextActionDepartmentId  String?
+  nextActionExternalLabel String?
+  version                 Int                      @default(1)
+  legacyLocalId           String?
+  archivedAt              DateTime?
+  deletedAt               DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization            Organization?            @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  leadDepartment          Department?              @relation("LeadDepartment", fields: [leadDepartmentId], references: [id], onDelete: SetNull)
+  project                 Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  parentTask              Task?                    @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks                Task[]                   @relation("TaskHierarchy")
+  sourceTask              Task?                    @relation("TaskSplitSource", fields: [sourceTaskId], references: [id], onDelete: SetNull)
+  splitTasks              Task[]                   @relation("TaskSplitSource")
+  recurrence              TaskRecurrence?          @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  createdBy               Principal?               @relation("TaskCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
+  nextActionPrincipal     Principal?               @relation("NextActionPrincipal", fields: [nextActionPrincipalId], references: [id], onDelete: SetNull)
+  nextActionDepartment    Department?              @relation("NextActionDepartment", fields: [nextActionDepartmentId], references: [id], onDelete: SetNull)
+  involvedDepartments     TaskInvolvedDepartment[]
+  assignments             TaskAssignment[]
+  dependencies            TaskDependency[]         @relation("DependentTask")
+  prerequisiteFor         TaskDependency[]         @relation("PrerequisiteTask")
+  updates                 TaskUpdate[]
+  resources               TaskResource[]
+  events                  TaskEvent[]
+  reviewCycles            TaskReviewCycle[]
+  checklistItems          TaskChecklistItem[]
+  captureLinks            CaptureTask[]
+  nudgeStates             WorkNudge[]
+
+  @@unique([workspaceId, legacyLocalId])
+  @@index([workspaceId, status, archivedAt, deletedAt])
+  @@index([organizationId, leadDepartmentId])
+  @@index([projectId])
+  @@index([parentTaskId])
+  @@index([sourceTaskId])
+  @@index([recurrenceId])
+}
+
+model TaskChecklistItem {
+  id                     String     @id @default(uuid())
+  taskId                 String
+  title                  String
+  position               Int        @default(0)
+  completedAt            DateTime?
+  completedByPrincipalId String?
+  task                   Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  completedBy            Principal? @relation(fields: [completedByPrincipalId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, position])
+  @@index([taskId, completedAt])
+}
+
+model TaskRecurrence {
+  id                 String              @id @default(uuid())
+  workspaceId        String
+  frequency          RecurrenceFrequency
+  interval           Int                 @default(1)
+  weekDays           Int[]               @default([])
+  monthDay           Int?
+  startDate          DateTime            @db.Date
+  endDate            DateTime?           @db.Date
+  nextOccurrenceDate DateTime?           @db.Date
+  active             Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks              Task[]
+
+  @@index([workspaceId, active, nextOccurrenceDate])
+}
+
+model SavedView {
+  id          String     @id @default(uuid())
+  workspaceId String
+  ownerId     String?
+  name        String
+  filters     Json
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner       Principal? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, ownerId])
+}
+
+model TaskInvolvedDepartment {
+  taskId       String
+  departmentId String
+  task         Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, departmentId])
+  @@index([departmentId, taskId])
+}
+
+model TaskAssignment {
+  id                      String           @id @default(uuid())
+  taskId                  String
+  principalId             String
+  role                    AssignmentRole   @default(COLLABORATOR)
+  source                  AssignmentSource @default(MANUAL)
+  assignedAt              DateTime         @default(now())
+  assignedByPrincipalId   String?
+  claimedFromAssignmentId String?
+  task                    Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  principal               Principal        @relation("AssignedPrincipal", fields: [principalId], references: [id], onDelete: Cascade)
+  assignedBy              Principal?       @relation("AssignedByPrincipal", fields: [assignedByPrincipalId], references: [id], onDelete: SetNull)
+  claimedFrom             TaskAssignment?  @relation("ClaimLineage", fields: [claimedFromAssignmentId], references: [id], onDelete: SetNull)
+  claims                  TaskAssignment[] @relation("ClaimLineage")
+
+  @@unique([taskId, principalId])
+  @@index([principalId, role])
+}
+
+model TaskDependency {
+  id                 String         @id @default(uuid())
+  taskId             String
+  prerequisiteTaskId String?
+  ownerPrincipalId   String?
+  ownerDepartmentId  String?
+  type               DependencyType
+  label              String
+  resolvedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  task               Task           @relation("DependentTask", fields: [taskId], references: [id], onDelete: Cascade)
+  prerequisiteTask   Task?          @relation("PrerequisiteTask", fields: [prerequisiteTaskId], references: [id], onDelete: SetNull)
+  ownerPrincipal     Principal?     @relation("DependencyOwnerPrincipal", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  ownerDepartment    Department?    @relation("DependencyOwnerDepartment", fields: [ownerDepartmentId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, type, resolvedAt])
+  @@index([prerequisiteTaskId])
+}
+
+model TaskReviewCycle {
+  id                     String          @id @default(uuid())
+  taskId                 String
+  submittedByPrincipalId String
+  submittedAt            DateTime        @default(now())
+  reviewerPrincipalId    String?
+  reviewedByPrincipalId  String?
+  reviewedAt             DateTime?
+  decision               ReviewDecision?
+  revisionNote           String?
+  task                   Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  submittedBy            Principal       @relation("SubmittedBy", fields: [submittedByPrincipalId], references: [id], onDelete: Restrict)
+  reviewer               Principal?      @relation("ReviewRequestedFrom", fields: [reviewerPrincipalId], references: [id], onDelete: SetNull)
+  reviewedBy             Principal?      @relation("ReviewedBy", fields: [reviewedByPrincipalId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, reviewedAt])
+}
+
+model TaskUpdate {
+  id        String         @id @default(uuid())
+  taskId    String
+  authorId  String
+  text      String
+  createdAt DateTime       @default(now())
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    Principal      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  resources TaskResource[]
+
+  @@index([taskId, createdAt])
+}
+
+model TaskResource {
+  id             String        @id @default(uuid())
+  scope          ResourceScope
+  taskId         String?
+  projectId      String?
+  organizationId String?
+  updateId       String?
+  label          String
+  url            String?
+  fileName       String?
+  mimeType       String?
+  byteSize       Int?
+  content        Bytes?
+  createdAt      DateTime      @default(now())
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  update         TaskUpdate?   @relation(fields: [updateId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, scope])
+  @@index([updateId])
+}
+
+model TaskEvent {
+  id        String        @id @default(uuid())
+  taskId    String
+  actorId   String?
+  type      TaskEventType
+  summary   String
+  before    Json?
+  after     Json?
+  createdAt DateTime      @default(now())
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor     Principal?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+}
+
+model InboxCapture {
+  id              String        @id @default(uuid())
+  workspaceId     String
+  actorId         String?
+  rawText         String
+  status          CaptureStatus @default(REVIEWING)
+  candidates      Json?
+  confirmationKey String?
+  undoExpiresAt   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor           Principal?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  tasks           CaptureTask[]
+
+  @@index([workspaceId, status])
+}
+
+model CaptureTask {
+  captureId String
+  taskId    String
+  capture   InboxCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+  task      Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([captureId, taskId])
+}
+
+model LegacyImport {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  fingerprint   String
+  importedAt    DateTime  @default(now())
+  importedCount Int
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, fingerprint])
+}
+
+// Phase 3 keeps reusable workflows canonical. A template is intentionally a
+// lightweight project blueprint: it can suggest work, teams, checklists and
+// simple dependency links without becoming a separate task system.
+model WorkflowTemplate {
+  id                   String                               @id @default(uuid())
+  workspaceId          String
+  organizationId       String
+  leadDepartmentId     String?
+  createdByPrincipalId String?
+  name                 String
+  description          String?
+  status               WorkflowTemplateStatus               @default(ACTIVE)
+  createdAt            DateTime                             @default(now())
+  updatedAt            DateTime                             @updatedAt
+  workspace            Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization         Organization                         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadDepartment       Department?                          @relation("TemplateLeadDepartment", fields: [leadDepartmentId], references: [id], onDelete: SetNull)
+  createdBy            Principal?                           @relation("TemplateCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
+  involvedDepartments  WorkflowTemplateInvolvedDepartment[]
+  tasks                WorkflowTemplateTask[]
+  milestones           WorkflowTemplateMilestone[]
+  focusItems           WorkflowTemplateFocusItem[]
+  projects             Project[]                            @relation("TemplateProjects")
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+  @@index([organizationId])
+}
+
+model WorkflowTemplateInvolvedDepartment {
+  templateId   String
+  departmentId String
+  template     WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  department   Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, departmentId])
+  @@index([departmentId, templateId])
+}
+
+model WorkflowTemplateTask {
+  id                 String                          @id @default(uuid())
+  templateId         String
+  title              String
+  description        String?
+  leadDepartmentId   String?
+  defaultAssigneeId  String?
+  priority           TaskPriority                    @default(MEDIUM)
+  startOffsetDays    Int?
+  targetOffsetDays   Int?
+  deadlineOffsetDays Int?
+  position           Int                             @default(0)
+  template           WorkflowTemplate                @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  leadDepartment     Department?                     @relation("TemplateTaskLeadDepartment", fields: [leadDepartmentId], references: [id], onDelete: SetNull)
+  defaultAssignee    Principal?                      @relation("TemplateTaskAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
+  checklistItems     WorkflowTemplateChecklistItem[]
+  dependencies       WorkflowTemplateDependency[]    @relation("TemplateDependentTask")
+  prerequisiteFor    WorkflowTemplateDependency[]    @relation("TemplatePrerequisiteTask")
+
+  @@unique([templateId, position])
+  @@index([templateId, leadDepartmentId])
+}
+
+model WorkflowTemplateChecklistItem {
+  id             String               @id @default(uuid())
+  templateTaskId String
+  title          String
+  position       Int                  @default(0)
+  templateTask   WorkflowTemplateTask @relation(fields: [templateTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([templateTaskId, position])
+}
+
+model WorkflowTemplateDependency {
+  id                         String               @id @default(uuid())
+  taskId                     String
+  prerequisiteTemplateTaskId String
+  type                       DependencyType
+  label                      String
+  task                       WorkflowTemplateTask @relation("TemplateDependentTask", fields: [taskId], references: [id], onDelete: Cascade)
+  prerequisiteTask           WorkflowTemplateTask @relation("TemplatePrerequisiteTask", fields: [prerequisiteTemplateTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, prerequisiteTemplateTaskId, type])
+  @@index([prerequisiteTemplateTaskId])
+}
+
+model WorkflowTemplateMilestone {
+  id               String           @id @default(uuid())
+  templateId       String
+  title            String
+  targetOffsetDays Int?
+  ownerPrincipalId String?
+  position         Int              @default(0)
+  template         WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  owner            Principal?       @relation(fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+
+  @@unique([templateId, position])
+}
+
+model WorkflowTemplateFocusItem {
+  id         String           @id @default(uuid())
+  templateId String
+  text       String
+  position   Int              @default(0)
+  template   WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, position])
+}
+
+// Nudge state records a deliberate dismissal or snooze. The actual nudge
+// candidates remain derived from live work, so resolved work disappears on its
+// own and no background process needs to create noisy notifications.
+model WorkNudge {
+  id           String           @id @default(uuid())
+  workspaceId  String
+  recipientId  String
+  taskId       String?
+  dedupKey     String
+  disposition  NudgeDisposition
+  snoozedUntil DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  recipient    Principal        @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  task         Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, recipientId, dedupKey])
+  @@index([workspaceId, recipientId, disposition])
+  @@index([taskId])
+}
