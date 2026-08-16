@@ -30,7 +30,12 @@ import {
   createCanonicalWorkflowTemplate,
   updateCanonicalWorkflowTemplate,
   createCanonicalProject,
+  deleteCanonicalProject,
+  archiveCanonicalProject,
+  createCanonicalOrganization,
+  resetCanonicalDemoData,
   createCanonicalPrincipal,
+  updateCanonicalProfile,
   updateCanonicalPrincipal,
   decideCanonicalReview,
   deleteCanonicalView,
@@ -153,6 +158,58 @@ export async function createProjectAction(raw: unknown) {
   }).safeParse(raw);
   if (!parsed.success) return invalid("Project name and organization are required.");
   const result = await createCanonicalProject(parsed.data);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function deleteProjectAction(raw: unknown) {
+  const parsed = z.object({ projectId: id, confirm: z.literal(true), workspaceId: id.optional() }).safeParse(raw);
+  if (!parsed.success) return invalid("Confirm permanent project deletion before continuing.");
+  const result = await deleteCanonicalProject(parsed.data.projectId, parsed.data.workspaceId);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function archiveProjectAction(raw: unknown) {
+  const parsed = z.object({ projectId: id, workspaceId: id.optional() }).safeParse(raw);
+  if (!parsed.success) return invalid("Choose a valid project to archive.");
+  const result = await archiveCanonicalProject(parsed.data.projectId, parsed.data.workspaceId);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function createOrganizationAction(raw: unknown) {
+  const parsed = z.object({
+    workspaceId: id.optional(),
+    name: z.string().trim().min(1).max(240),
+    description: z.string().trim().max(2_000).optional(),
+  }).safeParse(raw);
+  if (!parsed.success) return invalid("Organization name is required.");
+  const result = await createCanonicalOrganization(parsed.data);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function updateProfileAction(raw: unknown) {
+  const parsed = z.object({
+    workspaceId: id.optional(),
+    displayName: z.string().trim().min(1).max(240),
+    role: z.enum(["owner", "organization_manager", "department_manager", "employee"]),
+    email: z.string().trim().email().max(320).or(z.literal("")).optional(),
+    timezone: z.string().trim().min(1).max(120),
+    dateFormat: z.string().trim().min(1).max(80),
+    theme: z.enum(["soft", "clear", "dark"]),
+  }).safeParse(raw);
+  if (!parsed.success) return invalid("Complete the required profile fields before saving.");
+  const result = await updateCanonicalProfile({ ...parsed.data, email: parsed.data.email || undefined });
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function resetDemoDataAction(raw: unknown) {
+  const parsed = z.object({ confirmation: z.literal("RESET DEMO DATA") }).safeParse(raw);
+  if (!parsed.success) return invalid("Type RESET DEMO DATA to confirm.");
+  const result = await resetCanonicalDemoData(parsed.data.confirmation);
   if (result.ok) refreshWorkspace();
   return result;
 }

@@ -192,6 +192,7 @@ export type PrincipalWhereInput = {
   active?: Prisma.BoolFilter<"Principal"> | boolean
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   memberships?: Prisma.PrincipalMembershipListRelationFilter
+  preferences?: Prisma.XOR<Prisma.PrincipalPreferenceNullableScalarRelationFilter, Prisma.PrincipalPreferenceWhereInput> | null
   assignments?: Prisma.TaskAssignmentListRelationFilter
   assignedBy?: Prisma.TaskAssignmentListRelationFilter
   createdTasks?: Prisma.TaskListRelationFilter
@@ -223,6 +224,7 @@ export type PrincipalOrderByWithRelationInput = {
   active?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
   memberships?: Prisma.PrincipalMembershipOrderByRelationAggregateInput
+  preferences?: Prisma.PrincipalPreferenceOrderByWithRelationInput
   assignments?: Prisma.TaskAssignmentOrderByRelationAggregateInput
   assignedBy?: Prisma.TaskAssignmentOrderByRelationAggregateInput
   createdTasks?: Prisma.TaskOrderByRelationAggregateInput
@@ -258,6 +260,7 @@ export type PrincipalWhereUniqueInput = Prisma.AtLeast<{
   active?: Prisma.BoolFilter<"Principal"> | boolean
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   memberships?: Prisma.PrincipalMembershipListRelationFilter
+  preferences?: Prisma.XOR<Prisma.PrincipalPreferenceNullableScalarRelationFilter, Prisma.PrincipalPreferenceWhereInput> | null
   assignments?: Prisma.TaskAssignmentListRelationFilter
   assignedBy?: Prisma.TaskAssignmentListRelationFilter
   createdTasks?: Prisma.TaskListRelationFilter
@@ -312,6 +315,7 @@ export type PrincipalCreateInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -342,6 +346,7 @@ export type PrincipalUncheckedCreateInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -372,6 +377,7 @@ export type PrincipalUpdateInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -402,6 +408,7 @@ export type PrincipalUncheckedUpdateInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -596,6 +603,20 @@ export type EnumPrincipalTypeFieldUpdateOperationsInput = {
 
 export type BoolFieldUpdateOperationsInput = {
   set?: boolean
+}
+
+export type PrincipalCreateNestedOneWithoutPreferencesInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutPreferencesInput, Prisma.PrincipalUncheckedCreateWithoutPreferencesInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutPreferencesInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutPreferencesNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutPreferencesInput, Prisma.PrincipalUncheckedCreateWithoutPreferencesInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutPreferencesInput
+  upsert?: Prisma.PrincipalUpsertWithoutPreferencesInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutPreferencesInput, Prisma.PrincipalUpdateWithoutPreferencesInput>, Prisma.PrincipalUncheckedUpdateWithoutPreferencesInput>
 }
 
 export type PrincipalCreateNestedOneWithoutMembershipsInput = {
@@ -883,6 +904,7 @@ export type PrincipalCreateWithoutWorkspaceInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -912,6 +934,7 @@ export type PrincipalUncheckedCreateWithoutWorkspaceInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -980,6 +1003,7 @@ export type PrincipalCreateWithoutCreatedProjectsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1009,6 +1033,7 @@ export type PrincipalUncheckedCreateWithoutCreatedProjectsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1054,6 +1079,7 @@ export type PrincipalUpdateWithoutCreatedProjectsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -1083,6 +1109,7 @@ export type PrincipalUncheckedUpdateWithoutCreatedProjectsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -1112,6 +1139,7 @@ export type PrincipalCreateWithoutProjectMembershipsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1141,6 +1169,7 @@ export type PrincipalUncheckedCreateWithoutProjectMembershipsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1186,6 +1215,7 @@ export type PrincipalUpdateWithoutProjectMembershipsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -1215,6 +1245,7 @@ export type PrincipalUncheckedUpdateWithoutProjectMembershipsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -1244,6 +1275,7 @@ export type PrincipalCreateWithoutMilestoneOwnershipInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1273,6 +1305,7 @@ export type PrincipalUncheckedCreateWithoutMilestoneOwnershipInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1318,6 +1351,7 @@ export type PrincipalUpdateWithoutMilestoneOwnershipInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -1347,11 +1381,148 @@ export type PrincipalUncheckedUpdateWithoutMilestoneOwnershipInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutPreferencesInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  email?: string | null
+  active?: boolean
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutPreferencesInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  email?: string | null
+  active?: boolean
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutPreferencesInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutPreferencesInput, Prisma.PrincipalUncheckedCreateWithoutPreferencesInput>
+}
+
+export type PrincipalUpsertWithoutPreferencesInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutPreferencesInput, Prisma.PrincipalUncheckedUpdateWithoutPreferencesInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutPreferencesInput, Prisma.PrincipalUncheckedCreateWithoutPreferencesInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutPreferencesInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutPreferencesInput, Prisma.PrincipalUncheckedUpdateWithoutPreferencesInput>
+}
+
+export type PrincipalUpdateWithoutPreferencesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutPreferencesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
   submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
@@ -1375,6 +1546,7 @@ export type PrincipalCreateWithoutMembershipsInput = {
   email?: string | null
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1404,6 +1576,7 @@ export type PrincipalUncheckedCreateWithoutMembershipsInput = {
   name: string
   email?: string | null
   active?: boolean
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1449,6 +1622,7 @@ export type PrincipalUpdateWithoutMembershipsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -1478,6 +1652,7 @@ export type PrincipalUncheckedUpdateWithoutMembershipsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -1508,6 +1683,7 @@ export type PrincipalCreateWithoutCreatedTasksInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
@@ -1537,6 +1713,7 @@ export type PrincipalUncheckedCreateWithoutCreatedTasksInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1571,6 +1748,7 @@ export type PrincipalCreateWithoutNextActionTasksInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1600,6 +1778,7 @@ export type PrincipalUncheckedCreateWithoutNextActionTasksInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1645,6 +1824,7 @@ export type PrincipalUpdateWithoutCreatedTasksInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
@@ -1674,6 +1854,7 @@ export type PrincipalUncheckedUpdateWithoutCreatedTasksInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -1714,6 +1895,7 @@ export type PrincipalUpdateWithoutNextActionTasksInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -1743,6 +1925,7 @@ export type PrincipalUncheckedUpdateWithoutNextActionTasksInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -1772,6 +1955,7 @@ export type PrincipalCreateWithoutCompletedChecklistItemsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1801,6 +1985,7 @@ export type PrincipalUncheckedCreateWithoutCompletedChecklistItemsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1846,6 +2031,7 @@ export type PrincipalUpdateWithoutCompletedChecklistItemsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -1875,6 +2061,7 @@ export type PrincipalUncheckedUpdateWithoutCompletedChecklistItemsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -1904,6 +2091,7 @@ export type PrincipalCreateWithoutSavedViewsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -1933,6 +2121,7 @@ export type PrincipalUncheckedCreateWithoutSavedViewsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -1978,6 +2167,7 @@ export type PrincipalUpdateWithoutSavedViewsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -2007,6 +2197,7 @@ export type PrincipalUncheckedUpdateWithoutSavedViewsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2036,6 +2227,7 @@ export type PrincipalCreateWithoutAssignmentsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
@@ -2065,6 +2257,7 @@ export type PrincipalUncheckedCreateWithoutAssignmentsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2099,6 +2292,7 @@ export type PrincipalCreateWithoutAssignedByInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
@@ -2128,6 +2322,7 @@ export type PrincipalUncheckedCreateWithoutAssignedByInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2173,6 +2368,7 @@ export type PrincipalUpdateWithoutAssignmentsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
@@ -2202,6 +2398,7 @@ export type PrincipalUncheckedUpdateWithoutAssignmentsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2242,6 +2439,7 @@ export type PrincipalUpdateWithoutAssignedByInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
@@ -2271,6 +2469,7 @@ export type PrincipalUncheckedUpdateWithoutAssignedByInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2300,6 +2499,7 @@ export type PrincipalCreateWithoutDependencyOwnersInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -2329,6 +2529,7 @@ export type PrincipalUncheckedCreateWithoutDependencyOwnersInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2374,6 +2575,7 @@ export type PrincipalUpdateWithoutDependencyOwnersInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -2403,6 +2605,7 @@ export type PrincipalUncheckedUpdateWithoutDependencyOwnersInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2432,6 +2635,7 @@ export type PrincipalCreateWithoutSubmittedReviewsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -2461,6 +2665,7 @@ export type PrincipalUncheckedCreateWithoutSubmittedReviewsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2495,6 +2700,7 @@ export type PrincipalCreateWithoutRequestedReviewsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -2524,6 +2730,7 @@ export type PrincipalUncheckedCreateWithoutRequestedReviewsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2558,6 +2765,7 @@ export type PrincipalCreateWithoutReviewedReviewsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -2587,6 +2795,7 @@ export type PrincipalUncheckedCreateWithoutReviewedReviewsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2632,6 +2841,7 @@ export type PrincipalUpdateWithoutSubmittedReviewsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -2661,6 +2871,7 @@ export type PrincipalUncheckedUpdateWithoutSubmittedReviewsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2701,6 +2912,7 @@ export type PrincipalUpdateWithoutRequestedReviewsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -2730,6 +2942,7 @@ export type PrincipalUncheckedUpdateWithoutRequestedReviewsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2770,6 +2983,7 @@ export type PrincipalUpdateWithoutReviewedReviewsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -2799,6 +3013,7 @@ export type PrincipalUncheckedUpdateWithoutReviewedReviewsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2828,6 +3043,7 @@ export type PrincipalCreateWithoutUpdatesInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -2857,6 +3073,7 @@ export type PrincipalUncheckedCreateWithoutUpdatesInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -2902,6 +3119,7 @@ export type PrincipalUpdateWithoutUpdatesInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -2931,6 +3149,7 @@ export type PrincipalUncheckedUpdateWithoutUpdatesInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -2960,6 +3179,7 @@ export type PrincipalCreateWithoutEventsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -2989,6 +3209,7 @@ export type PrincipalUncheckedCreateWithoutEventsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -3034,6 +3255,7 @@ export type PrincipalUpdateWithoutEventsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3063,6 +3285,7 @@ export type PrincipalUncheckedUpdateWithoutEventsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -3092,6 +3315,7 @@ export type PrincipalCreateWithoutCapturesInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -3121,6 +3345,7 @@ export type PrincipalUncheckedCreateWithoutCapturesInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -3166,6 +3391,7 @@ export type PrincipalUpdateWithoutCapturesInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3195,6 +3421,7 @@ export type PrincipalUncheckedUpdateWithoutCapturesInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -3224,6 +3451,7 @@ export type PrincipalCreateWithoutCreatedTemplatesInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -3253,6 +3481,7 @@ export type PrincipalUncheckedCreateWithoutCreatedTemplatesInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -3298,6 +3527,7 @@ export type PrincipalUpdateWithoutCreatedTemplatesInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3327,6 +3557,7 @@ export type PrincipalUncheckedUpdateWithoutCreatedTemplatesInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -3356,6 +3587,7 @@ export type PrincipalCreateWithoutTemplateAssignmentsInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -3385,6 +3617,7 @@ export type PrincipalUncheckedCreateWithoutTemplateAssignmentsInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -3430,6 +3663,7 @@ export type PrincipalUpdateWithoutTemplateAssignmentsInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3459,6 +3693,7 @@ export type PrincipalUncheckedUpdateWithoutTemplateAssignmentsInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -3488,6 +3723,7 @@ export type PrincipalCreateWithoutTemplateMilestoneOwnershipInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -3517,6 +3753,7 @@ export type PrincipalUncheckedCreateWithoutTemplateMilestoneOwnershipInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -3562,6 +3799,7 @@ export type PrincipalUpdateWithoutTemplateMilestoneOwnershipInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3591,6 +3829,7 @@ export type PrincipalUncheckedUpdateWithoutTemplateMilestoneOwnershipInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -3620,6 +3859,7 @@ export type PrincipalCreateWithoutNudgeStatesInput = {
   active?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
@@ -3649,6 +3889,7 @@ export type PrincipalUncheckedCreateWithoutNudgeStatesInput = {
   email?: string | null
   active?: boolean
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
@@ -3694,6 +3935,7 @@ export type PrincipalUpdateWithoutNudgeStatesInput = {
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3723,6 +3965,7 @@ export type PrincipalUncheckedUpdateWithoutNudgeStatesInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -3759,6 +4002,7 @@ export type PrincipalUpdateWithoutWorkspaceInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
@@ -3788,6 +4032,7 @@ export type PrincipalUncheckedUpdateWithoutWorkspaceInput = {
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
@@ -4038,6 +4283,7 @@ export type PrincipalSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   active?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   memberships?: boolean | Prisma.Principal$membershipsArgs<ExtArgs>
+  preferences?: boolean | Prisma.Principal$preferencesArgs<ExtArgs>
   assignments?: boolean | Prisma.Principal$assignmentsArgs<ExtArgs>
   assignedBy?: boolean | Prisma.Principal$assignedByArgs<ExtArgs>
   createdTasks?: boolean | Prisma.Principal$createdTasksArgs<ExtArgs>
@@ -4094,6 +4340,7 @@ export type PrincipalOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs 
 export type PrincipalInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   memberships?: boolean | Prisma.Principal$membershipsArgs<ExtArgs>
+  preferences?: boolean | Prisma.Principal$preferencesArgs<ExtArgs>
   assignments?: boolean | Prisma.Principal$assignmentsArgs<ExtArgs>
   assignedBy?: boolean | Prisma.Principal$assignedByArgs<ExtArgs>
   createdTasks?: boolean | Prisma.Principal$createdTasksArgs<ExtArgs>
@@ -4128,6 +4375,7 @@ export type $PrincipalPayload<ExtArgs extends runtime.Types.Extensions.InternalA
   objects: {
     workspace: Prisma.$WorkspacePayload<ExtArgs>
     memberships: Prisma.$PrincipalMembershipPayload<ExtArgs>[]
+    preferences: Prisma.$PrincipalPreferencePayload<ExtArgs> | null
     assignments: Prisma.$TaskAssignmentPayload<ExtArgs>[]
     assignedBy: Prisma.$TaskAssignmentPayload<ExtArgs>[]
     createdTasks: Prisma.$TaskPayload<ExtArgs>[]
@@ -4552,6 +4800,7 @@ export interface Prisma__PrincipalClient<T, Null = never, ExtArgs extends runtim
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   memberships<T extends Prisma.Principal$membershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$membershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PrincipalMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  preferences<T extends Prisma.Principal$preferencesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$preferencesArgs<ExtArgs>>): Prisma.Prisma__PrincipalPreferenceClient<runtime.Types.Result.GetResult<Prisma.$PrincipalPreferencePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   assignments<T extends Prisma.Principal$assignmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$assignmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   assignedBy<T extends Prisma.Principal$assignedByArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$assignedByArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   createdTasks<T extends Prisma.Principal$createdTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$createdTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -5029,6 +5278,25 @@ export type Principal$membershipsArgs<ExtArgs extends runtime.Types.Extensions.I
   take?: number
   skip?: number
   distinct?: Prisma.PrincipalMembershipScalarFieldEnum | Prisma.PrincipalMembershipScalarFieldEnum[]
+}
+
+/**
+ * Principal.preferences
+ */
+export type Principal$preferencesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PrincipalPreference
+   */
+  select?: Prisma.PrincipalPreferenceSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PrincipalPreference
+   */
+  omit?: Prisma.PrincipalPreferenceOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PrincipalPreferenceInclude<ExtArgs> | null
+  where?: Prisma.PrincipalPreferenceWhereInput
 }
 
 /**

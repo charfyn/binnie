@@ -154,12 +154,14 @@ model Workspace {
   savedViews        SavedView[]
   workflowTemplates WorkflowTemplate[]
   nudgeStates       WorkNudge[]
+  preferences       PrincipalPreference[]
 }
 
 model Organization {
   id                String                @id @default(uuid())
   workspaceId       String
   name              String
+  description       String?
   aliases           String[]              @default([])
   workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   departments       Department[]
@@ -281,6 +283,7 @@ model Principal {
   active                     Boolean                     @default(true)
   workspace                  Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   memberships                PrincipalMembership[]
+  preferences                PrincipalPreference?
   assignments                TaskAssignment[]            @relation("AssignedPrincipal")
   assignedBy                 TaskAssignment[]            @relation("AssignedByPrincipal")
   createdTasks               Task[]                      @relation("TaskCreator")
@@ -303,6 +306,23 @@ model Principal {
   nudgeStates                WorkNudge[]
 
   @@unique([workspaceId, name])
+}
+
+// Personal settings are deliberately separate from identity and memberships so
+// preference migrations never replace user-created profile data.
+model PrincipalPreference {
+  principalId    String   @id
+  workspaceId    String
+  timezone       String   @default("Asia/Jakarta")
+  dateFormat     String   @default("12 Aug 2026")
+  theme          String   @default("soft")
+  storageVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  principal      Principal @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model PrincipalMembership {

@@ -226,6 +226,7 @@ export type WorkspaceWhereInput = {
   savedViews?: Prisma.SavedViewListRelationFilter
   workflowTemplates?: Prisma.WorkflowTemplateListRelationFilter
   nudgeStates?: Prisma.WorkNudgeListRelationFilter
+  preferences?: Prisma.PrincipalPreferenceListRelationFilter
 }
 
 export type WorkspaceOrderByWithRelationInput = {
@@ -244,6 +245,7 @@ export type WorkspaceOrderByWithRelationInput = {
   savedViews?: Prisma.SavedViewOrderByRelationAggregateInput
   workflowTemplates?: Prisma.WorkflowTemplateOrderByRelationAggregateInput
   nudgeStates?: Prisma.WorkNudgeOrderByRelationAggregateInput
+  preferences?: Prisma.PrincipalPreferenceOrderByRelationAggregateInput
 }
 
 export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
@@ -265,6 +267,7 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   savedViews?: Prisma.SavedViewListRelationFilter
   workflowTemplates?: Prisma.WorkflowTemplateListRelationFilter
   nudgeStates?: Prisma.WorkNudgeListRelationFilter
+  preferences?: Prisma.PrincipalPreferenceListRelationFilter
 }, "id">
 
 export type WorkspaceOrderByWithAggregationInput = {
@@ -307,6 +310,7 @@ export type WorkspaceCreateInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateInput = {
@@ -325,6 +329,7 @@ export type WorkspaceUncheckedCreateInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUpdateInput = {
@@ -343,6 +348,7 @@ export type WorkspaceUpdateInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateInput = {
@@ -361,6 +367,7 @@ export type WorkspaceUncheckedUpdateInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateManyInput = {
@@ -482,6 +489,20 @@ export type WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspaceUpdateToOneWithWhereWithoutPrincipalsInput, Prisma.WorkspaceUpdateWithoutPrincipalsInput>, Prisma.WorkspaceUncheckedUpdateWithoutPrincipalsInput>
 }
 
+export type WorkspaceCreateNestedOneWithoutPreferencesInput = {
+  create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutPreferencesInput, Prisma.WorkspaceUncheckedCreateWithoutPreferencesInput>
+  connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutPreferencesInput
+  connect?: Prisma.WorkspaceWhereUniqueInput
+}
+
+export type WorkspaceUpdateOneRequiredWithoutPreferencesNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutPreferencesInput, Prisma.WorkspaceUncheckedCreateWithoutPreferencesInput>
+  connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutPreferencesInput
+  upsert?: Prisma.WorkspaceUpsertWithoutPreferencesInput
+  connect?: Prisma.WorkspaceWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspaceUpdateToOneWithWhereWithoutPreferencesInput, Prisma.WorkspaceUpdateWithoutPreferencesInput>, Prisma.WorkspaceUncheckedUpdateWithoutPreferencesInput>
+}
+
 export type WorkspaceCreateNestedOneWithoutTasksInput = {
   create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutTasksInput, Prisma.WorkspaceUncheckedCreateWithoutTasksInput>
   connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutTasksInput
@@ -595,6 +616,7 @@ export type WorkspaceCreateWithoutOrganizationsInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutOrganizationsInput = {
@@ -612,6 +634,7 @@ export type WorkspaceUncheckedCreateWithoutOrganizationsInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutOrganizationsInput = {
@@ -645,6 +668,7 @@ export type WorkspaceUpdateWithoutOrganizationsInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutOrganizationsInput = {
@@ -662,6 +686,7 @@ export type WorkspaceUncheckedUpdateWithoutOrganizationsInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutProjectsInput = {
@@ -679,6 +704,7 @@ export type WorkspaceCreateWithoutProjectsInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutProjectsInput = {
@@ -696,6 +722,7 @@ export type WorkspaceUncheckedCreateWithoutProjectsInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutProjectsInput = {
@@ -729,6 +756,7 @@ export type WorkspaceUpdateWithoutProjectsInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutProjectsInput = {
@@ -746,6 +774,7 @@ export type WorkspaceUncheckedUpdateWithoutProjectsInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutPrincipalsInput = {
@@ -763,6 +792,7 @@ export type WorkspaceCreateWithoutPrincipalsInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutPrincipalsInput = {
@@ -780,6 +810,7 @@ export type WorkspaceUncheckedCreateWithoutPrincipalsInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutPrincipalsInput = {
@@ -813,6 +844,7 @@ export type WorkspaceUpdateWithoutPrincipalsInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutPrincipalsInput = {
@@ -822,6 +854,95 @@ export type WorkspaceUncheckedUpdateWithoutPrincipalsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organizations?: Prisma.OrganizationUncheckedUpdateManyWithoutWorkspaceNestedInput
+  tasks?: Prisma.TaskUncheckedUpdateManyWithoutWorkspaceNestedInput
+  projects?: Prisma.ProjectUncheckedUpdateManyWithoutWorkspaceNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutWorkspaceNestedInput
+  legacyImports?: Prisma.LegacyImportUncheckedUpdateManyWithoutWorkspaceNestedInput
+  taskRecurrences?: Prisma.TaskRecurrenceUncheckedUpdateManyWithoutWorkspaceNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
+}
+
+export type WorkspaceCreateWithoutPreferencesInput = {
+  id?: string
+  name: string
+  revision?: number
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  organizations?: Prisma.OrganizationCreateNestedManyWithoutWorkspaceInput
+  principals?: Prisma.PrincipalCreateNestedManyWithoutWorkspaceInput
+  tasks?: Prisma.TaskCreateNestedManyWithoutWorkspaceInput
+  projects?: Prisma.ProjectCreateNestedManyWithoutWorkspaceInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutWorkspaceInput
+  legacyImports?: Prisma.LegacyImportCreateNestedManyWithoutWorkspaceInput
+  taskRecurrences?: Prisma.TaskRecurrenceCreateNestedManyWithoutWorkspaceInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
+  workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+}
+
+export type WorkspaceUncheckedCreateWithoutPreferencesInput = {
+  id?: string
+  name: string
+  revision?: number
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  organizations?: Prisma.OrganizationUncheckedCreateNestedManyWithoutWorkspaceInput
+  principals?: Prisma.PrincipalUncheckedCreateNestedManyWithoutWorkspaceInput
+  tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutWorkspaceInput
+  projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutWorkspaceInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutWorkspaceInput
+  legacyImports?: Prisma.LegacyImportUncheckedCreateNestedManyWithoutWorkspaceInput
+  taskRecurrences?: Prisma.TaskRecurrenceUncheckedCreateNestedManyWithoutWorkspaceInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+}
+
+export type WorkspaceCreateOrConnectWithoutPreferencesInput = {
+  where: Prisma.WorkspaceWhereUniqueInput
+  create: Prisma.XOR<Prisma.WorkspaceCreateWithoutPreferencesInput, Prisma.WorkspaceUncheckedCreateWithoutPreferencesInput>
+}
+
+export type WorkspaceUpsertWithoutPreferencesInput = {
+  update: Prisma.XOR<Prisma.WorkspaceUpdateWithoutPreferencesInput, Prisma.WorkspaceUncheckedUpdateWithoutPreferencesInput>
+  create: Prisma.XOR<Prisma.WorkspaceCreateWithoutPreferencesInput, Prisma.WorkspaceUncheckedCreateWithoutPreferencesInput>
+  where?: Prisma.WorkspaceWhereInput
+}
+
+export type WorkspaceUpdateToOneWithWhereWithoutPreferencesInput = {
+  where?: Prisma.WorkspaceWhereInput
+  data: Prisma.XOR<Prisma.WorkspaceUpdateWithoutPreferencesInput, Prisma.WorkspaceUncheckedUpdateWithoutPreferencesInput>
+}
+
+export type WorkspaceUpdateWithoutPreferencesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  organizations?: Prisma.OrganizationUpdateManyWithoutWorkspaceNestedInput
+  principals?: Prisma.PrincipalUpdateManyWithoutWorkspaceNestedInput
+  tasks?: Prisma.TaskUpdateManyWithoutWorkspaceNestedInput
+  projects?: Prisma.ProjectUpdateManyWithoutWorkspaceNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutWorkspaceNestedInput
+  legacyImports?: Prisma.LegacyImportUpdateManyWithoutWorkspaceNestedInput
+  taskRecurrences?: Prisma.TaskRecurrenceUpdateManyWithoutWorkspaceNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+}
+
+export type WorkspaceUncheckedUpdateWithoutPreferencesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  organizations?: Prisma.OrganizationUncheckedUpdateManyWithoutWorkspaceNestedInput
+  principals?: Prisma.PrincipalUncheckedUpdateManyWithoutWorkspaceNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutWorkspaceNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutWorkspaceNestedInput
   captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -847,6 +968,7 @@ export type WorkspaceCreateWithoutTasksInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutTasksInput = {
@@ -864,6 +986,7 @@ export type WorkspaceUncheckedCreateWithoutTasksInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutTasksInput = {
@@ -897,6 +1020,7 @@ export type WorkspaceUpdateWithoutTasksInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutTasksInput = {
@@ -914,6 +1038,7 @@ export type WorkspaceUncheckedUpdateWithoutTasksInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutTaskRecurrencesInput = {
@@ -931,6 +1056,7 @@ export type WorkspaceCreateWithoutTaskRecurrencesInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutTaskRecurrencesInput = {
@@ -948,6 +1074,7 @@ export type WorkspaceUncheckedCreateWithoutTaskRecurrencesInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutTaskRecurrencesInput = {
@@ -981,6 +1108,7 @@ export type WorkspaceUpdateWithoutTaskRecurrencesInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutTaskRecurrencesInput = {
@@ -998,6 +1126,7 @@ export type WorkspaceUncheckedUpdateWithoutTaskRecurrencesInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutSavedViewsInput = {
@@ -1015,6 +1144,7 @@ export type WorkspaceCreateWithoutSavedViewsInput = {
   taskRecurrences?: Prisma.TaskRecurrenceCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutSavedViewsInput = {
@@ -1032,6 +1162,7 @@ export type WorkspaceUncheckedCreateWithoutSavedViewsInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutSavedViewsInput = {
@@ -1065,6 +1196,7 @@ export type WorkspaceUpdateWithoutSavedViewsInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutSavedViewsInput = {
@@ -1082,6 +1214,7 @@ export type WorkspaceUncheckedUpdateWithoutSavedViewsInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutCapturesInput = {
@@ -1099,6 +1232,7 @@ export type WorkspaceCreateWithoutCapturesInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutCapturesInput = {
@@ -1116,6 +1250,7 @@ export type WorkspaceUncheckedCreateWithoutCapturesInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutCapturesInput = {
@@ -1149,6 +1284,7 @@ export type WorkspaceUpdateWithoutCapturesInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutCapturesInput = {
@@ -1166,6 +1302,7 @@ export type WorkspaceUncheckedUpdateWithoutCapturesInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutLegacyImportsInput = {
@@ -1183,6 +1320,7 @@ export type WorkspaceCreateWithoutLegacyImportsInput = {
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutLegacyImportsInput = {
@@ -1200,6 +1338,7 @@ export type WorkspaceUncheckedCreateWithoutLegacyImportsInput = {
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutLegacyImportsInput = {
@@ -1233,6 +1372,7 @@ export type WorkspaceUpdateWithoutLegacyImportsInput = {
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutLegacyImportsInput = {
@@ -1250,6 +1390,7 @@ export type WorkspaceUncheckedUpdateWithoutLegacyImportsInput = {
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutWorkflowTemplatesInput = {
@@ -1267,6 +1408,7 @@ export type WorkspaceCreateWithoutWorkflowTemplatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceCreateNestedManyWithoutWorkspaceInput
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutWorkflowTemplatesInput = {
@@ -1284,6 +1426,7 @@ export type WorkspaceUncheckedCreateWithoutWorkflowTemplatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUncheckedCreateNestedManyWithoutWorkspaceInput
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutWorkflowTemplatesInput = {
@@ -1317,6 +1460,7 @@ export type WorkspaceUpdateWithoutWorkflowTemplatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUpdateManyWithoutWorkspaceNestedInput
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutWorkflowTemplatesInput = {
@@ -1334,6 +1478,7 @@ export type WorkspaceUncheckedUpdateWithoutWorkflowTemplatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUncheckedUpdateManyWithoutWorkspaceNestedInput
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutNudgeStatesInput = {
@@ -1351,6 +1496,7 @@ export type WorkspaceCreateWithoutNudgeStatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceCreateNestedManyWithoutWorkspaceInput
   savedViews?: Prisma.SavedViewCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceUncheckedCreateWithoutNudgeStatesInput = {
@@ -1368,6 +1514,7 @@ export type WorkspaceUncheckedCreateWithoutNudgeStatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUncheckedCreateNestedManyWithoutWorkspaceInput
   savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutWorkspaceInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutWorkspaceInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedManyWithoutWorkspaceInput
 }
 
 export type WorkspaceCreateOrConnectWithoutNudgeStatesInput = {
@@ -1401,6 +1548,7 @@ export type WorkspaceUpdateWithoutNudgeStatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUpdateManyWithoutWorkspaceNestedInput
   savedViews?: Prisma.SavedViewUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceUncheckedUpdateWithoutNudgeStatesInput = {
@@ -1418,6 +1566,7 @@ export type WorkspaceUncheckedUpdateWithoutNudgeStatesInput = {
   taskRecurrences?: Prisma.TaskRecurrenceUncheckedUpdateManyWithoutWorkspaceNestedInput
   savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutWorkspaceNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutWorkspaceNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 
@@ -1436,6 +1585,7 @@ export type WorkspaceCountOutputType = {
   savedViews: number
   workflowTemplates: number
   nudgeStates: number
+  preferences: number
 }
 
 export type WorkspaceCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1449,6 +1599,7 @@ export type WorkspaceCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensi
   savedViews?: boolean | WorkspaceCountOutputTypeCountSavedViewsArgs
   workflowTemplates?: boolean | WorkspaceCountOutputTypeCountWorkflowTemplatesArgs
   nudgeStates?: boolean | WorkspaceCountOutputTypeCountNudgeStatesArgs
+  preferences?: boolean | WorkspaceCountOutputTypeCountPreferencesArgs
 }
 
 /**
@@ -1531,6 +1682,13 @@ export type WorkspaceCountOutputTypeCountNudgeStatesArgs<ExtArgs extends runtime
   where?: Prisma.WorkNudgeWhereInput
 }
 
+/**
+ * WorkspaceCountOutputType without action
+ */
+export type WorkspaceCountOutputTypeCountPreferencesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PrincipalPreferenceWhereInput
+}
+
 
 export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1548,6 +1706,7 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   savedViews?: boolean | Prisma.Workspace$savedViewsArgs<ExtArgs>
   workflowTemplates?: boolean | Prisma.Workspace$workflowTemplatesArgs<ExtArgs>
   nudgeStates?: boolean | Prisma.Workspace$nudgeStatesArgs<ExtArgs>
+  preferences?: boolean | Prisma.Workspace$preferencesArgs<ExtArgs>
   _count?: boolean | Prisma.WorkspaceCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspace"]>
 
@@ -1587,6 +1746,7 @@ export type WorkspaceInclude<ExtArgs extends runtime.Types.Extensions.InternalAr
   savedViews?: boolean | Prisma.Workspace$savedViewsArgs<ExtArgs>
   workflowTemplates?: boolean | Prisma.Workspace$workflowTemplatesArgs<ExtArgs>
   nudgeStates?: boolean | Prisma.Workspace$nudgeStatesArgs<ExtArgs>
+  preferences?: boolean | Prisma.Workspace$preferencesArgs<ExtArgs>
   _count?: boolean | Prisma.WorkspaceCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type WorkspaceIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -1605,6 +1765,7 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     savedViews: Prisma.$SavedViewPayload<ExtArgs>[]
     workflowTemplates: Prisma.$WorkflowTemplatePayload<ExtArgs>[]
     nudgeStates: Prisma.$WorkNudgePayload<ExtArgs>[]
+    preferences: Prisma.$PrincipalPreferencePayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -2016,6 +2177,7 @@ export interface Prisma__WorkspaceClient<T, Null = never, ExtArgs extends runtim
   savedViews<T extends Prisma.Workspace$savedViewsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$savedViewsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SavedViewPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   workflowTemplates<T extends Prisma.Workspace$workflowTemplatesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$workflowTemplatesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkflowTemplatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   nudgeStates<T extends Prisma.Workspace$nudgeStatesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$nudgeStatesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkNudgePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  preferences<T extends Prisma.Workspace$preferencesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$preferencesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PrincipalPreferencePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2680,6 +2842,30 @@ export type Workspace$nudgeStatesArgs<ExtArgs extends runtime.Types.Extensions.I
   take?: number
   skip?: number
   distinct?: Prisma.WorkNudgeScalarFieldEnum | Prisma.WorkNudgeScalarFieldEnum[]
+}
+
+/**
+ * Workspace.preferences
+ */
+export type Workspace$preferencesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PrincipalPreference
+   */
+  select?: Prisma.PrincipalPreferenceSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PrincipalPreference
+   */
+  omit?: Prisma.PrincipalPreferenceOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PrincipalPreferenceInclude<ExtArgs> | null
+  where?: Prisma.PrincipalPreferenceWhereInput
+  orderBy?: Prisma.PrincipalPreferenceOrderByWithRelationInput | Prisma.PrincipalPreferenceOrderByWithRelationInput[]
+  cursor?: Prisma.PrincipalPreferenceWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PrincipalPreferenceScalarFieldEnum | Prisma.PrincipalPreferenceScalarFieldEnum[]
 }
 
 /**

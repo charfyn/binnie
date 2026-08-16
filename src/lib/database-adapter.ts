@@ -13,11 +13,17 @@ export function createPostgresAdapter(connectionString: string) {
   const isSupabasePooler = url.hostname.endsWith(".supabase.com");
   const sslMode = url.searchParams.get("sslmode");
 
+  // A workspace snapshot intentionally loads several related records. Keep a
+  // small shared client pool so concurrent development renders cannot exhaust
+  // a transaction-pooler's session limit before those reads complete.
+  const max = 4;
+
   if (isSupabasePooler && sslMode === "require") {
     url.searchParams.delete("sslmode");
-    const pool = new Pool({ connectionString: url.toString(), ssl: { rejectUnauthorized: false } });
+    const pool = new Pool({ connectionString: url.toString(), max, ssl: { rejectUnauthorized: false } });
     return new PrismaPg(pool, { schema, disposeExternalPool: true });
   }
 
-  return new PrismaPg({ connectionString }, { schema });
+  const pool = new Pool({ connectionString, max });
+  return new PrismaPg(pool, { schema, disposeExternalPool: true });
 }

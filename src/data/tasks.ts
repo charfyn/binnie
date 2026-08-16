@@ -22,6 +22,7 @@ import {
   type Prisma,
 } from "@/generated/prisma/client";
 import { getDb, hasDatabaseConfiguration } from "@/lib/db";
+import { seedDemoWorkspace } from "../../prisma/seed";
 import { nextOccurrenceDate, taskTransitionBlockReason } from "@/lib/work-rules";
 import type {
   ActionResult,
@@ -30,12 +31,14 @@ import type {
   InboxCaptureDTO,
   NextActionKindValue,
   NudgeStateDTO,
+  OrganizationDTO,
   ProjectDTO,
   SavedViewDTO,
   TaskAssignmentDTO,
   TaskDTO,
   TaskPriorityValue,
   TaskStatusValue,
+  UserProfileDTO,
   WorkflowTemplateDTO,
   WorkspaceSnapshotDTO,
 } from "@/lib/work-types";
@@ -149,6 +152,22 @@ export interface CreatePrincipalInput {
   type: "person" | "team";
   email?: string;
   memberships?: Array<{ organizationId?: string; departmentId?: string; role?: "owner" | "organization_manager" | "department_manager" | "employee" }>;
+}
+
+export interface UpdateCanonicalProfileInput {
+  workspaceId?: string;
+  displayName: string;
+  role: DirectoryDTO["memberships"][number]["role"];
+  email?: string;
+  timezone: string;
+  dateFormat: string;
+  theme: UserProfileDTO["theme"];
+}
+
+export interface CreateOrganizationInput {
+  workspaceId?: string;
+  name: string;
+  description?: string;
 }
 
 export interface CreateTaskInput {
@@ -348,6 +367,24 @@ function toDirectoryDTO(principal: Prisma.PrincipalGetPayload<{ include: { membe
   };
 }
 
+function toProfileDTO(actor: ActorRecord, preference?: { timezone: string; dateFormat: string; theme: string; storageVersion: number } | null): UserProfileDTO {
+  const preferredMembership = actor.memberships.find(membership => membership.role === WorkspaceRole.OWNER)
+    || actor.memberships.find(membership => membership.role === WorkspaceRole.ORGANIZATION_MANAGER)
+    || actor.memberships.find(membership => membership.role === WorkspaceRole.DEPARTMENT_MANAGER)
+    || actor.memberships[0];
+  const theme = preference?.theme === "clear" || preference?.theme === "dark" ? preference.theme : "soft";
+  return {
+    principalId: actor.id,
+    displayName: actor.name,
+    role: (preferredMembership?.role || WorkspaceRole.EMPLOYEE).toLowerCase() as UserProfileDTO["role"],
+    email: actor.email || undefined,
+    timezone: preference?.timezone || "Asia/Jakarta",
+    dateFormat: preference?.dateFormat || "12 Aug 2026",
+    theme,
+    storageVersion: preference?.storageVersion || 0,
+  };
+}
+
 function readableNextAction(task: TaskRecord, actorId: string) {
   if (task.nextActionKind === NextActionKind.READY) return "Ready";
   if (task.nextActionKind === NextActionKind.EXTERNAL) return task.nextActionExternalLabel || "External";
@@ -365,6 +402,29 @@ function toResourceDTO(resource: TaskRecord["resources"][number]) {
     mimeType: resource.mimeType || undefined,
     byteSize: resource.byteSize || undefined,
     kind: resource.content || resource.fileName ? "file" as const : "link" as const,
+  };
+}
+
+function toOrganizationDTO(organization: {
+  id: string;
+  name: string;
+  description: string | null;
+  aliases: string[];
+  departments: Array<{ id: string; name: string; aliases: string[]; memberships: Array<{ principal: { id: string; type: PrincipalType } }> }>;
+  resources: TaskRecord["resources"];
+}): OrganizationDTO {
+  return {
+    id: organization.id,
+    name: organization.name,
+    description: organization.description || undefined,
+    aliases: organization.aliases,
+    departments: organization.departments.map((department) => ({
+      id: department.id,
+      name: department.name,
+      aliases: department.aliases,
+      teamId: department.memberships.find(({ principal }) => principal.type === PrincipalType.TEAM)?.principal.id,
+    })),
+    resources: organization.resources.map(toResourceDTO),
   };
 }
 
@@ -864,7 +924,7 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
       resolveActor(workspaceId),
     ]);
     if (!workspace) return null;
-    const [records, projects, principals, organizations, savedViews, workflowTemplates, nudgeStates, inboxCaptures] = await Promise.all([
+    const [records, projects, principals, organizations, savedViews, workflowTemplates, nudgeStates, inboxCaptures, preference] = await Promise.all([
       db.task.findMany({ where: { workspaceId, deletedAt: null }, include: taskInclude, orderBy: { updatedAt: "desc" } }),
       db.project.findMany({ where: { workspaceId, status: { not: ProjectStatus.ARCHIVED } }, include: projectInclude, orderBy: { updatedAt: "desc" } }),
       db.principal.findMany({
@@ -885,6 +945,7 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
+      db.principalPreference.findUnique({ where: { principalId: actor.id } }),
     ]);
     const visibleTasks = records.filter((task) => canViewTask(actor, task));
     const visibleProjectIds = new Set(visibleTasks.map(task => task.projectId).filter((projectId): projectId is string => Boolean(projectId)));
@@ -894,29 +955,11 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
       workspaceName: workspace.name,
       revision: workspace.revision,
       actorId: actor.id,
+      profile: toProfileDTO(actor, preference),
       tasks: visibleTasks.map((task) => toTaskDTO(task, actor.id)),
       projects: projects.filter(project => canViewProject(actor, project) || visibleProjectIds.has(project.id)).map(toProjectDTO),
       directory,
-      organizations: organizations.map((organization) => ({
-        id: organization.id,
-        name: organization.name,
-        aliases: organization.aliases,
-        departments: organization.departments.map((department) => ({
-          id: department.id,
-          name: department.name,
-          aliases: department.aliases,
-          teamId: department.memberships.find(({ principal }) => principal.type === PrincipalType.TEAM)?.principalId,
-        })),
-        resources: organization.resources.map(resource => ({
-          id: resource.id,
-          label: resource.label,
-          url: resource.url || (resource.content ? `/api/resources/${resource.id}` : undefined),
-          fileName: resource.fileName || undefined,
-          mimeType: resource.mimeType || undefined,
-          byteSize: resource.byteSize || undefined,
-          kind: resource.content || resource.fileName ? "file" as const : "link" as const,
-        })),
-      })),
+      organizations: organizations.map(toOrganizationDTO),
       savedViews: savedViews.map((view): SavedViewDTO => ({ id: view.id, name: view.name, filters: view.filters as Record<string, unknown>, ownerId: view.ownerId || undefined })),
       workflowTemplates: workflowTemplates
         .filter(template => actorIsOwner(actor) || actorManagesOrganization(actor, template.organizationId) || actor.memberships.some(membership => membership.departmentId === template.leadDepartmentId || template.involvedDepartments.some(({ departmentId }) => departmentId === membership.departmentId)))
@@ -1016,8 +1059,58 @@ export async function createCanonicalProject(input: CreateProjectInput): Promise
     const project = await projectById(revision.projectId);
     return project ? { ok: true, data: toProjectDTO(project), revision: revision.revision } : { ok: false, code: "NOT_FOUND", message: "Project was created but could not be loaded." };
   } catch (error) {
+    console.error("Failed to create canonical project", { workspaceId, organizationId: input.organizationId, name, error });
     if (error instanceof Error && error.message.includes("Unique constraint")) return { ok: false, code: "VALIDATION", message: "A project with this name already exists in this organization." };
-    return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Binnie could not create this project." };
+    return { ok: false, code: "VALIDATION", message: "Couldn't create project. Please try again." };
+  }
+}
+
+/**
+ * Permanently removes a project from the shared workspace while deliberately
+ * retaining its tasks. Tasks are detached before the project row is deleted so
+ * their history, assignments, and dashboard counts stay intact.
+ */
+export async function deleteCanonicalProject(projectId: string, workspaceId = DEFAULT_WORKSPACE_ID): Promise<ActionResult<{ id: string; disassociatedTaskCount: number }>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  try {
+    const db = getDb();
+    const project = await projectById(projectId);
+    if (!project || project.workspaceId !== workspaceId) return { ok: false, code: "NOT_FOUND", message: "Project not found." };
+    const actor = await resolveActor(workspaceId);
+    if (!canManageProject(actor, project)) return forbidden("You do not have permission to permanently delete this project.");
+
+    const result = await db.$transaction(async tx => {
+      const disassociatedTaskCount = await tx.task.count({ where: { workspaceId, projectId } });
+      // The schema also protects this relationship with onDelete: SetNull. Do
+      // it explicitly inside this transaction so the behavior is intentional
+      // and task records never retain a stale project reference in transit.
+      await tx.task.updateMany({ where: { workspaceId, projectId }, data: { projectId: null } });
+      await tx.project.delete({ where: { id: projectId } });
+      const revision = (await incrementRevision(tx, workspaceId)).revision;
+      return { disassociatedTaskCount, revision };
+    });
+    return { ok: true, data: { id: projectId, disassociatedTaskCount: result.disassociatedTaskCount }, revision: result.revision };
+  } catch (error) {
+    console.error("Failed to permanently delete canonical project", { workspaceId, projectId, error });
+    return { ok: false, code: "VALIDATION", message: "Couldn't delete project. Please try again." };
+  }
+}
+
+export async function archiveCanonicalProject(projectId: string, workspaceId = DEFAULT_WORKSPACE_ID): Promise<ActionResult<{ id: string }>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  try {
+    const project = await projectById(projectId);
+    if (!project || project.workspaceId !== workspaceId) return { ok: false, code: "NOT_FOUND", message: "Project not found." };
+    const actor = await resolveActor(workspaceId);
+    if (!canManageProject(actor, project)) return forbidden("You do not have permission to archive this project.");
+    const revision = await getDb().$transaction(async tx => {
+      await tx.project.update({ where: { id: projectId }, data: { status: ProjectStatus.ARCHIVED } });
+      return (await incrementRevision(tx, workspaceId)).revision;
+    });
+    return { ok: true, data: { id: projectId }, revision };
+  } catch (error) {
+    console.error("Failed to archive canonical project", { workspaceId, projectId, error });
+    return { ok: false, code: "VALIDATION", message: "Couldn't archive project. Please try again." };
   }
 }
 
@@ -1571,6 +1664,111 @@ export async function updateCanonicalOrganizationVocabulary(
     return (await incrementRevision(tx, organization.workspaceId)).revision;
   });
   return { ok: true, data: { id: organizationId }, revision };
+}
+
+/** Persist the active person's identity, role, and preferences as one confirmed
+ * transaction. This intentionally updates only their selected role membership,
+ * preserving every organization and department membership already on record. */
+export async function updateCanonicalProfile(input: UpdateCanonicalProfileInput): Promise<ActionResult<UserProfileDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
+  const displayName = input.displayName.trim();
+  if (!displayName) return { ok: false, code: "VALIDATION", message: "Display name is required." };
+  if (!input.timezone.trim() || !input.dateFormat.trim()) return { ok: false, code: "VALIDATION", message: "Choose valid profile preferences." };
+  try {
+    const db = getDb();
+    const actor = await resolveActor(workspaceId);
+    const result = await db.$transaction(async tx => {
+      const principal = await tx.principal.update({
+        where: { id: actor.id },
+        data: { name: displayName, email: input.email?.trim() || null },
+        include: { memberships: { include: { organization: true, department: true } } },
+      });
+      const roleMembership = principal.memberships.find(membership => membership.role === WorkspaceRole.OWNER)
+        || principal.memberships.find(membership => membership.organizationId)
+        || principal.memberships[0];
+      if (roleMembership) {
+        await tx.principalMembership.update({
+          where: { id: roleMembership.id },
+          data: { role: input.role.toUpperCase() as WorkspaceRole },
+        });
+      } else {
+        await tx.principalMembership.create({ data: { principalId: principal.id, role: input.role.toUpperCase() as WorkspaceRole } });
+      }
+      const preference = await tx.principalPreference.upsert({
+        where: { principalId: principal.id },
+        create: {
+          principalId: principal.id,
+          workspaceId,
+          timezone: input.timezone.trim().slice(0, 120),
+          dateFormat: input.dateFormat.trim().slice(0, 80),
+          theme: input.theme,
+          storageVersion: 1,
+        },
+        update: {
+          timezone: input.timezone.trim().slice(0, 120),
+          dateFormat: input.dateFormat.trim().slice(0, 80),
+          theme: input.theme,
+          storageVersion: 1,
+        },
+      });
+      const updated = await tx.principal.findUniqueOrThrow({
+        where: { id: principal.id },
+        include: { memberships: { include: { organization: true, department: true } } },
+      });
+      const revision = await incrementRevision(tx, workspaceId);
+      return { profile: toProfileDTO(updated, preference), revision: revision.revision };
+    });
+    return { ok: true, data: result.profile, revision: result.revision };
+  } catch (error) {
+    console.error("Could not persist Binnie profile", error);
+    return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Could not save profile changes." };
+  }
+}
+
+export async function createCanonicalOrganization(input: CreateOrganizationInput): Promise<ActionResult<OrganizationDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
+  const name = input.name.trim();
+  if (!name) return { ok: false, code: "VALIDATION", message: "Organization name is required." };
+  try {
+    const db = getDb();
+    const actor = await resolveActor(workspaceId);
+    if (!actorIsOwner(actor)) return forbidden("Only a workspace owner can add organizations.");
+    const result = await db.$transaction(async tx => {
+      const organization = await tx.organization.create({
+        data: { workspaceId, name, description: input.description?.trim().slice(0, 2_000) || null },
+        include: { departments: { include: { memberships: { include: { principal: true } } } }, resources: true },
+      });
+      const revision = await incrementRevision(tx, workspaceId);
+      return { organization, revision: revision.revision };
+    });
+    return { ok: true, data: toOrganizationDTO(result.organization), revision: result.revision };
+  } catch (error) {
+    console.error("Could not create Binnie organization", error);
+    if (error instanceof Error && error.message.includes("Unique constraint")) return { ok: false, code: "VALIDATION", message: "That organization already exists in Binnie." };
+    return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Could not create organization." };
+  }
+}
+
+/** The only intentional destructive path for a development demo workspace.
+ * It is unavailable in production and must be explicitly confirmed by the
+ * caller; normal startup, migrations, and seeds never remove user data. */
+export async function resetCanonicalDemoData(confirmation: string, workspaceId = DEFAULT_WORKSPACE_ID): Promise<ActionResult<{ workspaceId: string }>> {
+  if (process.env.NODE_ENV === "production") return forbidden("Demo data can only be reset in development.");
+  if (confirmation !== "RESET DEMO DATA") return { ok: false, code: "VALIDATION", message: "Type RESET DEMO DATA to confirm." };
+  if (!hasDatabaseConfiguration()) return configuration();
+  try {
+    const db = getDb();
+    const actor = await resolveActor(workspaceId);
+    if (!actorIsOwner(actor)) return forbidden("Only a workspace owner can reset demo data.");
+    await db.workspace.delete({ where: { id: workspaceId } });
+    await seedDemoWorkspace();
+    return { ok: true, data: { workspaceId } };
+  } catch (error) {
+    console.error("Could not reset Binnie demo data", error);
+    return { ok: false, code: "VALIDATION", message: "Couldn't reset demo data. Please check the server log." };
+  }
 }
 
 export async function createCanonicalPrincipal(input: CreatePrincipalInput): Promise<ActionResult<DirectoryDTO>> {

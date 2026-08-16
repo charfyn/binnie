@@ -24,7 +24,7 @@ export * as $Enums from './enums.ts'
 export * from "./enums.ts"
 /**
  * ## Prisma Client
- * 
+ *
  * Type-safe database client for TypeScript
  * @example
  * ```
@@ -86,6 +86,11 @@ export type ProjectFocusItem = Prisma.ProjectFocusItemModel
  * 
  */
 export type Principal = Prisma.PrincipalModel
+/**
+ * Model PrincipalPreference
+ *
+ */
+export type PrincipalPreference = Prisma.PrincipalPreferenceModel
 /**
  * Model PrincipalMembership
  * 

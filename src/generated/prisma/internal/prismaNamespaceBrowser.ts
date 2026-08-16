@@ -60,6 +60,7 @@ export const ModelName = {
   ProjectMilestone: 'ProjectMilestone',
   ProjectFocusItem: 'ProjectFocusItem',
   Principal: 'Principal',
+  PrincipalPreference: 'PrincipalPreference',
   PrincipalMembership: 'PrincipalMembership',
   Task: 'Task',
   TaskChecklistItem: 'TaskChecklistItem',
@@ -116,6 +117,7 @@ export const OrganizationScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
   name: 'name',
+  description: 'description',
   aliases: 'aliases'
 } as const
 
@@ -204,6 +206,20 @@ export const PrincipalScalarFieldEnum = {
 } as const
 
 export type PrincipalScalarFieldEnum = (typeof PrincipalScalarFieldEnum)[keyof typeof PrincipalScalarFieldEnum]
+
+
+export const PrincipalPreferenceScalarFieldEnum = {
+  principalId: 'principalId',
+  workspaceId: 'workspaceId',
+  timezone: 'timezone',
+  dateFormat: 'dateFormat',
+  theme: 'theme',
+  storageVersion: 'storageVersion',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PrincipalPreferenceScalarFieldEnum = (typeof PrincipalPreferenceScalarFieldEnum)[keyof typeof PrincipalPreferenceScalarFieldEnum]
 
 
 export const PrincipalMembershipScalarFieldEnum = {

@@ -23,6 +23,20 @@ export interface DirectoryDTO {
   }>;
 }
 
+export type WorkspaceThemeValue = "soft" | "clear" | "dark";
+
+export interface UserProfileDTO {
+  principalId: string;
+  displayName: string;
+  role: DirectoryDTO["memberships"][number]["role"];
+  email?: string;
+  timezone: string;
+  dateFormat: string;
+  theme: WorkspaceThemeValue;
+  /** 0 denotes a profile created before durable preferences were introduced. */
+  storageVersion: number;
+}
+
 /** A raw thought Binnie retained because it could not safely organize it yet. */
 export interface InboxCaptureDTO {
   id: string;
@@ -61,6 +75,15 @@ export interface TaskResourceDTO {
   mimeType?: string;
   byteSize?: number;
   kind: "link" | "file";
+}
+
+export interface OrganizationDTO {
+  id: string;
+  name: string;
+  description?: string;
+  aliases: string[];
+  departments: Array<{ id: string; name: string; aliases: string[]; teamId?: string }>;
+  resources: TaskResourceDTO[];
 }
 
 export interface TaskUpdateDTO {
@@ -263,16 +286,11 @@ export interface WorkspaceSnapshotDTO {
   workspaceName: string;
   revision: number;
   actorId: string;
+  profile: UserProfileDTO;
   tasks: TaskDTO[];
   projects: ProjectDTO[];
   directory: DirectoryDTO[];
-  organizations: Array<{
-    id: string;
-    name: string;
-    aliases: string[];
-    departments: Array<{ id: string; name: string; aliases: string[]; teamId?: string }>;
-    resources: TaskResourceDTO[];
-  }>;
+  organizations: OrganizationDTO[];
   savedViews: SavedViewDTO[];
   workflowTemplates: WorkflowTemplateDTO[];
   nudgeStates: NudgeStateDTO[];

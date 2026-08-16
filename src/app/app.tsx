@@ -19,7 +19,12 @@ import {
   createTaskAction,
   createWorkflowTemplateAction,
   createProjectAction,
+  deleteProjectAction,
+  archiveProjectAction,
+  createOrganizationAction,
   createPrincipalAction,
+  resetDemoDataAction,
+  updateProfileAction,
   updatePrincipalAction,
   decideTaskReviewAction,
   archiveTaskAction,
@@ -48,7 +53,7 @@ import {
   uploadTaskUpdateFileAction,
   uploadProjectFileAction,
 } from "./actions";
-import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, ProjectDTO, SavedViewDTO, TaskDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
+import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
 import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
@@ -59,7 +64,7 @@ import {
   ChevronDown, ChevronUp, Check, Calendar, Send,
   Hourglass, Eye, BarChart2, Layers, Timer,
   SlidersHorizontal, ArrowUpDown, Copy, ChevronLeft,
-  MessageSquare, ListTodo, Target, UserCheck, Menu, ImagePlus, Download, Trash2, Pencil, Database,
+  MessageSquare, ListTodo, Target, UserCheck, Menu, ImagePlus, Trash2, Pencil, Database,
 } from "lucide-react";
 
 const cn = (...classes: Array<string | false | null | undefined>) =>
@@ -183,6 +188,21 @@ interface UserProfile {
   email: string;
   timezone: string;
   dateFormat: string;
+}
+
+function canonicalProfileToUserProfile(profile: UserProfileDTO): UserProfile {
+  return {
+    directoryId: profile.principalId,
+    displayName: profile.displayName,
+    role: profile.role,
+    email: profile.email || "",
+    timezone: profile.timezone,
+    dateFormat: profile.dateFormat,
+  };
+}
+
+function profileRoleLabel(role: string) {
+  return role.replace(/_/g, " ").replace(/\b\w/g, character => character.toUpperCase());
 }
 
 // Capture is used in several places, but self-assignment must always resolve to
@@ -419,7 +439,6 @@ type TaskDraft = Omit<Task, "id"> & { id?: string };
 let TASKS: Task[] = SEED_TASKS.map(task => ({ ...task }));
 let ARCHIVED_TASKS: Task[] = SEED_ARCHIVED_TASKS.map(task => ({ ...task }));
 let taskStoreVersion = 0;
-let taskStoreHydrated = false;
 let taskStoreUsesServer = false;
 let taskStoreServerRevision = 0;
 let CANONICAL_ACTOR_ID = DEFAULT_CURRENT_USER_ID;
@@ -441,36 +460,9 @@ function subscribeToTaskStore(listener: () => void) {
   return () => taskStoreListeners.delete(listener);
 }
 
-function persistTaskStore() {
-  if (typeof window === "undefined" || taskStoreUsesServer) return;
-  try {
-    window.localStorage.setItem(BINNIE_TASK_STORE_STORAGE_KEY, JSON.stringify({ tasks: TASKS, archivedTasks: ARCHIVED_TASKS }));
-  } catch {
-    // Persistence is an enhancement in the local prototype; in-memory work is
-    // still valid if browser storage is unavailable.
-  }
-}
-
 function publishTaskStore() {
   taskStoreVersion += 1;
-  persistTaskStore();
   taskStoreListeners.forEach(listener => listener());
-}
-
-function initializeTaskStore() {
-  if (taskStoreHydrated || taskStoreUsesServer || typeof window === "undefined") return;
-  taskStoreHydrated = true;
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(BINNIE_TASK_STORE_STORAGE_KEY) || "null") as { tasks?: Task[]; archivedTasks?: Task[] } | null;
-    if (stored?.tasks && Array.isArray(stored.tasks)) {
-      TASKS = stored.tasks;
-      ARCHIVED_TASKS = Array.isArray(stored.archivedTasks) ? stored.archivedTasks : [];
-    }
-  } catch {
-    // A damaged local record should never prevent Binnie from opening with its
-    // safe demo seed.
-  }
-  publishTaskStore();
 }
 
 function taskDateLabel(iso?: string) {
@@ -547,9 +539,33 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
   };
 }
 
+function canonicalOrganizationToMeta(organization: OrganizationDTO): OrganizationMeta {
+  const previous = ORGS_META.find(candidate => candidate.name === organization.name);
+  return {
+    name: organization.name,
+    desc: organization.description || previous?.desc || "No description yet.",
+    aliases: organization.aliases,
+    areas: organization.departments.map(department => department.name as AreaName),
+    areaSettings: Object.fromEntries(organization.departments.map(department => [department.name, {
+      aliases: department.aliases,
+      defaultTeamId: department.teamId,
+      defaultAssignee: department.teamId ? PEOPLE_DIRECTORY.find(person => person.id === department.teamId)?.name : undefined,
+    }])),
+  };
+}
+
+function applyCanonicalOrganization(organization: OrganizationDTO) {
+  const next = canonicalOrganizationToMeta(organization);
+  const index = ORGS_META.findIndex(candidate => candidate.name === organization.name);
+  if (index >= 0) ORGS_META[index] = next;
+  else ORGS_META.push(next);
+  remoteOrganizationIds.set(organization.name, organization.id);
+  organization.departments.forEach(department => remoteDepartmentIds.set(`${organization.name}::${department.name}`, department.id));
+  return next;
+}
+
 function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
   taskStoreUsesServer = true;
-  taskStoreHydrated = true;
   taskStoreServerRevision = snapshot.revision;
   CANONICAL_ACTOR_ID = snapshot.actorId;
   remoteDepartmentIds.clear();
@@ -570,6 +586,7 @@ function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
     email: person.email,
     memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", role: membership.role?.replace(/_/g, " "), area: membership.department as AreaName | undefined })),
   })));
+  ORGS_META.splice(0, ORGS_META.length, ...snapshot.organizations.map(canonicalOrganizationToMeta));
   TASKS = snapshot.tasks.filter(task => !task.archivedAt).map(canonicalTaskToLegacy);
   ARCHIVED_TASKS = snapshot.tasks.filter(task => task.archivedAt).map(canonicalTaskToLegacy);
   CANONICAL_PROJECTS = snapshot.projects;
@@ -604,6 +621,30 @@ function applyCanonicalProject(project: ProjectDTO, revision?: number) {
 
 function getCanonicalProject(projectId: string) {
   return CANONICAL_PROJECTS.find(project => project.id === projectId);
+}
+
+function removeCanonicalProject(projectId: string, revision?: number) {
+  CANONICAL_PROJECTS = CANONICAL_PROJECTS.filter(project => project.id !== projectId);
+  const detach = (task: Task) => task.projectId === projectId ? { ...task, projectId: undefined, project: undefined } : task;
+  TASKS = TASKS.map(detach);
+  ARCHIVED_TASKS = ARCHIVED_TASKS.map(detach);
+  // Older compatibility-only views still read this projection. Keep it in sync
+  // until those views are fully converted to canonical projects.
+  const legacyIndex = STRATEGIC_PROJECTS.findIndex(project => project.id === projectId);
+  if (legacyIndex >= 0) STRATEGIC_PROJECTS.splice(legacyIndex, 1);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function canManageCanonicalProject(project: ProjectDTO) {
+  const actor = PEOPLE_DIRECTORY.find(person => person.id === CANONICAL_ACTOR_ID);
+  if (!actor) return false;
+  if (project.members.some(member => member.principalId === actor.id && member.role === "owner")) return true;
+  return actor.memberships.some(membership =>
+    membership.role === "owner"
+    || (membership.organization === project.organization && membership.role === "organization_manager")
+    || (membership.area === project.leadArea && membership.role === "department_manager"),
+  );
 }
 
 function applyCanonicalWorkflowTemplate(template: WorkflowTemplateDTO, revision?: number) {
@@ -915,10 +956,6 @@ function getTasksForOrganization(organization: OrgName, tasks = TASKS) {
 
 function getTasksForArea(area: AreaName, organization?: OrgName, tasks = TASKS) {
   return tasks.filter(task => !task.archived && (!organization || task.org === organization) && taskInvolvesArea(task, area));
-}
-
-function getTasksForProject(project: string, tasks = TASKS) {
-  return tasks.filter(task => task.project === project && !task.archived);
 }
 
 function getTasksForAssignee(assigneeId: string, tasks = TASKS) {
@@ -1892,7 +1929,12 @@ function rememberCaptureCorrection(raw: string, patch: { org?: OrgName; area?: A
 }
 
 function captureOrgAreas(org?: OrgName) {
-  return org ? ORGS_META.find(item => item.name === org)?.areas || [] : Array.from(new Set(ORGS_META.flatMap(item => item.areas)));
+  const configuredAreas = Array.from(remoteDepartmentIds.keys()).map(key => {
+    const separator = key.indexOf("::");
+    return { organization: key.slice(0, separator), area: key.slice(separator + 2) as AreaName };
+  });
+  if (org) return configuredAreas.filter(item => item.organization === org).map(item => item.area);
+  return Array.from(new Set(configuredAreas.map(item => item.area)));
 }
 
 function getOrganizationAliases(org?: OrgName) {
@@ -2809,6 +2851,7 @@ function HomeView({
   onTaskClick: (task: Task) => void; onNavigate: (view: NavView) => void;
   onProjectClick: (projectId: string) => void; onOrgClick: (org: OrgName) => void; userName: string;
 }) {
+  useTaskStoreVersion();
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const workspaceDate = getWorkspaceCalendarDate();
   const todayTasks = getTasksForToday(TASKS, currentUserId);
@@ -2818,6 +2861,11 @@ function HomeView({
   const waitingTasks = getWaitingTasks(TASKS);
   const waitingPeople = Array.from(new Map(waitingTasks.flatMap(task => taskAssigneeNames(task).map(name => [name, task] as const))).entries()).map(([name, task]) => ({ name, outstanding: waitingTasks.filter(item => taskAssigneeNames(item).includes(name)).length, overdue: waitingTasks.filter(item => taskAssigneeNames(item).includes(name) && isTaskOverdue(item)).length, oldest: task.waitingSince || "Recently" }));
   const weeklyTasks = getTasksForWeek(TASKS);
+  const strategicProjects = CANONICAL_PROJECTS.filter(project => project.status !== "archived").map(project => {
+    const projectTasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
+    const done = projectTasks.filter(task => task.status === "done").length;
+    return { id: project.id, name: project.name, org: project.organization as OrgName, progress: projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0, tasks: projectTasks.length, done };
+  });
   const weekOrgs: { org: OrgName; tasks: number; done: number }[] = (["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => {
     const orgTasks = weeklyTasks.filter(task => task.org === org);
     return { org, tasks: orgTasks.length, done: orgTasks.filter(task => task.status === "done").length };
@@ -3023,7 +3071,7 @@ function HomeView({
               <h2 className="text-sm font-semibold text-foreground">Strategic Projects</h2>
             </div>
             <div className="p-3 space-y-2">
-              {STRATEGIC_PROJECTS.map(proj => {
+              {strategicProjects.map(proj => {
                 const c = ORG_COLORS[proj.org];
                 return (
                   <button key={proj.id} onClick={() => onProjectClick(proj.id)} className="w-full rounded-lg bg-muted/30 p-3 text-left transition-colors hover:bg-muted/50">
@@ -4278,11 +4326,17 @@ const EMPTY_RESOURCE_DRAFT: ResourceDraft = { label: "", type: "website", url: "
 function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigate, onPersonClick }: {
   orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void; onNavigate: (view: NavView) => void; onPersonClick: (person: string) => void;
 }) {
+  useTaskStoreVersion();
   const orgMeta = ORGS_META.find(o => o.name === orgName);
   const c = ORG_COLORS[orgName] || ORG_COLORS.Personal;
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
   const [areas, setAreas] = useState<AreaName[]>(() => orgMeta?.areas || []);
-  const [projects, setProjects] = useState(() => STRATEGIC_PROJECTS.filter(project => project.org === orgName));
+  const [legacyProjects, setProjects] = useState(() => STRATEGIC_PROJECTS.filter(project => project.org === orgName));
+  const projects = taskStoreUsesServer ? CANONICAL_PROJECTS.filter(project => project.organization === orgName && project.status !== "archived").map(project => {
+    const projectTasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
+    const done = projectTasks.filter(task => task.status === "done").length;
+    return { id: project.id, name: project.name, org: project.organization as OrgName, progress: projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0, tasks: projectTasks.length, done, deadline: project.targetDate ? taskDateLabel(project.targetDate) || "No target yet" : "No target yet", status: "on_track" as const };
+  }) : legacyProjects;
   const [resources, setResources] = useState<OrganizationResource[]>(() => ORG_RESOURCES[orgName] || []);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -4838,63 +4892,6 @@ function PlanningBoard({ tasks, areas, selectedArea, onAreaChange, onTaskClick, 
 }
 
 // Kept as a compact display fallback while the interactive timeline is used by planning views.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function PlanningTimelineLegacy({ tasks, areas, selectedArea, onAreaChange, onTaskClick }: { tasks: Task[]; areas: AreaName[]; selectedArea: AreaName | "all"; onAreaChange: (area: AreaName | "all") => void; onTaskClick: (task: Task) => void }) {
-  const visibleTasks = selectedArea === "all" ? tasks.filter(task => task.status !== "done") : tasks.filter(task => task.area === selectedArea && task.status !== "done");
-  const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => task.area === area)) : [selectedArea];
-  const weeks = Array.from({ length: 6 }, (_, index) => new Date(Date.UTC(2026, 7, 10 + index * 7)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }));
-  return <div><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="binnie-heading text-lg font-bold text-foreground">Parallel timeline</h2><p className="mt-1 text-[11px] text-muted-foreground">Grouped by department · weeks · only solid dependency markers represent real blockers.</p></div><PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} /></div><div className="overflow-x-auto rounded-2xl border border-border bg-card"><div className="min-w-[820px]"><div className="grid grid-cols-[155px_1fr] border-b border-border bg-muted/35"><div className="px-4 py-3 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Department</div><div className="grid grid-cols-6">{weeks.map(week => <div key={week} className="border-l border-border px-3 py-3 text-[10px] font-medium text-muted-foreground">{week}</div>)}</div></div>{visibleAreas.map(area => { const areaTasks = visibleTasks.filter(task => task.area === area); const laneHeight = Math.max(96, 30 + areaTasks.length * 44); const style = PLANNING_AREA_STYLES[area] || { bar: "bg-muted border-border text-foreground", label: "text-foreground" }; return <div key={area} className="grid grid-cols-[155px_1fr] border-b border-border last:border-b-0"><div className="border-r border-border bg-muted/20 px-4 py-4"><p className={cn("text-[12px] font-semibold", style.label)}>{area}</p><p className="mt-1 text-[10px] text-muted-foreground">{areaTasks.length} active</p></div><div className="relative" style={{ height: laneHeight, backgroundImage: "linear-gradient(to right, var(--border) 1px, transparent 1px)", backgroundSize: "16.6667% 100%" }}><div className="absolute inset-y-0 z-[1] w-px bg-primary/65" style={{ left: "9.5%" }}><span className="absolute -top-5 -translate-x-1/2 rounded bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">Today</span></div>{areaTasks.map((task, index) => { const schedule = taskSchedule(task, index); return <button key={task.id} title={`${task.title}\n${schedule.start} – ${schedule.target}\n${task.area}${task.assignee ? ` · ${task.assignee}` : ""}${task.blockedBy ? `\nBlocked by: ${task.blockedBy.label}` : ""}`} onClick={() => onTaskClick(task)} className={cn("absolute z-[2] flex h-8 items-center gap-1.5 overflow-hidden rounded-lg border px-2 text-left text-[10px] font-medium shadow-[0_2px_6px_var(--theme-shadow)] transition hover:brightness-[0.98]", style.bar, task.status === "blocked" && "border-l-4 border-l-overdue")} style={{ left: `${schedule.left}%`, top: 28 + index * 40, width: `${schedule.width}%` }}><span className="truncate">{task.title}</span>{task.blockedBy && <GitBranch className="h-3 w-3 flex-shrink-0" />}</button>; })}</div></div>; })}</div></div>{visibleTasks.some(task => task.status === "blocked") && <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground"><GitBranch className="h-3.5 w-3.5 text-overdue" />A solid marker indicates a task that cannot move until its named dependency is complete. Unrelated work remains parallel.</p>}</div>;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function PlanningTimelineLegacyV2({ tasks, areas, selectedArea, onAreaChange, onTaskClick, onRefresh }: { tasks: Task[]; areas: AreaName[]; selectedArea: AreaName | "all"; onAreaChange: (area: AreaName | "all") => void; onTaskClick: (task: Task) => void; onRefresh?: () => void }) {
-  const [, setRevision] = useState(0);
-  const [filters, setFilters] = useState<PlanningFilter>(DEFAULT_PLANNING_FILTER);
-  const [scale, setScale] = useState<"days" | "weeks" | "months">("weeks");
-  const range = scale === "days" ? { windowDays: 14, tickDays: 2 } : scale === "weeks" ? { windowDays: 42, tickDays: 7 } : { windowDays: 90, tickDays: 30 };
-  const timeLabels = Array.from({ length: range.windowDays / range.tickDays }, (_, index) => new Date(Date.UTC(2026, 7, 10 + index * range.tickDays)).toLocaleDateString("en-US", scale === "months" ? { month: "short", year: "numeric", timeZone: "UTC" } : { month: "short", day: "numeric", timeZone: "UTC" }));
-  const todayPosition = Math.max(1, Math.min(98, (3 / range.windowDays) * 100));
-  const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done" && matchesPlanningFilter(task, filters));
-  const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
-  const canonicalProject = tasks[0]?.projectId ? getCanonicalProject(tasks[0].projectId) : undefined;
-  const milestones = canonicalProject
-    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || isoDate(getWorkspaceCalendarDate()), project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const, description: undefined }))
-    : MILESTONES.filter(milestone => visibleTasks.some(task => task.project === milestone.project));
-  const lanes = visibleAreas.map((area, laneIndex) => {
-    const laneTasks = visibleTasks.filter(task => taskInvolvesArea(task, area));
-    const height = Math.max(92, 32 + laneTasks.length * 42);
-    const top = visibleAreas.slice(0, laneIndex).reduce((total, precedingArea) => total + Math.max(92, 32 + visibleTasks.filter(task => taskInvolvesArea(task, precedingArea)).length * 42), 0);
-    return { area, tasks: laneTasks, top, height };
-  });
-  const cumulativeTop = lanes.reduce((total, lane) => total + lane.height, 0);
-  const positions = new Map<string, { x: number; y: number }>();
-  lanes.forEach(lane => lane.tasks.forEach((task, index) => {
-    const schedule = taskSchedule(task, tasks.indexOf(task), range.windowDays);
-    positions.set(task.id, { x: 190 + ((schedule.left + schedule.width) / 100) * 810, y: lane.top + 44 + index * 40 });
-  }));
-  const dependencyLines = visibleTasks.flatMap(task => {
-    if (!task.blockedBy?.taskId) return [];
-    const source = positions.get(task.blockedBy.taskId);
-    const target = positions.get(task.id);
-    return source && target ? [{ id: `${source.x}-${target.x}-${task.id}`, source, target }] : [];
-  });
-  const reschedule = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const task = TASKS.find(item => item.id === event.dataTransfer.getData("text/plain"));
-    if (!task) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(0.94, (event.clientX - bounds.left) / bounds.width));
-    const existing = taskSchedule(task, tasks.indexOf(task), range.windowDays);
-    const duration = Math.max(2, Math.round((existing.targetMs - existing.startMs) / 86400000));
-    const start = Date.UTC(2026, 7, 10) + Math.round(ratio * range.windowDays) * 86400000;
-    Object.assign(task, { startDate: planningIsoDate(start), targetDate: planningIsoDate(start + duration * 86400000), deadline: new Date(start + duration * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }), lastUpdate: "Rescheduled on timeline just now" });
-    commitTaskStore();
-    setRevision(current => current + 1);
-    onRefresh?.();
-  };
-  return <div><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="binnie-heading text-lg font-bold text-foreground">Parallel timeline</h2><p className="mt-1 text-[11px] text-muted-foreground">Drag a bar to reschedule. Solid arrows only show real blocking dependencies; work without arrows can continue in parallel.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex rounded-xl border border-border bg-card p-1">{(["days", "weeks", "months"] as const).map(value => <button key={value} onClick={() => setScale(value)} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium capitalize", scale === value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{value}</button>)}</div><PlanningFilterMenu tasks={tasks} value={filters} onChange={setFilters} /><PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} /></div></div><div className="overflow-x-auto rounded-2xl border border-border bg-card"><div className="min-w-[820px]"><div className="grid grid-cols-[155px_1fr] border-b border-border bg-muted/35"><div className="px-4 py-3 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Department</div><div className="grid" style={{ gridTemplateColumns: `repeat(${timeLabels.length}, minmax(0, 1fr))` }}>{timeLabels.map(label => <div key={label} className="border-l border-border px-3 py-3 text-[10px] font-medium text-muted-foreground">{label}</div>)}</div></div><div className="grid grid-cols-[155px_1fr] border-b border-border"><div className="bg-muted/20 px-4 py-3 text-[10px] font-medium text-muted-foreground">Milestones</div><div className="relative h-14" style={{ backgroundImage: "linear-gradient(to right, var(--border) 1px, transparent 1px)", backgroundSize: `${100 / timeLabels.length}% 100%` }}>{milestones.map(milestone => <span key={milestone.id} title={`${milestone.name} · ${milestone.owner}`} className={cn("absolute top-3 -translate-x-1/2 text-center", milestone.status === "at_risk" ? "text-overdue" : milestone.status === "done" ? "text-success" : "text-primary")} style={{ left: `${milestonePosition(milestone.date, range.windowDays)}%` }}><span className="mx-auto block h-3 w-3 rotate-45 border border-current bg-card" /><span className="mt-1 block max-w-20 truncate text-[9px] font-medium">{milestone.name}</span></span>)}</div></div><div className="relative"><svg aria-label="Blocking dependency connectors" className="pointer-events-none absolute inset-0 z-[3] h-full w-full" preserveAspectRatio="none" viewBox={`0 0 1000 ${Math.max(cumulativeTop, 1)}`}><defs><marker id="binnie-dependency-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="var(--overdue)" /></marker></defs>{dependencyLines.map(line => <path key={line.id} d={`M ${line.source.x} ${line.source.y} C ${line.source.x + 36} ${line.source.y}, ${line.target.x - 36} ${line.target.y}, ${line.target.x} ${line.target.y}`} fill="none" stroke="var(--overdue)" strokeWidth="1.5" markerEnd="url(#binnie-dependency-arrow)" opacity="0.8" />)}</svg>{lanes.map(lane => { const style = PLANNING_AREA_STYLES[lane.area] || { bar: "bg-muted border-border text-foreground", label: "text-foreground" }; return <div key={lane.area} className="grid grid-cols-[155px_1fr] border-b border-border last:border-b-0"><div className="border-r border-border bg-muted/20 px-4 py-4"><p className={cn("text-[12px] font-semibold", style.label)}>{lane.area}</p><p className="mt-1 text-[10px] text-muted-foreground">{lane.tasks.length} active</p></div><div onDragOver={event => event.preventDefault()} onDrop={reschedule} className="relative" style={{ height: lane.height, backgroundImage: "linear-gradient(to right, var(--border) 1px, transparent 1px)", backgroundSize: `${100 / timeLabels.length}% 100%` }}><div className="absolute inset-y-0 z-[1] w-px bg-primary/65" style={{ left: `${todayPosition}%` }}><span className="absolute -top-5 -translate-x-1/2 rounded bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">Today</span></div>{lane.tasks.map((task, index) => { const schedule = taskSchedule(task, tasks.indexOf(task), range.windowDays); return <button key={task.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", task.id)} title={`${task.title}\n${schedule.start} – ${schedule.target}\n${task.area}${task.assignee ? ` · ${task.assignee}` : ""}${task.blockedBy ? `\nBlocked by: ${task.blockedBy.label}` : ""}`} onClick={() => onTaskClick(task)} className={cn("absolute z-[4] flex h-8 cursor-grab items-center gap-1.5 overflow-hidden rounded-lg border px-2 text-left text-[10px] font-medium shadow-[0_2px_6px_var(--theme-shadow)] transition hover:brightness-[0.98] active:cursor-grabbing", style.bar, task.status === "blocked" && "border-l-4 border-l-overdue")} style={{ left: `${schedule.left}%`, top: 28 + index * 40, width: `${schedule.width}%` }}><span className="truncate">{task.title}</span>{task.blockedBy && <GitBranch className="h-3 w-3 flex-shrink-0" />}</button>; })}</div></div>; })}</div></div></div>{dependencyLines.length > 0 && <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground"><GitBranch className="h-3.5 w-3.5 text-overdue" />{dependencyLines.length} real blocking {dependencyLines.length === 1 ? "connector" : "connectors"} shown. Other work is intentionally left unconnected.</p>}</div>;
-}
-
 type TimelineComposerMode = "binnie" | "manual" | "milestone";
 
 interface TimelineWorkDraft {
@@ -5234,69 +5231,6 @@ function PlanningRoadmap({ tasks, areas, selectedArea, onAreaChange, onTaskClick
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function ProjectDetailViewLegacy({ projectId, onBack, onTaskClick }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
-  const [tab, setTab] = useState<ProjectTab>("overview");
-  const [selectedArea, setSelectedArea] = useState<AreaName | "all">("all");
-  const [, setRevision] = useState(0);
-  const detail = PROJECT_DETAILS[projectId];
-  const basicProj = STRATEGIC_PROJECTS.find(project => project.id === projectId);
-  if (!detail || !basicProj) return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card p-8 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Project not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p></div></div>;
-  const projectTasks = TASKS.filter(task => task.project === detail.name);
-  const projectAreas = Array.from(new Set(projectTasks.flatMap(task => getTaskAreas(task))));
-  const activeTasks = projectTasks.filter(task => task.status !== "done");
-  const readyTasks = activeTasks.filter(task => task.status === "ready" && !task.blockedBy);
-  const waitingOnTeams = projectTasks.filter(task => task.status === "blocked" && task.blockedBy);
-  const statusCounts: Record<TaskStatus, number> = { ready: 0, in_progress: 0, waiting: 0, blocked: 0, review: 0, done: 0 };
-  projectTasks.forEach(task => { statusCounts[task.status] += 1; });
-  const tabs: { id: ProjectTab; label: string }[] = [{ id: "overview", label: "Overview" }, { id: "board", label: "Board" }, { id: "timeline", label: "Timeline" }, { id: "roadmap", label: "Roadmap" }, { id: "people", label: "People" }, { id: "resources", label: "Resources" }, { id: "activity", label: "Activity" }];
-  const refresh = () => setRevision(current => current + 1);
-  return <div className="mx-auto max-w-[1180px] p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card mb-5 overflow-hidden"><div className="p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="mb-2 flex flex-wrap items-center gap-2"><OrgBadge org={detail.org} /><AreaBadge area={detail.area} /><span className="rounded-full bg-success/10 px-2 py-1 text-[10px] font-medium text-success">On track</span></div><h1 className="binnie-heading text-2xl font-bold text-foreground">{detail.name}</h1><p className="mt-1 text-[12px] text-muted-foreground">Target {detail.deadline} · {projectAreas.length} teams contributing in parallel</p></div><div className="min-w-32 text-left sm:text-right"><p className="text-3xl font-bold text-primary">{detail.progress}%</p><p className="text-[10px] text-muted-foreground">project progress</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${detail.progress}%` }} /></div><div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">{PLANNING_COLUMNS.map(column => <div key={column.id} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-bold", column.text)}>{statusCounts[column.id]}</p><p className="text-[9px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{column.label}</p></div>)}</div></div><div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-1.5">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium transition", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/70 hover:text-foreground")}>{item.label}</button>)}</div></div>{tab === "overview" && <><MilestonePlanner tasks={projectTasks} onRefresh={refresh} /><div className="grid gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2"><section className="binnie-card p-5"><div className="mb-3 flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><div><h2 className="text-sm font-semibold text-foreground">What can move now</h2><p className="text-[11px] text-muted-foreground">Work is not a relay race. These tasks are ready to start.</p></div><span className="ml-auto rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{readyTasks.length} ready</span></div><div className="space-y-2">{readyTasks.slice(0, 5).map(task => <TaskCard key={task.id} task={task} compact onClick={() => onTaskClick(task)} />)}{!readyTasks.length && <p className="py-5 text-center text-[12px] text-muted-foreground">No tasks are waiting to start right now.</p>}</div></section><section className="binnie-card p-5"><div className="mb-3 flex items-center gap-2"><Target className="h-4 w-4 text-primary" /><h2 className="text-sm font-semibold text-foreground">Current focus</h2></div><div className="space-y-2">{detail.currentFocus.map((item, index) => <div key={item} className="flex items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.035] p-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{index + 1}</span><p className="text-[12px] text-foreground">{item}</p></div>)}</div></section></div><div className="space-y-5"><section className="binnie-card p-5"><div className="mb-3 flex items-center gap-2"><GitBranch className="h-4 w-4 text-overdue" /><div><h2 className="text-sm font-semibold text-foreground">Other teams waiting on this project</h2><p className="text-[10px] text-muted-foreground">Only real blockers appear here.</p></div></div><div className="space-y-2">{waitingOnTeams.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-overdue/15 bg-overdue/[0.035] p-3 text-left"><p className="text-[12px] font-medium text-foreground">{task.area} is waiting on {task.blockedBy?.owner || "a dependency"}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.title} · {task.blockedBy?.label}</p></button>)}{!waitingOnTeams.length && <p className="py-4 text-center text-[11px] text-muted-foreground">No cross-team blockers right now.</p>}</div></section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Teams involved</h2><div className="mt-3 flex flex-wrap gap-2">{projectAreas.map(area => <span key={area} className="rounded-full border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground">{area}</span>)}</div></section></div></div></>}{tab === "board" && <PlanningBoard tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={refresh} />}{tab === "timeline" && <PlanningTimeline tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={refresh} />}{tab === "roadmap" && <PlanningRoadmap tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} />}{tab === "people" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Project people</h2><p className="mt-1 text-[11px] text-muted-foreground">Ownership and next actions remain visible across teams.</p><div className="mt-4 grid gap-2 sm:grid-cols-2">{Array.from(new Set(projectTasks.map(task => task.assignee).filter((name): name is string => Boolean(name)))).map(person => { const tasks = projectTasks.filter(task => task.assignee === person); return <div key={person} className="flex items-center gap-3 rounded-xl border border-border p-3"><Avatar name={person} size="md" /><div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-foreground">{person}</p><p className="text-[10px] text-muted-foreground">{tasks.length} tasks · {tasks.filter(task => task.nextActionBy === person || task.nextActionBy === tasks[0]?.area).length} next actions</p></div></div>; })}</div></div>}{tab === "resources" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Resources</h2><div className="mt-4 space-y-2">{detail.resources.map(resource => <div key={resource.label} className="flex items-center gap-3 rounded-xl border border-border p-3"><LinkIcon type={resource.type} /><span className="flex-1 text-[12px] font-medium text-foreground">{resource.label}</span><span className="text-[10px] text-muted-foreground">{resource.url === "#" ? "Not connected" : "Available"}</span></div>)}</div></div>}{tab === "activity" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Activity</h2><div className="mt-4 space-y-3">{detail.recentActivity.map(activity => <div key={`${activity.actor}-${activity.time}`} className="flex gap-3"><Avatar name={activity.actor} size="xs" /><div><p className="text-[12px] text-foreground">{activity.text}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{activity.actor} · {activity.time}</p></div></div>)}</div></div>}</div>;
-}
-
-function LinksAndFiles({ links, files, onLinksChange, onFilesChange }: { links: TaskLink[]; files: TaskFile[]; onLinksChange: (links: TaskLink[]) => void; onFilesChange: (files: TaskFile[]) => void }) {
-  const [linkFormOpen, setLinkFormOpen] = useState(false);
-  const [linkDraft, setLinkDraft] = useState({ label: "", url: "", description: "" });
-  const [fileMenuId, setFileMenuId] = useState<string | null>(null);
-  const [editingFileId, setEditingFileId] = useState<string | null>(null);
-  const [fileName, setFileName] = useState("");
-  const addLink = () => {
-    const url = linkDraft.url.trim();
-    if (!linkDraft.label.trim() || !url) return;
-    onLinksChange([...links, { label: linkDraft.label.trim(), url, type: linkTypeFromUrl(url), description: linkDraft.description.trim() || undefined }]);
-    setLinkDraft({ label: "", url: "", description: "" }); setLinkFormOpen(false);
-  };
-  const addFiles = (fileList: FileList | null) => {
-    if (!fileList?.length) return;
-    onFilesChange([...files, ...Array.from(fileList).map(file => ({ id: `project-file-${Date.now()}-${file.name}`, name: file.name, type: fileTypeFromName(file.name), size: file.size ? `${Math.max(1, Math.round(file.size / 1024))} KB` : "Uploaded", url: URL.createObjectURL(file) }))]);
-  };
-  const openFile = (file: TaskFile) => { if (file.url) window.open(file.url, "_blank", "noopener,noreferrer"); };
-  const downloadFile = (file: TaskFile) => { if (!file.url) return; const anchor = document.createElement("a"); anchor.href = file.url; anchor.download = file.name; document.body.appendChild(anchor); anchor.click(); anchor.remove(); };
-  const fileTypeLabel: Record<TaskFile["type"], string> = { pdf: "PDF", excel: "Excel", screenshot: "Image", doc: "Document" };
-  return <div className="grid gap-5 lg:grid-cols-2"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Links</h2><p className="mt-1 text-[11px] text-muted-foreground">Useful project references, without an account connection.</p></div><button onClick={() => setLinkFormOpen(current => !current)} className="rounded-xl bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">+ Add Link</button></div>{linkFormOpen && <div className="mt-4 grid gap-2 rounded-xl border border-border bg-muted/30 p-3"><label className="text-[10px] font-medium text-muted-foreground">Name<input autoFocus value={linkDraft.label} onChange={event => setLinkDraft(current => ({ ...current, label: event.target.value }))} placeholder="Website Revamp Figma" className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">URL<input value={linkDraft.url} onChange={event => setLinkDraft(current => ({ ...current, url: event.target.value }))} placeholder="https://…" className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Description<input value={linkDraft.description} onChange={event => setLinkDraft(current => ({ ...current, description: event.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><div className="flex justify-end gap-2"><button onClick={() => setLinkFormOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[11px] text-muted-foreground">Cancel</button><button onClick={addLink} disabled={!linkDraft.label.trim() || !linkDraft.url.trim()} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Save Link</button></div></div>}<div className="mt-4 space-y-2">{links.map((link, index) => <div key={`${link.label}-${index}`} className="flex items-center gap-3 rounded-xl border border-border p-3"><LinkIcon type={link.type} /><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-foreground">{link.label}</p><p className="truncate text-[10px] text-muted-foreground">{link.url.replace(/^https?:\/\//, "")}</p></div><a href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">Open <ExternalLink className="h-3 w-3" /></a></div>)}{!links.length && <p className="py-8 text-center text-[11px] text-muted-foreground">Keep the references this project needs close by.</p>}</div></section><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Files</h2><p className="mt-1 text-[11px] text-muted-foreground">Project documents and working files.</p></div><label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary"><Paperclip className="h-3.5 w-3.5" />Upload File<input type="file" multiple className="sr-only" onChange={event => addFiles(event.target.files)} /></label></div><div className="mt-4 space-y-2">{files.map((file, index) => { const id = file.id || `${file.name}-${index}`; const isEditing = editingFileId === id; return <div key={id} className="relative flex items-center gap-3 rounded-xl border border-border p-3"><FileText className={cn("h-4 w-4", file.type === "pdf" ? "text-overdue" : file.type === "excel" ? "text-success" : file.type === "screenshot" ? "text-info" : "text-primary")} /><div className="min-w-0 flex-1">{isEditing ? <input autoFocus value={fileName} onChange={event => setFileName(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && fileName.trim()) { onFilesChange(files.map((item, itemIndex) => itemIndex === index ? { ...item, name: fileName.trim() } : item)); setEditingFileId(null); } }} className="w-full rounded-lg border border-border px-2 py-1 text-[11px] text-foreground" /> : <p className="truncate text-[12px] font-medium text-foreground">{file.name}</p>}<p className="text-[10px] text-muted-foreground">{fileTypeLabel[file.type]}{file.size ? ` · ${file.size}` : " · Attached"}</p></div><button onClick={() => openFile(file)} disabled={!file.url} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10 disabled:opacity-40">Open</button><button onClick={() => setFileMenuId(current => current === id ? null : id)} aria-label={`More actions for ${file.name}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><MoreHorizontal className="h-4 w-4" /></button>{fileMenuId === id && <div className="absolute right-2 top-10 z-20 w-32 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_var(--theme-shadow)]"><button onClick={() => { downloadFile(file); setFileMenuId(null); }} disabled={!file.url} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] text-foreground hover:bg-muted disabled:opacity-40"><Download className="h-3 w-3" />Download</button><button onClick={() => { setEditingFileId(id); setFileName(file.name); setFileMenuId(null); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] text-foreground hover:bg-muted"><Pencil className="h-3 w-3" />Rename</button><button onClick={() => { onFilesChange(files.filter((_, itemIndex) => itemIndex !== index)); setFileMenuId(null); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] text-overdue hover:bg-overdue/10"><Trash2 className="h-3 w-3" />Remove</button></div>}</div>; })}{!files.length && <p className="py-8 text-center text-[11px] text-muted-foreground">Upload a file when the project needs a shared reference.</p>}</div></section></div>;
-}
-
-function LegacyProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
-  const detail = PROJECT_DETAILS[projectId];
-  const basicProj = STRATEGIC_PROJECTS.find(project => project.id === projectId);
-  const [tab, setTab] = useState<ProjectTab>("overview");
-  const [selectedArea, setSelectedArea] = useState<AreaName | "all">("all");
-  const [, setRevision] = useState(0);
-  const [projectLinks, setProjectLinks] = useState<TaskLink[]>(() => PROJECT_DETAILS[projectId]?.resources || []);
-  const [projectFiles, setProjectFiles] = useState<TaskFile[]>(() => PROJECT_DETAILS[projectId]?.files || []);
-  if (!detail || !basicProj) return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card p-8 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Project not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p></div></div>;
-  const projectTasks = getTasksForProject(detail.name);
-  const projectAreas = Array.from(new Set(projectTasks.flatMap(task => getTaskAreas(task))));
-  const activeTasks = projectTasks.filter(task => task.status !== "done");
-  const readyTasks = activeTasks.filter(task => task.status === "ready" && !task.blockedBy);
-  const waitingOnTeams = projectTasks.filter(task => task.status === "blocked" && task.blockedBy);
-  const statusCounts: Record<TaskStatus, number> = { ready: 0, in_progress: 0, waiting: 0, blocked: 0, review: 0, done: 0 };
-  projectTasks.forEach(task => { statusCounts[task.status] += 1; });
-  const tabs: { id: ProjectTab; label: string }[] = [{ id: "overview", label: "Overview" }, { id: "board", label: "Board" }, { id: "timeline", label: "Timeline" }, { id: "roadmap", label: "Roadmap" }, { id: "people", label: "People" }, { id: "links-files", label: "Links & Files" }, { id: "activity", label: "Activity" }];
-  const refresh = () => { commitTaskStore(); setRevision(current => current + 1); };
-  return <div className="mx-auto max-w-[1180px] p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card mb-5 overflow-hidden"><div className="p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="mb-2 flex flex-wrap items-center gap-2"><OrgBadge org={detail.org} /><AreaBadge area={detail.area} /><span className="rounded-full bg-success/10 px-2 py-1 text-[10px] font-medium text-success">On track</span></div><h1 className="binnie-heading text-2xl font-bold text-foreground">{detail.name}</h1><p className="mt-1 text-[12px] text-muted-foreground">Target {detail.deadline} · {projectAreas.length} teams contributing in parallel</p></div><div className="min-w-32 text-left sm:text-right"><p className="text-3xl font-bold text-primary">{detail.progress}%</p><p className="text-[10px] text-muted-foreground">project progress</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${detail.progress}%` }} /></div><div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">{PLANNING_COLUMNS.map(column => <div key={column.id} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-bold", column.text)}>{statusCounts[column.id]}</p><p className="text-[9px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{column.label}</p></div>)}</div></div><div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-1.5">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium transition", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/70 hover:text-foreground")}>{item.label}</button>)}</div></div>{tab === "overview" && <><MilestonePlanner tasks={projectTasks} onRefresh={refresh} /><div className="grid gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2"><section className="binnie-card p-5"><div className="mb-3 flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><div><h2 className="text-sm font-semibold text-foreground">What can move now</h2><p className="text-[11px] text-muted-foreground">Work is not a relay race. These tasks are ready to start.</p></div><span className="ml-auto rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{readyTasks.length} ready</span></div><div className="space-y-2">{readyTasks.slice(0, 5).map(task => <TaskCard key={task.id} task={task} compact onClick={() => onTaskClick(task)} />)}{!readyTasks.length && <p className="py-5 text-center text-[12px] text-muted-foreground">No tasks are ready to start right now.</p>}</div></section><section className="binnie-card p-5"><div className="mb-3 flex items-center gap-2"><Target className="h-4 w-4 text-primary" /><h2 className="text-sm font-semibold text-foreground">Current focus</h2></div><div className="space-y-2">{detail.currentFocus.map((item, index) => <div key={item} className="flex items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.035] p-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{index + 1}</span><p className="text-[12px] text-foreground">{item}</p></div>)}</div></section></div><div className="space-y-5"><section className="binnie-card p-5"><div className="mb-3 flex items-center gap-2"><GitBranch className="h-4 w-4 text-overdue" /><div><h2 className="text-sm font-semibold text-foreground">Other teams waiting on this project</h2><p className="text-[10px] text-muted-foreground">Only real blockers appear here.</p></div></div><div className="space-y-2">{waitingOnTeams.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-overdue/15 bg-overdue/[0.035] p-3 text-left"><p className="text-[12px] font-medium text-foreground">{task.area} is waiting on {task.blockedBy?.owner || "a dependency"}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.title} · {task.blockedBy?.label}</p></button>)}{!waitingOnTeams.length && <p className="py-4 text-center text-[11px] text-muted-foreground">No cross-team blockers right now.</p>}</div></section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Teams involved</h2><div className="mt-3 flex flex-wrap gap-2">{projectAreas.map(area => <span key={area} className="rounded-full border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground">{area}</span>)}</div></section></div></div></>}{tab === "board" && <PlanningBoard tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={refresh} />}{tab === "timeline" && <PlanningTimeline tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={refresh} />}{tab === "roadmap" && <PlanningRoadmap tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} />}{tab === "people" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Project people</h2><p className="mt-1 text-[11px] text-muted-foreground">Ownership and next actions remain visible across teams.</p><div className="mt-4 grid gap-2 sm:grid-cols-2">{Array.from(new Set(projectTasks.map(task => task.assignee).filter((name): name is string => Boolean(name)))).map(person => { const personTasks = projectTasks.filter(task => task.assignee === person); return <div key={person} className="flex items-center gap-3 rounded-xl border border-border p-3"><Avatar name={person} size="md" /><div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-foreground">{person}</p><p className="text-[10px] text-muted-foreground">{personTasks.length} tasks · {personTasks.filter(task => task.nextActionBy === person || task.nextActionBy === personTasks[0]?.area).length} next actions</p></div></div>; })}</div></div>}{tab === "links-files" && <LinksAndFiles links={projectLinks} files={projectFiles} onLinksChange={setProjectLinks} onFilesChange={setProjectFiles} />}{tab === "activity" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Activity</h2><div className="mt-4 space-y-3">{detail.recentActivity.map(activity => <div key={`${activity.actor}-${activity.time}`} className="flex gap-3"><Avatar name={activity.actor} size="xs" /><div><p className="text-[12px] text-foreground">{activity.text}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{activity.actor} · {activity.time}</p></div></div>)}</div></div>}</div>;
-}
-
 // ─── FOLLOW-UP CENTER VIEW (NEW) ──────────────────────────────────────────────
 
 type FollowUpTab = "today" | "overdue" | "no-update" | "later";
@@ -5307,7 +5241,7 @@ const FOLLOWUP_STATUS_CONFIG: Record<FollowUpItem["status"], { label: string; co
   no_update: { label: "No Update", color: "text-slate-400", bg: "bg-slate-400/10" },
 };
 
-function CanonicalProjectDetail({ project, onBack, onTaskClick, onAddWork }: { project: ProjectDTO; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+function CanonicalProjectDetailContent({ project, onBack, onTaskClick, onAddWork }: { project: ProjectDTO; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
   const [tab, setTab] = useState<ProjectTab>("overview");
   const [selectedArea, setSelectedArea] = useState<AreaName | "all">("all");
   const [milestoneTitle, setMilestoneTitle] = useState("");
@@ -5377,12 +5311,24 @@ function CanonicalProjectDetail({ project, onBack, onTaskClick, onAddWork }: { p
     if (!result.ok) return setMessage(result.message);
     applyCanonicalProject(result.data, result.revision);
   }
-  return <div className="mx-auto max-w-[1180px] p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card mb-5 overflow-hidden"><div className="p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="mb-2 flex flex-wrap items-center gap-2"><OrgBadge org={project.organization} />{project.leadArea && <AreaBadge area={project.leadArea} />}{attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div><h1 className="binnie-heading text-2xl font-bold text-foreground">{project.name}</h1>{project.description && <p className="mt-1 max-w-2xl text-[12px] text-muted-foreground">{project.description}</p>}<p className="mt-2 text-[11px] text-muted-foreground">{project.targetDate ? `Target ${taskDateLabel(project.targetDate)}` : "No target date"} · {projectAreas.length} teams involved</p></div><div className="min-w-32 text-left sm:text-right"><p className="text-3xl font-bold text-primary">{projectTasks.length ? `${progress}%` : "Not started"}</p><p className="text-[10px] text-muted-foreground">{projectTasks.length ? `${done} of ${projectTasks.length} tasks complete` : "No active work yet"}</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} /></div><div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">{PLANNING_COLUMNS.map(column => <div key={column.id} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-bold", column.text)}>{statusCounts[column.id]}</p><p className="text-[9px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{column.label}</p></div>)}</div></div><div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-1.5">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/70 hover:text-foreground")}>{item.label}</button>)}</div></div>{message && <p role="status" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}{tab === "overview" && <div className="grid gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project progress</h2><p className="mt-1 text-[11px] text-muted-foreground">Derived from the work in this project.</p></div>{projectTasks.length ? <span className="text-[12px] font-medium text-primary">{done} / {projectTasks.length} complete</span> : null}</div>{!projectTasks.length && <div className="mt-5 rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">No active work yet.</p><button onClick={() => onAddWork?.(project)} className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button></div>}</section><section className="binnie-card p-5"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-semibold text-foreground">What can move now</h2><p className="mt-1 text-[11px] text-muted-foreground">Work that is ready or in progress without a start blocker.</p></div><span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{readyTasks.length} available</span></div>{readyTasks.length ? <div className="space-y-2">{readyTasks.slice(0, 5).map(task => <TaskCard key={task.id} task={task} compact onClick={() => onTaskClick(task)} />)}</div> : <div className="rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">Nothing here yet. Add work to start moving this project forward.</p><div className="mt-3 flex gap-2"><button onClick={() => onAddWork?.(project)} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button><button onClick={() => onAddWork?.(project)} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary">Capture with Binnie</button></div></div>}</section><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Current focus</h2><p className="mt-1 text-[11px] text-muted-foreground">A short summary, separate from tasks.</p></div></div>{project.focusItems.length ? <div className="mt-4 space-y-2">{project.focusItems.map((item, index) => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.035] p-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{index + 1}</span><p className="min-w-0 flex-1 text-[12px] text-foreground">{item.text}</p><button onClick={() => void removeFocus(item.id)} className="rounded-lg p-1 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove focus ${item.text}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No focus areas added yet.</p>}<div className="mt-3 flex gap-2"><input value={focusText} onChange={event => setFocusText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addFocus()} placeholder="Add focus" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addFocus()} disabled={!focusText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Focus</button></div></section></div><div className="space-y-5"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Milestones</h2><p className="mt-1 text-[10px] text-muted-foreground">Project-level deliveries, not task cards.</p></div></div>{project.milestones.length ? <div className="mt-4 space-y-2">{project.milestones.map(milestone => <div key={milestone.id} className="rounded-xl border border-border p-3"><p className="text-[12px] font-medium text-foreground">{milestone.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{milestone.targetDate ? taskDateLabel(milestone.targetDate) : "No target date"}{milestone.owner ? ` · ${milestone.owner}` : ""}</p></div>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No milestones yet.</p>}<div className="mt-3 grid gap-2"><input value={milestoneTitle} onChange={event => setMilestoneTitle(event.target.value)} placeholder="Website Ready" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="flex gap-2"><input type="date" value={milestoneDate} onChange={event => setMilestoneDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addMilestone()} disabled={!milestoneTitle.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Milestone</button></div></div></section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Other teams waiting on this project</h2><p className="mt-1 text-[10px] text-muted-foreground">Only real task dependencies appear here.</p>{waitingOnTeams.length ? <div className="mt-3 space-y-2">{waitingOnTeams.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-overdue/15 bg-overdue/[0.035] p-3 text-left"><p className="text-[12px] font-medium text-foreground">{task.area} is waiting on {task.blockedBy?.owner || "a dependency"}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.title} · {task.blockedBy?.label}</p></button>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No blockers yet.</p>}</section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Teams involved</h2><div className="mt-3 flex flex-wrap gap-2">{projectAreas.length ? projectAreas.map(area => <span key={area} className="rounded-full border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground">{area}</span>) : <p className="text-[11px] text-muted-foreground">No teams added yet.</p>}</div></section></div></div>}{tab === "board" && <PlanningBoard tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "timeline" && <PlanningTimeline tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "roadmap" && <PlanningRoadmap tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} />}{tab === "people" && <div className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project people</h2><p className="mt-1 text-[11px] text-muted-foreground">Project members and people actively assigned to this work.</p></div><button onClick={() => setMemberEditorOpen(current => !current)} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">{memberEditorOpen ? "Done" : "+ Add people"}</button></div>{memberEditorOpen && <div className="mt-4 rounded-xl border border-border bg-muted/25 p-3"><p className="text-[10px] text-muted-foreground">Project members support visibility and ownership; task assignees remain unchanged.</p><div className="mt-2 flex flex-wrap gap-1.5">{PEOPLE_DIRECTORY.filter(person => person.active && person.memberships.some(membership => membership.organization === project.organization)).map(person => <button key={person.id} onClick={() => void toggleProjectMember(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", project.members.some(member => member.principalId === person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}>{project.members.some(member => member.principalId === person.id) ? "✓ " : ""}{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div></div>}{people.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2">{people.map(person => <div key={person.principalId} className="flex items-center gap-3 rounded-xl border border-border p-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-foreground">{person.name}</p><p className="text-[10px] text-muted-foreground">{person.role === "owner" ? "Project owner" : person.type === "team" ? "Team" : "Contributor"}</p></div></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No additional people or teams added yet.</p>}</div>}{tab === "links-files" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Links &amp; Files</h2><p className="mt-1 text-[11px] text-muted-foreground">Shared project resources.</p>{project.resources.length ? <div className="mt-4 space-y-2">{project.resources.map(resource => <div key={resource.id} className="flex items-center gap-3 rounded-xl border border-border p-3"><a href={resource.url} target={resource.url?.startsWith("/api/") ? undefined : "_blank"} rel={resource.url?.startsWith("/api/") ? undefined : "noopener noreferrer"} className="min-w-0 flex-1 truncate text-[12px] text-primary"><Link2 className="mr-1 inline h-3.5 w-3.5" />{resource.label}</a><button onClick={() => void removeProjectResource(resource.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove ${resource.label}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-5 text-[12px] text-muted-foreground">No links or files yet.</p>}<div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4"><input value={resourceLink} onChange={event => setResourceLink(event.target.value)} onKeyDown={event => event.key === "Enter" && void addProjectLink()} placeholder="Paste a shared link" className="min-w-48 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addProjectLink()} disabled={!resourceLink.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Add link</button><input ref={projectFileInputRef} type="file" multiple className="hidden" onChange={event => void uploadProjectFiles(event.target.files)} /><button onClick={() => projectFileInputRef.current?.click()} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary"><Paperclip className="mr-1 inline h-3.5 w-3.5" />Attach file</button></div></div>}{tab === "activity" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Activity</h2><div className="mt-4 space-y-3"><div className="flex gap-3"><Avatar name="Binnie" size="xs" /><div><p className="text-[12px] text-foreground">Project created</p><p className="mt-0.5 text-[10px] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(project.createdAt))}</p></div></div>{projectTasks.flatMap(task => (task.activity || []).slice(0, 2).map(activity => ({ task, activity }))).slice(0, 12).map(({ task, activity }, index) => <div key={`${task.id}-${index}`} className="flex gap-3"><Avatar name={activity.actor} size="xs" /><div><p className="text-[12px] text-foreground">{activity.text}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.title} · {activity.time}</p></div></div>)}</div></div>}</div>;
+  return <div className="mx-auto max-w-[1180px] p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card mb-5 overflow-hidden"><div className="p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="mb-2 flex flex-wrap items-center gap-2"><OrgBadge org={project.organization} />{project.leadArea && <AreaBadge area={project.leadArea} />}{attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div><h1 className="binnie-heading text-2xl font-bold text-foreground">{project.name}</h1>{project.description && <p className="mt-1 max-w-2xl text-[12px] text-muted-foreground">{project.description}</p>}<p className="mt-2 text-[11px] text-muted-foreground">{project.targetDate ? `Target ${taskDateLabel(project.targetDate)}` : "No target date"} · {projectAreas.length} areas involved</p></div><div className="min-w-32 text-left sm:text-right"><p className="text-3xl font-bold text-primary">{projectTasks.length ? `${progress}%` : "Not started"}</p><p className="text-[10px] text-muted-foreground">{projectTasks.length ? `${done} of ${projectTasks.length} tasks complete` : "No active work yet"}</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} /></div><div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">{PLANNING_COLUMNS.map(column => <div key={column.id} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-bold", column.text)}>{statusCounts[column.id]}</p><p className="text-[9px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{column.label}</p></div>)}</div></div><div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-1.5">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/70 hover:text-foreground")}>{item.label}</button>)}</div></div>{message && <p role="status" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}{tab === "overview" && <div className="grid gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project progress</h2><p className="mt-1 text-[11px] text-muted-foreground">Derived from the work in this project.</p></div>{projectTasks.length ? <span className="text-[12px] font-medium text-primary">{done} / {projectTasks.length} complete</span> : null}</div>{!projectTasks.length && <div className="mt-5 rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">No work added yet.</p><button onClick={() => onAddWork?.(project)} className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button></div>}</section><section className="binnie-card p-5"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-semibold text-foreground">What can move now</h2><p className="mt-1 text-[11px] text-muted-foreground">Work that is ready or in progress without a start blocker.</p></div><span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{readyTasks.length} available</span></div>{readyTasks.length ? <div className="space-y-2">{readyTasks.slice(0, 5).map(task => <TaskCard key={task.id} task={task} compact onClick={() => onTaskClick(task)} />)}</div> : <div className="rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">No work added yet.</p><div className="mt-3 flex gap-2"><button onClick={() => onAddWork?.(project)} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button><button onClick={() => onAddWork?.(project)} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary">Capture with Binnie</button></div></div>}</section><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Current focus</h2><p className="mt-1 text-[11px] text-muted-foreground">A short summary, separate from tasks.</p></div></div>{project.focusItems.length ? <div className="mt-4 space-y-2">{project.focusItems.map((item, index) => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.035] p-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{index + 1}</span><p className="min-w-0 flex-1 text-[12px] text-foreground">{item.text}</p><button onClick={() => void removeFocus(item.id)} className="rounded-lg p-1 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove focus ${item.text}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No focus items yet.</p>}<div className="mt-3 flex gap-2"><input value={focusText} onChange={event => setFocusText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addFocus()} placeholder="Add focus" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addFocus()} disabled={!focusText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Focus</button></div></section></div><div className="space-y-5"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Milestones</h2><p className="mt-1 text-[10px] text-muted-foreground">Project-level deliveries, not task cards.</p></div></div>{project.milestones.length ? <div className="mt-4 space-y-2">{project.milestones.map(milestone => <div key={milestone.id} className="rounded-xl border border-border p-3"><p className="text-[12px] font-medium text-foreground">{milestone.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{milestone.targetDate ? taskDateLabel(milestone.targetDate) : "No target date"}{milestone.owner ? ` · ${milestone.owner}` : ""}</p></div>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No milestones yet.</p>}<div className="mt-3 grid gap-2"><input value={milestoneTitle} onChange={event => setMilestoneTitle(event.target.value)} placeholder="Website Ready" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="flex gap-2"><input type="date" value={milestoneDate} onChange={event => setMilestoneDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addMilestone()} disabled={!milestoneTitle.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Milestone</button></div></div></section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Other teams waiting on this project</h2><p className="mt-1 text-[10px] text-muted-foreground">Only real task dependencies appear here.</p>{waitingOnTeams.length ? <div className="mt-3 space-y-2">{waitingOnTeams.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-overdue/15 bg-overdue/[0.035] p-3 text-left"><p className="text-[12px] font-medium text-foreground">{task.area} is waiting on {task.blockedBy?.owner || "a dependency"}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.title} · {task.blockedBy?.label}</p></button>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No blockers yet.</p>}</section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Teams involved</h2><div className="mt-3 flex flex-wrap gap-2">{projectAreas.length ? projectAreas.map(area => <span key={area} className="rounded-full border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground">{area}</span>) : <p className="text-[11px] text-muted-foreground">No teams added yet.</p>}</div></section></div></div>}{tab === "board" && <PlanningBoard tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "timeline" && <PlanningTimeline tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "roadmap" && <PlanningRoadmap tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} />}{tab === "people" && <div className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project people</h2><p className="mt-1 text-[11px] text-muted-foreground">Project members and people actively assigned to this work.</p></div><button onClick={() => setMemberEditorOpen(current => !current)} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">{memberEditorOpen ? "Done" : "+ Add people"}</button></div>{memberEditorOpen && <div className="mt-4 rounded-xl border border-border bg-muted/25 p-3"><p className="text-[10px] text-muted-foreground">Project members support visibility and ownership; task assignees remain unchanged.</p><div className="mt-2 flex flex-wrap gap-1.5">{PEOPLE_DIRECTORY.filter(person => person.active && person.memberships.some(membership => membership.organization === project.organization)).map(person => <button key={person.id} onClick={() => void toggleProjectMember(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", project.members.some(member => member.principalId === person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}>{project.members.some(member => member.principalId === person.id) ? "✓ " : ""}{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div></div>}{people.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2">{people.map(person => <div key={person.principalId} className="flex items-center gap-3 rounded-xl border border-border p-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-foreground">{person.name}</p><p className="text-[10px] text-muted-foreground">{person.role === "owner" ? "Project owner" : person.type === "team" ? "Team" : "Contributor"}</p></div></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No additional people or teams added yet.</p>}</div>}{tab === "links-files" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Links &amp; Files</h2><p className="mt-1 text-[11px] text-muted-foreground">Shared project resources.</p>{project.resources.length ? <div className="mt-4 space-y-2">{project.resources.map(resource => <div key={resource.id} className="flex items-center gap-3 rounded-xl border border-border p-3"><a href={resource.url} target={resource.url?.startsWith("/api/") ? undefined : "_blank"} rel={resource.url?.startsWith("/api/") ? undefined : "noopener noreferrer"} className="min-w-0 flex-1 truncate text-[12px] text-primary"><Link2 className="mr-1 inline h-3.5 w-3.5" />{resource.label}</a><button onClick={() => void removeProjectResource(resource.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove ${resource.label}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-5 text-[12px] text-muted-foreground">No links or files yet.</p>}<div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4"><input value={resourceLink} onChange={event => setResourceLink(event.target.value)} onKeyDown={event => event.key === "Enter" && void addProjectLink()} placeholder="Paste a shared link" className="min-w-48 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addProjectLink()} disabled={!resourceLink.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Add link</button><input ref={projectFileInputRef} type="file" multiple className="hidden" onChange={event => void uploadProjectFiles(event.target.files)} /><button onClick={() => projectFileInputRef.current?.click()} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary"><Paperclip className="mr-1 inline h-3.5 w-3.5" />Attach file</button></div></div>}{tab === "activity" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Activity</h2><div className="mt-4 space-y-3"><div className="flex gap-3"><Avatar name="Binnie" size="xs" /><div><p className="text-[12px] text-foreground">Project created</p><p className="mt-0.5 text-[10px] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(project.createdAt))}</p></div></div>{projectTasks.flatMap(task => (task.activity || []).slice(0, 2).map(activity => ({ task, activity }))).slice(0, 12).map(({ task, activity }, index) => <div key={`${task.id}-${index}`} className="flex gap-3"><Avatar name={activity.actor} size="xs" /><div><p className="text-[12px] text-foreground">{activity.text}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.title} · {activity.time}</p></div></div>)}</div></div>}</div>;
+}
+
+function ProjectDetailSettingsMenu({ project, onDelete }: { project: ProjectDTO; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  if (!canManageCanonicalProject(project)) return null;
+  return <div className="relative" onClick={event => event.stopPropagation()}><button onClick={() => setOpen(current => !current)} aria-label={`Project settings for ${project.name}`} aria-expanded={open} className="rounded-xl border border-border bg-card p-2 text-muted-foreground shadow-sm hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{open && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]"><p className="px-2.5 pb-1 pt-1 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Project settings</p><button onClick={() => { setOpen(false); onDelete(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] font-medium text-overdue hover:bg-overdue/10">Delete Project</button></div>}</div>;
+}
+
+function CanonicalProjectDetail({ project, onBack, onTaskClick, onAddWork }: { project: ProjectDTO; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  const [deleting, setDeleting] = useState(false);
+  return <div className="relative"><div className="absolute right-5 top-[4.5rem] z-20 sm:right-8 lg:right-10"><ProjectDetailSettingsMenu project={project} onDelete={() => setDeleting(true)} /></div><CanonicalProjectDetailContent project={project} onBack={onBack} onTaskClick={onTaskClick} onAddWork={onAddWork} />{deleting && <DeleteProjectConfirmation project={project} onClose={() => setDeleting(false)} onDeleted={onBack} />}</div>;
 }
 
 function ProjectDetailView({ projectId, onBack, onTaskClick, onAddWork }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
-  const canonical = taskStoreUsesServer ? getCanonicalProject(projectId) : undefined;
-  return canonical ? <CanonicalProjectDetail project={canonical} onBack={onBack} onTaskClick={onTaskClick} onAddWork={onAddWork} /> : <LegacyProjectDetailView projectId={projectId} onBack={onBack} onTaskClick={onTaskClick} />;
+  const project = getCanonicalProject(projectId);
+  if (project) return <CanonicalProjectDetail project={project} onBack={onBack} onTaskClick={onTaskClick} onAddWork={onAddWork} />;
+  return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card p-8 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Project not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p></div></div>;
 }
 
 function LegacyFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
@@ -5574,17 +5520,24 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
 
 function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void }) {
+  useTaskStoreVersion();
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [formMessage, setFormMessage] = useState("");
   const [, setRevision] = useState(0);
 
-  function addOrganization() {
+  async function addOrganization() {
     const organizationName = name.trim();
     if (!organizationName) { setFormMessage("Add a workspace name to continue."); return; }
     if (ORGS_META.some(org => org.name.toLowerCase() === organizationName.toLowerCase())) { setFormMessage("That workspace already exists."); return; }
-    ORGS_META.push({ name: organizationName, desc: description.trim() || "A new Binnie workspace", areas: [] });
+    const result = await createOrganizationAction({ name: organizationName, description: description.trim() || undefined });
+    if (!result.ok) {
+      console.error("Could not create Binnie organization", result.message);
+      setFormMessage(result.message || "Couldn't create organization. Please try again.");
+      return;
+    }
+    applyCanonicalOrganization(result.data);
     ORG_COLORS[organizationName] = { ...ORG_COLORS["Villa Khayangan"] };
     ORG_RESOURCES[organizationName] = [];
     setRevision(current => current + 1);
@@ -5603,13 +5556,13 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
         </div>
         <button onClick={() => { setIsAdding(current => !current); setFormMessage(""); }} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" /> Add Organization</button>
       </div>
-      {isAdding && <div className="binnie-card mb-5 grid gap-3 bg-[#fdfcff] p-4 sm:grid-cols-[1fr_1.4fr_auto]"><input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && addOrganization()} placeholder="Workspace name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><input value={description} onChange={event => setDescription(event.target.value)} onKeyDown={event => event.key === "Enter" && addOrganization()} placeholder="Short description (optional)" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><div className="flex gap-2"><button onClick={addOrganization} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div>{formMessage && <p className="sm:col-span-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
+      {isAdding && <div className="binnie-card mb-5 grid gap-3 bg-[#fdfcff] p-4 sm:grid-cols-[1fr_1.4fr_auto]"><input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Workspace name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><input value={description} onChange={event => setDescription(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Short description (optional)" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><div className="flex gap-2"><button onClick={() => void addOrganization()} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div>{formMessage && <p className="sm:col-span-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {ORGS_META.map(org => {
-          const c = ORG_COLORS[org.name];
+          const c = ORG_COLORS[org.name] || ORG_COLORS.Personal;
           const orgTasks = TASKS.filter(t => t.org === org.name);
           const activeTasks = orgTasks.filter(task => task.status !== "done");
-          const orgProjects = STRATEGIC_PROJECTS.filter(project => project.org === org.name);
+          const orgProjects = CANONICAL_PROJECTS.filter(project => project.organization === org.name && project.status !== "archived");
           const waiting = activeTasks.filter(task => task.isWaiting).length;
           const attention = activeTasks.filter(task => task.isOverdue || task.status === "blocked" || task.status === "review").length;
           const visibleAreas = org.areas.slice(0, 3);
@@ -5652,119 +5605,104 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
 
 // ─── PROJECTS VIEW ────────────────────────────────────────────────────────────
 
-function LegacyProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void }) {
-  const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [isAdding, setIsAdding] = useState(false);
-  const [projectName, setProjectName] = useState("");
-  const [projectOrg, setProjectOrg] = useState<OrgName>("Villa Khayangan");
-  const [formMessage, setFormMessage] = useState("");
-  const [, setRevision] = useState(0);
-
-  function addProject() {
-    const name = projectName.trim();
-    if (!name) { setFormMessage("Add a project name to continue."); return; }
-    const id = `p-${Date.now()}`;
-    STRATEGIC_PROJECTS.push({ id, name, org: projectOrg, progress: 0, tasks: 0, done: 0, deadline: "No target", status: "on_track" });
-    PROJECT_DETAILS[id] = { id, name, org: projectOrg, area: "Operations", progress: 0, deadline: "No target", status: "on_track", tasks: 0, done: 0, currentFocus: [], resources: [], recentActivity: [] };
-    setRevision(current => current + 1);
-    setProjectName("");
-    setFormMessage("");
-    setIsAdding(false);
-  }
-  const needsAttention = (project: typeof STRATEGIC_PROJECTS[number]) => {
-    const detail = PROJECT_DETAILS[project.id];
-    const projectTasks = TASKS.filter(task => task.project === project.name);
-    return detail?.status === "at_risk" || projectTasks.some(task => task.isOverdue || task.status === "blocked" || task.isWaiting || task.status === "review");
-  };
-  const attentionProjects = STRATEGIC_PROJECTS.filter(needsAttention);
-  const activeProjects = STRATEGIC_PROJECTS.filter(project => project.done < project.tasks && !needsAttention(project));
-  const completedProjects = STRATEGIC_PROJECTS.filter(project => project.done >= project.tasks);
-  const visibleProjects = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : STRATEGIC_PROJECTS;
-  const projectGridClass = viewMode === "grid" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 gap-3";
-
-  const renderProjectCard = (project: typeof STRATEGIC_PROJECTS[number]) => {
-    const c = ORG_COLORS[project.org];
-    const detail = PROJECT_DETAILS[project.id];
-    const projectTasks = TASKS.filter(task => task.project === project.name);
-    const nextTask = projectTasks.find(task => task.nextActionBy === "me" && task.status !== "done") || projectTasks.find(task => task.status !== "done");
-    const waiting = projectTasks.filter(task => task.isWaiting).length;
-    const review = projectTasks.filter(task => task.status === "review").length;
-    const attention = needsAttention(project);
-    return (
-      <button key={project.id} onClick={() => onProjectClick(project.id)} className={cn("binnie-card binnie-card-hover group relative flex h-full min-h-[21.25rem] overflow-hidden p-4 text-left sm:p-5", c.card)}>
-        <div aria-hidden="true" className={cn("absolute -right-10 -top-10 h-28 w-28 rounded-full opacity-45 blur-2xl", c.bg)} />
-        <div className="relative flex h-full w-full flex-col">
-          <div className="mb-4 grid min-h-[4.25rem] grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-start gap-x-3">
-            <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", c.bg, c.text)}><FolderKanban className="h-4 w-4" /></span>
-            <div className="min-w-0">
-              <div className="flex h-5 items-center gap-2"><h2 className="binnie-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{project.name}</h2>{attention && <span className="flex-shrink-0 rounded-full bg-warning/12 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div>
-              <div className="mt-2 flex min-h-5 items-center gap-1.5 overflow-hidden"><OrgBadge org={project.org} />{detail && <AreaBadge area={detail.area} />}</div>
-            </div>
-            <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-          </div>
-          <div className="mb-3 flex items-end gap-3">
-            <p className={cn("binnie-heading text-2xl font-bold", c.text)}>{project.progress}%</p>
-            <div className="min-w-0 flex-1 pb-1"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} /></div></div>
-          </div>
-          <div className="mb-3 flex min-h-4 items-center justify-between text-[11px] text-muted-foreground"><span>{project.done} / {project.tasks} tasks</span><span>Target: {project.deadline}</span></div>
-          <div className="space-y-2.5 border-t border-border/80 pt-3">
-            <div className="min-h-10"><p className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Current focus</p><p className="truncate text-[12px] font-medium text-foreground">{detail?.currentFocus[0] || "Set a focused next step"}</p></div>
-            <div className="min-h-10"><p className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Next</p><p className="truncate text-[12px] text-foreground">{nextTask?.title || "No next task scheduled"}</p></div>
-          </div>
-          <div className="mt-3 flex min-h-6 flex-wrap gap-1.5">{waiting > 0 && <span className="rounded-full bg-info/10 px-2 py-1 text-[10px] font-medium text-info">{waiting} waiting</span>}{review > 0 && <span className="rounded-full bg-review/10 px-2 py-1 text-[10px] font-medium text-review">{review} review</span>}</div>
-        </div>
-      </button>
-    );
-  };
-
-  const renderProjectGroup = (title: string, projects: typeof STRATEGIC_PROJECTS, accent: string) => projects.length > 0 ? (
-    <section className="mb-7">
-      <div className="mb-3 flex items-center gap-2"><span className={cn("h-2 w-2 rounded-full", accent)} /><h2 className="text-[13px] font-semibold text-foreground">{title}</h2><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{projects.length}</span></div>
-      <div className={projectGridClass}>{projects.map(renderProjectCard)}</div>
-    </section>
-  ) : null;
-
-  return (
-    <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div>
-        <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" aria-pressed={viewMode === "grid"} className={cn("rounded-lg p-1.5 transition-colors", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" aria-pressed={viewMode === "list"} className={cn("rounded-lg p-1.5 transition-colors", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => { setIsAdding(current => !current); setFormMessage(""); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" /> Add Project</button></div>
-      </div>
-      {isAdding && <div className="binnie-card mb-5 grid gap-3 bg-[#fdfcff] p-4 sm:grid-cols-[1.4fr_1fr_auto]"><input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} onKeyDown={event => event.key === "Enter" && addProject()} placeholder="Project name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><select value={projectOrg} onChange={event => setProjectOrg(event.target.value as OrgName)} className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground">{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select><div className="flex gap-2"><button onClick={addProject} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div>{formMessage && <p className="sm:col-span-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
-      <div className="mb-5 flex flex-wrap items-center gap-1.5">
-        {[
-          { id: "all" as const, label: "All", count: STRATEGIC_PROJECTS.length },
-          { id: "active" as const, label: "Active", count: activeProjects.length },
-          { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length },
-          { id: "completed" as const, label: "Completed", count: completedProjects.length },
-        ].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground hover:border-primary/25 hover:text-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}
-      </div>
-      {filter === "all" ? <>{renderProjectGroup("Needs Attention", attentionProjects, "bg-warning")}{renderProjectGroup("Active Projects", activeProjects, "bg-primary")}</> : visibleProjects.length > 0 ? <div className={projectGridClass}>{visibleProjects.map(renderProjectCard)}</div> : <div className="binnie-card py-14 text-center"><CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-success/50" /><p className="text-sm font-medium text-foreground">Nothing to show here right now.</p><p className="mt-1 text-[12px] text-muted-foreground">The rest of your work is safely organized.</p></div>}
-    </div>
-  );
-}
-
 type ProjectCreationStep = 1 | 2 | 3;
 type ProjectMilestoneDraft = { title: string; targetDate: string };
 
-function CreateProjectDrawer({ onClose, onCreated, defaultOrganization }: {
+function archiveCanonicalProjectFromClient(projectId: string, revision?: number) {
+  CANONICAL_PROJECTS = CANONICAL_PROJECTS.filter(project => project.id !== projectId);
+  const legacyIndex = STRATEGIC_PROJECTS.findIndex(project => project.id === projectId);
+  if (legacyIndex >= 0) STRATEGIC_PROJECTS.splice(legacyIndex, 1);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function ProjectOverflowMenu({ project, onEdit, onDuplicate, onArchived, onDelete }: {
+  project: ProjectDTO;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onArchived?: () => void;
+  onDelete: () => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [error, setError] = useState("");
+  const allowed = canManageCanonicalProject(project);
+  if (!allowed) return null;
+  async function archive() {
+    setArchiving(true); setError("");
+    const result = await archiveProjectAction({ projectId: project.id });
+    if (!result.ok) {
+      console.error("Couldn't archive project", result.message);
+      setError(result.message || "Couldn't archive project. Please try again.");
+      setArchiving(false);
+      return;
+    }
+    archiveCanonicalProjectFromClient(project.id, result.revision);
+    setOpen(false);
+    onArchived?.();
+    router.refresh();
+  }
+  return <div className="relative shrink-0" onClick={event => event.stopPropagation()}>
+    <button onClick={() => { setOpen(current => !current); setError(""); }} aria-label={`Project actions for ${project.name}`} aria-expanded={open} className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>
+    {open && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]">
+      <button onClick={() => { setOpen(false); onEdit(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit</button>
+      <button onClick={() => { setOpen(false); onDuplicate(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Duplicate</button>
+      <button onClick={() => void archive()} disabled={archiving} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted disabled:opacity-50">{archiving ? "Archiving…" : "Archive"}</button>
+      <div className="my-1 border-t border-border" />
+      <button onClick={() => { setOpen(false); onDelete(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] font-medium text-overdue hover:bg-overdue/10">Delete Project</button>
+      {error && <p role="alert" className="px-2.5 pb-1 pt-1 text-[10px] text-overdue">{error}</p>}
+    </div>}
+  </div>;
+}
+
+function DeleteProjectConfirmation({ project, onClose, onDeleted }: { project: ProjectDTO; onClose: () => void; onDeleted: () => void }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const taskCount = [...TASKS, ...ARCHIVED_TASKS].filter(task => task.projectId === project.id).length;
+  async function confirmDeletion() {
+    setDeleting(true); setError("");
+    const result = await deleteProjectAction({ projectId: project.id, confirm: true });
+    if (!result.ok) {
+      console.error("Couldn't delete project", result.message);
+      setError(result.message || "Couldn't delete project. Please try again.");
+      setDeleting(false);
+      return;
+    }
+    removeCanonicalProject(project.id, result.revision);
+    onDeleted();
+    router.refresh();
+  }
+  return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-foreground/20 p-4 backdrop-blur-[1px] sm:items-center" onMouseDown={event => { if (event.target === event.currentTarget && !deleting) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="delete-project-title" className="w-full max-w-md rounded-[1.5rem] border border-overdue/20 bg-card p-5 shadow-xl">
+      <div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-overdue/10 text-overdue"><Trash2 className="h-4 w-4" /></span><div><p className="text-[10px] font-medium uppercase tracking-[0.1em] text-overdue">Permanent action</p><h2 id="delete-project-title" className="binnie-heading mt-1 text-lg font-bold text-foreground">Delete “{project.name}”?</h2></div></div>
+      <div className="mt-4 space-y-3 text-[12px] leading-5 text-muted-foreground"><p>This permanently deletes the project, including its milestones, focus items, and project-only links and files.</p>{taskCount ? <p><strong className="font-semibold text-foreground">{taskCount} {taskCount === 1 ? "task is" : "tasks are"} currently associated.</strong> Those tasks will be kept as standalone work; only their project connection will be removed.</p> : <p>No tasks are currently associated with this project.</p>}<p className="font-medium text-overdue">This cannot be undone.</p></div>
+      {error && <p role="alert" className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2"><button onClick={onClose} disabled={deleting} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted disabled:opacity-50">Cancel</button><button onClick={() => void confirmDeletion()} disabled={deleting} className="rounded-xl bg-overdue px-3.5 py-2 text-[12px] font-medium text-white hover:bg-overdue/90 disabled:opacity-50">{deleting ? "Deleting…" : "Delete Project"}</button></div>
+    </div>
+  </div>;
+}
+
+function CreateProjectDrawer({ onClose, onCreated, defaultOrganization, initialProject }: {
   onClose: () => void;
   onCreated: (project: ProjectDTO, addWork: boolean) => void;
   defaultOrganization?: OrgName;
+  initialProject?: ProjectDTO;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<ProjectCreationStep>(1);
-  const [name, setName] = useState("");
-  const [organization, setOrganization] = useState<OrgName>(defaultOrganization || "");
-  const [description, setDescription] = useState("");
-  const [leadArea, setLeadArea] = useState<AreaName | "">("");
-  const [targetDate, setTargetDate] = useState("");
-  const [ownerId, setOwnerId] = useState("");
-  const [involvedAreas, setInvolvedAreas] = useState<AreaName[]>([]);
-  const [personIds, setPersonIds] = useState<string[]>([]);
-  const [milestones, setMilestones] = useState<ProjectMilestoneDraft[]>([]);
-  const [focusItems, setFocusItems] = useState<string[]>([]);
+  const [name, setName] = useState(initialProject ? `${initialProject.name} copy` : "");
+  const [organization, setOrganization] = useState<OrgName>(initialProject?.organization || defaultOrganization || "");
+  const [description, setDescription] = useState(initialProject?.description || "");
+  const [leadArea, setLeadArea] = useState<AreaName | "">(initialProject?.leadArea as AreaName || "");
+  const [targetDate, setTargetDate] = useState(initialProject?.targetDate || "");
+  const [ownerId, setOwnerId] = useState(initialProject?.members.find(member => member.role === "owner")?.principalId || "");
+  const [involvedAreas, setInvolvedAreas] = useState<AreaName[]>(() => initialProject?.involvedDepartments.map(department => department.name as AreaName) || []);
+  const [teamIds, setTeamIds] = useState<string[]>(() => initialProject?.members.filter(member => member.type === "team").map(member => member.principalId) || []);
+  const [personIds, setPersonIds] = useState<string[]>(() => initialProject?.members.filter(member => member.type === "person" && member.role !== "owner").map(member => member.principalId) || []);
+  const [milestones, setMilestones] = useState<ProjectMilestoneDraft[]>(() => initialProject?.milestones.map(milestone => ({ title: milestone.title, targetDate: milestone.targetDate || "" })) || []);
+  const [focusItems, setFocusItems] = useState<string[]>(() => initialProject?.focusItems.map(item => item.text) || []);
   const [firstTask, setFirstTask] = useState({ title: "", area: "" as AreaName | "", assigneeId: "", targetDate: "" });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -5779,6 +5717,7 @@ function CreateProjectDrawer({ onClose, onCreated, defaultOrganization }: {
     setLeadArea("");
     setInvolvedAreas([]);
     setOwnerId("");
+    setTeamIds([]);
     setPersonIds([]);
     setFirstTask(current => ({ ...current, area: "", assigneeId: "" }));
     setError("");
@@ -5790,6 +5729,10 @@ function CreateProjectDrawer({ onClose, onCreated, defaultOrganization }: {
 
   function togglePerson(id: string) {
     setPersonIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+
+  function toggleTeam(id: string) {
+    setTeamIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   }
 
   function addMilestone() {
@@ -5814,44 +5757,53 @@ function CreateProjectDrawer({ onClose, onCreated, defaultOrganization }: {
     const leadDepartmentId = leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined;
     const involvedDepartmentIds = allSelectedAreas.map(area => getRemoteDepartmentId(organization, area)).filter((id): id is string => Boolean(id));
     const teamMemberIds = allSelectedAreas.map(area => getAreaTeam(organization, area)?.id).filter((id): id is string => Boolean(id));
-    const memberIds = Array.from(new Set([...teamMemberIds, ...personIds, ...(ownerId ? [ownerId] : [])]));
+    const memberIds = Array.from(new Set([...teamMemberIds, ...teamIds, ...personIds, ...(ownerId ? [ownerId] : [])]));
     setSaving(true);
-    const result = await createProjectAction({
-      name: name.trim(),
-      organizationId,
-      description: description.trim() || undefined,
-      leadDepartmentId,
-      involvedDepartmentIds,
-      targetDate: targetDate || undefined,
-      members: memberIds.map(principalId => ({ principalId, role: principalId === ownerId ? "owner" as const : teamMemberIds.includes(principalId) ? "member" as const : "collaborator" as const })),
-      milestones: milestones.filter(item => item.title.trim()).map(item => ({ title: item.title.trim(), targetDate: item.targetDate || undefined })),
-      focusItems: focusItems.map(item => item.trim()).filter(Boolean),
-      firstTask: firstTask.title.trim() ? {
-        title: firstTask.title.trim(),
-        leadDepartmentId: firstTask.area ? getRemoteDepartmentId(organization, firstTask.area) : leadDepartmentId,
-        assignments: firstTask.assigneeId ? [{ principalId: firstTask.assigneeId, role: "primary_owner" as const }] : undefined,
-        targetDate: firstTask.targetDate || undefined,
-      } : undefined,
-    });
-    setSaving(false);
-    if (!result.ok) { setError(result.message); return; }
-    applyCanonicalProject(result.data, result.revision);
-    // A project may have created its first canonical task in the same
-    // transaction; refresh the snapshot so progress and board counts update.
-    router.refresh();
-    onCreated(result.data, addWork);
+    try {
+      const result = await createProjectAction({
+        name: name.trim(),
+        organizationId,
+        description: description.trim() || undefined,
+        leadDepartmentId,
+        involvedDepartmentIds,
+        targetDate: targetDate || undefined,
+        members: memberIds.map(principalId => ({ principalId, role: principalId === ownerId ? "owner" as const : teamMemberIds.includes(principalId) ? "member" as const : "collaborator" as const })),
+        milestones: milestones.filter(item => item.title.trim()).map(item => ({ title: item.title.trim(), targetDate: item.targetDate || undefined })),
+        focusItems: focusItems.map(item => item.trim()).filter(Boolean),
+        firstTask: firstTask.title.trim() ? {
+          title: firstTask.title.trim(),
+          leadDepartmentId: firstTask.area ? getRemoteDepartmentId(organization, firstTask.area) : leadDepartmentId,
+          assignments: firstTask.assigneeId ? [{ principalId: firstTask.assigneeId, role: "primary_owner" as const }] : undefined,
+          targetDate: firstTask.targetDate || undefined,
+        } : undefined,
+      });
+      if (!result.ok) { setError(result.message); return; }
+      applyCanonicalProject(result.data, result.revision);
+      // A project may have created its first canonical task in the same
+      // transaction; refresh the snapshot so progress and board counts update.
+      router.refresh();
+      onCreated(result.data, addWork);
+    } catch (caught) {
+      console.error("Could not create project", caught);
+      setError("Couldn't create project. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const steps = [{ id: 1 as const, label: "Basics" }, { id: 2 as const, label: "Teams" }, { id: 3 as const, label: "Plan" }];
-  return <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create Project" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="border-b border-border px-5 py-5 sm:px-6"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Create Project</p><h2 className="binnie-heading mt-1 text-2xl font-bold text-foreground">Set the foundation.</h2><p className="mt-1 text-[12px] text-muted-foreground">You can refine everything later.</p></div><button onClick={onClose} aria-label="Close project creation" className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="mt-5 flex gap-1.5">{steps.map(item => <button key={item.id} onClick={() => item.id < step || validateBasics() ? setStep(item.id) : undefined} className={cn("flex-1 rounded-lg px-2 py-2 text-[10px] font-medium", step === item.id ? "bg-primary/10 text-primary" : item.id < step ? "bg-muted text-foreground" : "text-muted-foreground")}><span className="mr-1 opacity-70">{item.id}</span>{item.label}</button>)}</div></div><div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{step === 1 && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={name} onChange={event => { setName(event.target.value); setError(""); }} placeholder="Website Revamp" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => changeOrganization(event.target.value as OrgName)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground"><option value="">Choose organization</option>{ORGS_META.filter(org => remoteOrganizationIds.has(org.name)).map(org => <option key={org.name} value={org.name}>{org.name}</option>)}</select></label><label className="block text-[11px] font-medium text-muted-foreground">Project description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project trying to accomplish?" rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">Lead area <span className="font-normal">(recommended)</span><select value={leadArea} onChange={event => { const area = event.target.value as AreaName; setLeadArea(area); setInvolvedAreas(current => area && !current.includes(area) ? [area, ...current] : current); }} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input type="date" value={targetDate} onChange={event => setTargetDate(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground" /></label></div><label className="block text-[11px] font-medium text-muted-foreground">Project owner <span className="font-normal">(optional)</span><select value={ownerId} onChange={event => setOwnerId(event.target.value)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div>}{step === 2 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Who&apos;s involved?</h3><p className="mt-1 text-[12px] text-muted-foreground">Add the teams that will contribute. You can change this anytime.</p></div><div><p className="mb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Teams / areas involved</p><div className="flex flex-wrap gap-2">{areas.map(area => <button key={area} onClick={() => toggleArea(area)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", allSelectedAreas.includes(area) ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}>{allSelectedAreas.includes(area) && <Check className="mr-1 inline h-3 w-3" />}{area}</button>)}</div>{leadArea && <p className="mt-2 text-[10px] text-muted-foreground">{leadArea} is included as the lead area.</p>}</div><div className="border-t border-border pt-4"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">People</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add existing people without duplicating records.</p></div><span className="text-[10px] text-muted-foreground">Optional</span></div><div className="mt-3 flex flex-wrap gap-1.5">{directory.filter(person => person.type === "person").map(person => <button key={person.id} onClick={() => togglePerson(person.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[10px]", personIds.includes(person.id) ? "border-primary/25 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{personIds.includes(person.id) && <Check className="mr-1 inline h-3 w-3" />}{person.name}</button>)}</div></div></div>}{step === 3 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Give the project a starting point</h3><p className="mt-1 text-[12px] text-muted-foreground">Optional. Start with a milestone, a focus, first work—or an empty project.</p></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">First milestone</p><p className="text-[10px] text-muted-foreground">A meaningful delivery, not another task.</p></div><button onClick={addMilestone} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add milestone</button></div>{milestones.map((milestone, index) => <div key={index} className="mt-3 grid gap-2 sm:grid-cols-[1fr_9rem]"><input value={milestone.title} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Website Ready" className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /><input type="date" value={milestone.targetDate} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetDate: event.target.value } : item))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Current focus</p><p className="text-[10px] text-muted-foreground">A short summary of where attention is concentrated.</p></div><button onClick={addFocus} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add focus</button></div>{focusItems.map((focus, index) => <input key={index} value={focus} onChange={event => setFocusItems(current => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Mobile booking flow redesign" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><p className="text-[12px] font-semibold text-foreground">First task</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. This creates normal Binnie work inside the project.</p><input value={firstTask.title} onChange={event => setFirstTask(current => ({ ...current, title: event.target.value }))} placeholder="Add the first piece of work" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />{firstTask.title && <div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={firstTask.area} onChange={event => setFirstTask(current => ({ ...current, area: event.target.value as AreaName }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Lead area</option>{allSelectedAreas.map(area => <option key={area}>{area}</option>)}</select><select value={firstTask.assigneeId} onChange={event => setFirstTask(current => ({ ...current, assigneeId: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Assignee / team</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={firstTask.targetDate} onChange={event => setFirstTask(current => ({ ...current, targetDate: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>}</section></div>}{error && <p role="alert" className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{error}</p>}</div><div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4 sm:px-6"><button onClick={() => step === 1 ? onClose() : setStep(current => (current - 1) as ProjectCreationStep)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">{step === 1 ? "Cancel" : "← Back"}</button><div className="ml-auto flex flex-wrap gap-2">{step === 1 && <button onClick={() => void create(false)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create now</button>}{step < 3 ? <button onClick={() => validateBasics() && setStep(current => (current + 1) as ProjectCreationStep)} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Continue →</button> : <><button onClick={() => void create(true)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create &amp; Add Work</button><button onClick={() => void create(false)} disabled={saving} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50">{saving ? "Creating…" : "Create Project"}</button></>}</div></div>{similarProject && <div className="absolute inset-0 flex items-center justify-center bg-foreground/10 p-5"><div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl"><p className="text-sm font-semibold text-foreground">A similar project already exists.</p><button onClick={() => { onClose(); onCreated(similarProject, false); }} className="mt-2 w-full rounded-xl border border-border bg-muted/35 p-3 text-left text-[12px] font-medium text-primary hover:bg-muted">{similarProject.name}<span className="mt-1 block text-[10px] font-normal text-muted-foreground">Open existing</span></button><div className="mt-4 flex justify-end gap-2"><button onClick={() => setSimilarProject(null)} className="rounded-lg px-2.5 py-2 text-[11px] text-muted-foreground">Cancel</button><button onClick={() => { setSimilarProject(null); void create(false, true); }} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Create Anyway</button></div></div></div>}</div></div>;
+  return <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create Project" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="border-b border-border px-5 py-5 sm:px-6"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Create Project</p><h2 className="binnie-heading mt-1 text-2xl font-bold text-foreground">Set the foundation.</h2><p className="mt-1 text-[12px] text-muted-foreground">You can refine everything later.</p></div><button onClick={onClose} aria-label="Close project creation" className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="mt-5 flex gap-1.5">{steps.map(item => <button key={item.id} onClick={() => item.id < step || validateBasics() ? setStep(item.id) : undefined} className={cn("flex-1 rounded-lg px-2 py-2 text-[10px] font-medium", step === item.id ? "bg-primary/10 text-primary" : item.id < step ? "bg-muted text-foreground" : "text-muted-foreground")}><span className="mr-1 opacity-70">{item.id}</span>{item.label}</button>)}</div></div><div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{step === 1 && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={name} onChange={event => { setName(event.target.value); setError(""); }} placeholder="Website Revamp" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => changeOrganization(event.target.value as OrgName)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground"><option value="">Choose organization</option>{Array.from(remoteOrganizationIds.keys()).map(org => <option key={org} value={org}>{org}</option>)}</select></label><label className="block text-[11px] font-medium text-muted-foreground">Project description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project trying to accomplish?" rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">Lead area <span className="font-normal">(recommended)</span><select value={leadArea} onChange={event => { const area = event.target.value as AreaName; setLeadArea(area); setInvolvedAreas(current => area && !current.includes(area) ? [area, ...current] : current); }} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input type="date" value={targetDate} onChange={event => setTargetDate(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground" /></label></div><label className="block text-[11px] font-medium text-muted-foreground">Project owner <span className="font-normal">(optional)</span><select value={ownerId} onChange={event => setOwnerId(event.target.value)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div>}{step === 2 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Who&apos;s involved?</h3><p className="mt-1 text-[12px] text-muted-foreground">Add the areas, teams, and people that will contribute. You can change this anytime.</p></div><div><p className="mb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Areas involved</p><div className="flex flex-wrap gap-2">{areas.map(area => <button key={area} onClick={() => toggleArea(area)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", allSelectedAreas.includes(area) ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}>{allSelectedAreas.includes(area) && <Check className="mr-1 inline h-3 w-3" />}{area}</button>)}</div>{leadArea && <p className="mt-2 text-[10px] text-muted-foreground">{leadArea} is included as the lead area.</p>}</div><div className="border-t border-border pt-4"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Teams</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add existing teams without creating a second directory.</p></div><span className="text-[10px] text-muted-foreground">Optional</span></div><div className="mt-3 flex flex-wrap gap-1.5">{directory.filter(person => person.type === "team").map(team => <button key={team.id} onClick={() => toggleTeam(team.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[10px]", teamIds.includes(team.id) ? "border-primary/25 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{teamIds.includes(team.id) && <Check className="mr-1 inline h-3 w-3" />}{team.name}</button>)}</div></div><div className="border-t border-border pt-4"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">People</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add existing people without duplicating records.</p></div><span className="text-[10px] text-muted-foreground">Optional</span></div><div className="mt-3 flex flex-wrap gap-1.5">{directory.filter(person => person.type === "person").map(person => <button key={person.id} onClick={() => togglePerson(person.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[10px]", personIds.includes(person.id) ? "border-primary/25 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{personIds.includes(person.id) && <Check className="mr-1 inline h-3 w-3" />}{person.name}</button>)}</div></div></div>}{step === 3 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Give the project a starting point</h3><p className="mt-1 text-[12px] text-muted-foreground">Optional. Start with a milestone, a focus, first work—or an empty project.</p></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Milestones</p><p className="text-[10px] text-muted-foreground">A meaningful delivery, not another task.</p></div><button onClick={addMilestone} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add milestone</button></div>{milestones.map((milestone, index) => <div key={index} className="mt-3 grid gap-2 sm:grid-cols-[1fr_9rem]"><input value={milestone.title} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Website Ready" className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /><input type="date" value={milestone.targetDate} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetDate: event.target.value } : item))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Current focus</p><p className="text-[10px] text-muted-foreground">A short summary of where attention is concentrated.</p></div><button onClick={addFocus} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add focus</button></div>{focusItems.map((focus, index) => <input key={index} value={focus} onChange={event => setFocusItems(current => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Mobile booking flow redesign" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><p className="text-[12px] font-semibold text-foreground">First task</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. This creates normal Binnie work inside the project.</p><input value={firstTask.title} onChange={event => setFirstTask(current => ({ ...current, title: event.target.value }))} placeholder="Add the first piece of work" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />{firstTask.title && <div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={firstTask.area} onChange={event => setFirstTask(current => ({ ...current, area: event.target.value as AreaName }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Lead area</option>{allSelectedAreas.map(area => <option key={area}>{area}</option>)}</select><select value={firstTask.assigneeId} onChange={event => setFirstTask(current => ({ ...current, assigneeId: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Assignee / team</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={firstTask.targetDate} onChange={event => setFirstTask(current => ({ ...current, targetDate: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>}</section></div>}{error && <p role="alert" className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{error}</p>}</div><div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4 sm:px-6"><button onClick={() => step === 1 ? onClose() : setStep(current => (current - 1) as ProjectCreationStep)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">{step === 1 ? "Cancel" : "← Back"}</button><div className="ml-auto flex flex-wrap gap-2">{step === 1 && <button onClick={() => void create(false)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create now</button>}{step < 3 ? <button onClick={() => validateBasics() && setStep(current => (current + 1) as ProjectCreationStep)} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Continue →</button> : <><button onClick={() => void create(true)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create &amp; Add Work</button><button onClick={() => void create(false)} disabled={saving} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50">{saving ? "Creating…" : "Create Project"}</button></>}</div></div>{similarProject && <div className="absolute inset-0 flex items-center justify-center bg-foreground/10 p-5"><div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl"><p className="text-sm font-semibold text-foreground">A similar project already exists.</p><button onClick={() => { onClose(); onCreated(similarProject, false); }} className="mt-2 w-full rounded-xl border border-border bg-muted/35 p-3 text-left text-[12px] font-medium text-primary hover:bg-muted">{similarProject.name}<span className="mt-1 block text-[10px] font-normal text-muted-foreground">Open existing</span></button><div className="mt-4 flex justify-end gap-2"><button onClick={() => setSimilarProject(null)} className="rounded-lg px-2.5 py-2 text-[11px] text-muted-foreground">Cancel</button><button onClick={() => { setSimilarProject(null); void create(false, true); }} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Create Anyway</button></div></div></div>}</div></div>;
 }
 
 /* The compact JSX card renderer intentionally uses several inline expressions. */
 /* eslint-disable @typescript-eslint/no-unused-expressions */
-function CanonicalProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void }) {
+function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void }) {
+  useTaskStoreVersion();
   const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [creating, setCreating] = useState(false);
+  const [duplicateSource, setDuplicateSource] = useState<ProjectDTO | null>(null);
+  const [deleting, setDeleting] = useState<ProjectDTO | null>(null);
   const projects = CANONICAL_PROJECTS.filter(project => project.status !== "archived");
   const taskSummary = (project: ProjectDTO) => {
     const tasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
@@ -5864,12 +5816,31 @@ function CanonicalProjectsView({ onProjectClick, onAddWork }: { onProjectClick: 
   const attentionProjects = projects.filter(project => taskSummary(project).attention);
   const visible = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : projects;
   const gridClass = viewMode === "grid" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 gap-3";
-  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button></div></div><div className="mb-5 flex flex-wrap items-center gap-1.5">{[{ id: "all" as const, label: "All", count: projects.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}</div>{visible.length ? <div className={gridClass}>{visible.map(project => { const summary = taskSummary(project); const color = ORG_COLORS[project.organization] || ORG_COLORS.Personal; const next = summary.tasks.find(task => task.status !== "done"); return <button key={project.id} onClick={() => onProjectClick(project.id)} className={cn("binnie-card binnie-card-hover min-h-64 p-5 text-left", color.card)}><div className="flex items-start gap-3"><span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color.bg, color.text)}><FolderKanban className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-[15px] font-semibold text-foreground">{project.name}</h2>{summary.attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[9px] font-medium text-warning">Needs attention</span>}</div><p className="mt-1 text-[11px] text-muted-foreground">{project.organization}{project.leadArea ? ` · ${project.leadArea}` : ""}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground" /></div><div className="mt-6 flex items-end gap-3"><p className={cn("text-2xl font-bold", color.text)}>{summary.tasks.length ? `${summary.progress}%` : "Not started"}</p><div className="min-w-0 flex-1 pb-1"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${summary.progress}%` }} /></div></div></div><div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground"><span>{summary.done} / {summary.tasks.length} tasks</span><span>{project.targetDate ? `Target: ${taskDateLabel(project.targetDate)}` : "No target date"}</span></div><div className="mt-4 border-t border-border/80 pt-3"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Current focus</p><p className="mt-1 truncate text-[12px] text-foreground">{project.focusItems[0]?.text || "No work added yet"}</p><p className="mt-3 truncate text-[10px] text-muted-foreground">{next ? `Next: ${next.title}` : "No active work yet"}</p></div></button>; })}</div> : <div className="binnie-card py-16 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No projects here yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Create a focused space for work that belongs together.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Project</button></div>}{creating && <CreateProjectDrawer onClose={() => setCreating(false)} onCreated={(project, addWork) => { setCreating(false); addWork ? onAddWork(project) : onProjectClick(project.id); }} />}</div>;
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div>
+      <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button></div>
+    </div>
+    <div className="mb-5 flex flex-wrap items-center gap-1.5">{[{ id: "all" as const, label: "All", count: projects.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}</div>
+    {visible.length ? <div className={gridClass}>{visible.map(project => {
+      const summary = taskSummary(project);
+      const color = ORG_COLORS[project.organization] || ORG_COLORS.Personal;
+      const next = summary.tasks.find(task => task.status !== "done");
+      return <article key={project.id} className={cn("binnie-card binnie-card-hover relative min-h-64 p-5", color.card)}>
+        <button onClick={() => onProjectClick(project.id)} className="block w-full text-left">
+          <div className="flex items-start gap-3 pr-8"><span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color.bg, color.text)}><FolderKanban className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-[15px] font-semibold text-foreground">{project.name}</h2>{summary.attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[9px] font-medium text-warning">Needs attention</span>}</div><p className="mt-1 text-[11px] text-muted-foreground">{project.organization}{project.leadArea ? ` · ${project.leadArea}` : ""}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground" /></div>
+          <div className="mt-6 flex items-end gap-3"><p className={cn("text-2xl font-bold", color.text)}>{summary.tasks.length ? `${summary.progress}%` : "Not started"}</p><div className="min-w-0 flex-1 pb-1"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${summary.progress}%` }} /></div></div></div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground"><span>{summary.done} / {summary.tasks.length} tasks</span><span>{project.targetDate ? `Target: ${taskDateLabel(project.targetDate)}` : "No target date"}</span></div>
+          <div className="mt-4 border-t border-border/80 pt-3"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Current focus</p><p className="mt-1 truncate text-[12px] text-foreground">{project.focusItems[0]?.text || "No work added yet"}</p><p className="mt-3 truncate text-[10px] text-muted-foreground">{next ? `Next: ${next.title}` : "No active work yet"}</p></div>
+        </button>
+        <div className="absolute right-3 top-3"><ProjectOverflowMenu project={project} onEdit={() => onProjectClick(project.id)} onDuplicate={() => { setDuplicateSource(project); setCreating(true); }} onDelete={() => setDeleting(project)} /></div>
+      </article>;
+    })}</div> : <div className="binnie-card py-16 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No projects here yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Create a focused space for work that belongs together.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Project</button></div>}
+    {creating && <CreateProjectDrawer initialProject={duplicateSource || undefined} onClose={() => { setCreating(false); setDuplicateSource(null); }} onCreated={(project, addWork) => { setCreating(false); setDuplicateSource(null); addWork ? onAddWork(project) : onProjectClick(project.id); }} />}
+    {deleting && <DeleteProjectConfirmation project={deleting} onClose={() => setDeleting(null)} onDeleted={() => setDeleting(null)} />}
+  </div>;
 }
 
-function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork?: (project: ProjectDTO) => void }) {
-  return taskStoreUsesServer ? <CanonicalProjectsView onProjectClick={onProjectClick} onAddWork={onAddWork || (() => {})} /> : <LegacyProjectsView onProjectClick={onProjectClick} />;
-}
 /* eslint-enable @typescript-eslint/no-unused-expressions */
 
 // ─── PHASE 3: WORKLOAD, NUDGES, AND TEMPLATES ─────────────────────────────────
@@ -6101,15 +6072,52 @@ const WORKSPACE_THEME_OPTIONS: { id: WorkspaceTheme; label: string; description:
   { id: "dark", label: "Dark", description: "Calm, low-light, and refined.", preview: "binnie-theme-preview-dark" },
 ];
 
-function ProfilePanel({ profile, theme, onThemeChange, onSave, onClose, onSignOut }: { profile: UserProfile; theme: WorkspaceTheme; onThemeChange: (theme: WorkspaceTheme) => void; onSave: (profile: UserProfile) => void; onClose: () => void; onSignOut: () => void }) {
+function ProfilePanel({ profile, theme, onSave, onResetDemoData, onClose, onSignOut }: { profile: UserProfile; theme: WorkspaceTheme; onSave: (profile: UserProfile, theme: WorkspaceTheme) => Promise<void>; onResetDemoData?: () => Promise<void>; onClose: () => void; onSignOut: () => void }) {
   const [draft, setDraft] = useState(profile);
+  const [draftTheme, setDraftTheme] = useState(theme);
   const [section, setSection] = useState<"profile" | "preferences" | "settings">("profile");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [resettingDemo, setResettingDemo] = useState(false);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   const update = (patch: Partial<UserProfile>) => setDraft(current => ({ ...current, ...patch }));
+  async function save() {
+    setSaveError("");
+    setSaved(false);
+    setSaving(true);
+    try {
+      await onSave(draft, draftTheme);
+      setSaved(true);
+    } catch (error) {
+      console.error("Could not save Binnie profile", error);
+      setSaveError(error instanceof Error ? error.message : "Couldn't save changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function resetDemoData() {
+    if (!onResetDemoData) return;
+    const confirmation = window.prompt('Type RESET DEMO DATA to rebuild the development workspace. This permanently removes current workspace records.');
+    if (confirmation !== "RESET DEMO DATA") {
+      setSaveError("Demo data was not reset.");
+      return;
+    }
+    setSaveError("");
+    setResettingDemo(true);
+    try {
+      await onResetDemoData();
+    } catch (error) {
+      console.error("Could not reset Binnie demo data", error);
+      setSaveError(error instanceof Error ? error.message : "Couldn't reset demo data. Please try again.");
+    } finally {
+      setResettingDemo(false);
+    }
+  }
   return (
     <div className="fixed inset-0 z-[80] flex justify-end" role="dialog" aria-modal="true" aria-label="Profile settings">
       <button aria-label="Close profile settings" onClick={onClose} className="absolute inset-0 cursor-default bg-foreground/10 backdrop-blur-[1px]" />
@@ -6117,12 +6125,12 @@ function ProfilePanel({ profile, theme, onThemeChange, onSave, onClose, onSignOu
         <div className="flex items-start justify-between border-b border-border px-5 py-5 sm:px-6"><div><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Your account</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Profile & preferences</h2></div><button onClick={onClose} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button></div>
         <div className="border-b border-border px-5 py-3 sm:px-6"><div className="flex gap-1 rounded-xl bg-muted/50 p-1">{[{ id: "profile" as const, label: "Profile" }, { id: "preferences" as const, label: "Preferences" }, { id: "settings" as const, label: "Settings" }].map(item => <button key={item.id} onClick={() => setSection(item.id)} className={cn("flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors", section === item.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div>
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-          <div className="mb-6 flex items-center gap-3"><Avatar name={draft.displayName || "Charlotte"} size="lg" /><div><p className="text-sm font-semibold text-foreground">{draft.displayName || "Charlotte"}</p><p className="text-[12px] text-muted-foreground">{draft.role}</p></div></div>
-          {section === "profile" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Display name<input value={draft.displayName} onChange={event => update({ displayName: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Role<input value={draft.role} onChange={event => update({ role: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Email <span className="font-normal">(optional)</span><input value={draft.email} onChange={event => update({ email: event.target.value })} type="email" className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label></div>}
+          <div className="mb-6 flex items-center gap-3"><Avatar name={draft.displayName || "Charlotte"} size="lg" /><div><p className="text-sm font-semibold text-foreground">{draft.displayName || "Charlotte"}</p><p className="text-[12px] text-muted-foreground">{profileRoleLabel(draft.role)}</p></div></div>
+          {section === "profile" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Display name<input value={draft.displayName} onChange={event => update({ displayName: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Role<select value={draft.role} onChange={event => update({ role: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option value="owner">Owner</option><option value="organization_manager">Organization manager</option><option value="department_manager">Department manager</option><option value="employee">Employee</option></select></label><label className="block text-[11px] font-medium text-muted-foreground">Email <span className="font-normal">(optional)</span><input value={draft.email} onChange={event => update({ email: event.target.value })} type="email" className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label></div>}
           {section === "preferences" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Timezone<select value={draft.timezone} onChange={event => update({ timezone: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>Asia/Jakarta</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option></select></label><label className="block text-[11px] font-medium text-muted-foreground">Preferred date format<select value={draft.dateFormat} onChange={event => update({ dateFormat: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>12 Aug 2026</option><option>Aug 12, 2026</option><option>2026-08-12</option></select></label></div>}
-          {section === "settings" && <section><div className="mb-4"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Appearance</p><h3 className="binnie-heading mt-1 text-lg font-bold text-foreground">Workspace Theme</h3><p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">Choose the atmosphere that feels best to work in.</p></div><div className="space-y-2.5">{WORKSPACE_THEME_OPTIONS.map(option => { const isSelected = theme === option.id; return <button key={option.id} onClick={() => onThemeChange(option.id)} className={cn("w-full rounded-2xl border p-3 text-left transition-colors", isSelected ? "border-primary/35 bg-secondary/50 shadow-sm" : "border-border bg-card hover:border-primary/25 hover:bg-muted/35")} aria-pressed={isSelected}><div className={cn("mb-3 rounded-xl border border-white/70 p-2.5", option.preview)}><div className="rounded-lg bg-[var(--preview-background)] p-2"><div className="flex h-9 items-center gap-2 rounded-md bg-[var(--preview-surface)] px-2 shadow-sm"><span className="h-4 w-4 rounded bg-[var(--preview-primary)]" /><span className="h-2 flex-1 rounded-full bg-[var(--preview-secondary)]" /><span className="h-3 w-3 rounded-full bg-[var(--preview-accent)]" /></div></div></div><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-foreground">{option.label}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{option.description}</p></div>{isSelected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="h-3 w-3" /></span>}</div></button>; })}</div></section>}
+          {section === "settings" && <section><div className="mb-4"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Appearance</p><h3 className="binnie-heading mt-1 text-lg font-bold text-foreground">Workspace Theme</h3><p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">Choose the atmosphere that feels best to work in.</p></div><div className="space-y-2.5">{WORKSPACE_THEME_OPTIONS.map(option => { const isSelected = draftTheme === option.id; return <button key={option.id} onClick={() => setDraftTheme(option.id)} className={cn("w-full rounded-2xl border p-3 text-left transition-colors", isSelected ? "border-primary/35 bg-secondary/50 shadow-sm" : "border-border bg-card hover:border-primary/25 hover:bg-muted/35")} aria-pressed={isSelected}><div className={cn("mb-3 rounded-xl border border-white/70 p-2.5", option.preview)}><div className="rounded-lg bg-[var(--preview-background)] p-2"><div className="flex h-9 items-center gap-2 rounded-md bg-[var(--preview-surface)] px-2 shadow-sm"><span className="h-4 w-4 rounded bg-[var(--preview-primary)]" /><span className="h-2 flex-1 rounded-full bg-[var(--preview-secondary)]" /><span className="h-3 w-3 rounded-full bg-[var(--preview-accent)]" /></div></div></div><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-foreground">{option.label}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{option.description}</p></div>{isSelected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="h-3 w-3" /></span>}</div></button>; })}</div>{onResetDemoData && <div className="mt-8 rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-4"><p className="text-[10px] font-medium uppercase tracking-[0.1em] text-overdue">Development tools</p><p className="mt-2 text-[12px] font-medium text-foreground">Reset Demo Data</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">This is the only action that intentionally rebuilds the development workspace. It requires the exact confirmation phrase.</p><button onClick={() => void resetDemoData()} disabled={resettingDemo} className="mt-3 rounded-xl border border-overdue/25 bg-card px-3 py-2 text-[11px] font-medium text-overdue hover:bg-overdue/10 disabled:opacity-50">{resettingDemo ? "Resetting…" : "Reset Demo Data"}</button></div>}</section>}
         </div>
-        <div className="flex items-center justify-between border-t border-border px-5 py-4 sm:px-6"><button onClick={onSignOut} className="rounded-lg px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Sign Out</button><button onClick={() => { onSave(draft); onClose(); }} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Save changes</button></div>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-4 sm:px-6"><button onClick={onSignOut} disabled={saving} className="rounded-lg px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50">Sign Out</button><div className="flex items-center gap-3">{saveError && <p role="alert" className="max-w-48 text-right text-[11px] text-overdue">{saveError}</p>}{saved && <p role="status" className="text-[11px] font-medium text-success">✓ Changes saved</p>}<button onClick={() => void save()} disabled={saving} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50">{saving ? "Saving…" : "Save changes"}</button></div></div>
       </aside>
     </div>
   );
@@ -6209,7 +6217,7 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
           <Avatar name={profile.displayName || "Charlotte"} size="sm" />
           {!collapsed && <div className="flex-1 min-w-0">
             <p className="text-[12px] font-medium text-foreground truncate">{profile.displayName || "Charlotte"}</p>
-            <p className="text-[10px] text-muted-foreground">{profile.role}</p>
+            <p className="text-[10px] text-muted-foreground">{profileRoleLabel(profile.role)}</p>
           </div>}
           {!collapsed && <Settings className="w-3.5 h-3.5 text-muted-foreground" />}
           {collapsed && <span role="tooltip" className="pointer-events-none absolute left-[calc(100%+0.65rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground opacity-0 shadow-[0_5px_16px_rgb(35_41_61_/_0.10)] transition-opacity group-hover:opacity-100">Profile & settings</span>}
@@ -6227,7 +6235,6 @@ function SharedWorkspaceRequired() {
 
 export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: WorkspaceSnapshotDTO }) {
   const router = useRouter();
-  const initialActor = initialSnapshot?.directory.find(person => person.id === initialSnapshot.actorId);
   const taskStoreRevision = useTaskStoreVersion();
   const [view, setView] = useState<NavView>("home");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -6237,8 +6244,12 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>("soft");
-  const [profile, setProfile] = useState<UserProfile>(() => ({ directoryId: initialActor?.id || "person-charlotte", displayName: initialActor?.name || "Charlotte", role: initialActor?.memberships.some(membership => membership.role === "owner") ? "Owner" : "Employee", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026" }));
+  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() => initialSnapshot?.profile.theme || "soft");
+  const [profile, setProfile] = useState<UserProfile>(() => initialSnapshot ? canonicalProfileToUserProfile(initialSnapshot.profile) : { directoryId: "person-charlotte", displayName: "Charlotte", role: "employee", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026" });
+  // Keep the server snapshot authoritative through Fast Refresh; no demo data
+  // is rendered while this client projection is being synchronized.
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
+  const migratedLegacyPreferences = useRef(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [accountMessage, setAccountMessage] = useState("");
   const [legacyTasksToImport, setLegacyTasksToImport] = useState<Task[] | null>(null);
@@ -6246,9 +6257,14 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
 
   useEffect(() => {
     if (initialSnapshot) {
+      const timer = window.setTimeout(() => {
       hydrateCanonicalTaskStore(initialSnapshot);
-    } else {
-      initializeTaskStore();
+      setProfile(canonicalProfileToUserProfile(initialSnapshot.profile));
+      setWorkspaceTheme(initialSnapshot.profile.theme);
+      document.documentElement.dataset.theme = initialSnapshot.profile.theme;
+      setWorkspaceHydrated(true);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [initialSnapshot]);
   void taskStoreRevision;
@@ -6302,19 +6318,17 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
   }, []);
 
   useEffect(() => {
-    const themeTimer = window.setTimeout(() => {
-      const savedTheme = getStoredPreference(BINNIE_WORKSPACE_THEME_STORAGE_KEY, LEGACY_LUMA_STORAGE_KEYS.workspaceTheme);
-      const theme: WorkspaceTheme = savedTheme === "grounded"
-        ? "clear"
-        : savedTheme === "clear" || savedTheme === "dark"
-          ? savedTheme
-          : "soft";
-      if (savedTheme === "grounded") window.localStorage.setItem(BINNIE_WORKSPACE_THEME_STORAGE_KEY, "clear");
-      setWorkspaceTheme(theme);
-      document.documentElement.dataset.theme = theme;
-    }, 0);
-    return () => window.clearTimeout(themeTimer);
-  }, []);
+    if (!initialSnapshot || initialSnapshot.profile.storageVersion !== 0 || migratedLegacyPreferences.current) return;
+    migratedLegacyPreferences.current = true;
+    const savedTheme = getStoredPreference(BINNIE_WORKSPACE_THEME_STORAGE_KEY, LEGACY_LUMA_STORAGE_KEYS.workspaceTheme);
+    const theme: WorkspaceTheme = savedTheme === "grounded" ? "clear" : savedTheme === "clear" || savedTheme === "dark" ? savedTheme : initialSnapshot.profile.theme;
+    if (savedTheme === "grounded") window.localStorage.setItem(BINNIE_WORKSPACE_THEME_STORAGE_KEY, "clear");
+    if (theme === initialSnapshot.profile.theme) return;
+    void (async () => {
+      const result = await updateProfileAction({ ...initialSnapshot.profile, theme });
+      if (!result.ok) console.error("Could not migrate saved Binnie theme", result.message);
+    })();
+  }, [initialSnapshot]);
 
   function toggleSidebar() {
     const next = !sidebarCollapsed;
@@ -6322,12 +6336,35 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     window.localStorage.setItem(BINNIE_SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
   }
 
-  function changeWorkspaceTheme(theme: WorkspaceTheme) {
-    setWorkspaceTheme(theme);
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(BINNIE_WORKSPACE_THEME_STORAGE_KEY, theme);
-    setAccountMessage(`${theme.charAt(0).toUpperCase()}${theme.slice(1)} workspace theme applied`);
+  async function saveProfile(nextProfile: UserProfile, nextTheme: WorkspaceTheme) {
+    const result = await updateProfileAction({
+      displayName: nextProfile.displayName,
+      role: nextProfile.role,
+      email: nextProfile.email,
+      timezone: nextProfile.timezone,
+      dateFormat: nextProfile.dateFormat,
+      theme: nextTheme,
+    });
+    if (!result.ok) {
+      console.error("Could not persist Binnie profile", result.message);
+      throw new Error(result.message || "Couldn't save changes. Please try again.");
+    }
+    const savedProfile = canonicalProfileToUserProfile(result.data);
+    setProfile(savedProfile);
+    setWorkspaceTheme(result.data.theme);
+    document.documentElement.dataset.theme = result.data.theme;
+    const directoryPerson = PEOPLE_DIRECTORY.find(person => person.id === savedProfile.directoryId);
+    if (directoryPerson) replaceDirectoryPerson(directoryPerson.id, person => ({ ...person, name: savedProfile.displayName, email: savedProfile.email || undefined }));
+    setAccountMessage("✓ Changes saved");
     window.setTimeout(() => setAccountMessage(""), 2400);
+    router.refresh();
+  }
+
+  async function resetDevelopmentDemoData() {
+    const result = await resetDemoDataAction({ confirmation: "RESET DEMO DATA" });
+    if (!result.ok) throw new Error(result.message || "Couldn't reset demo data. Please try again.");
+    setProfileOpen(false);
+    router.refresh();
   }
 
   async function importLegacyTaskStore() {
@@ -6401,7 +6438,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
       case "templates": return <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} />;
       case "project-detail": return selectedProject
         ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />
-        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
+        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />;
       case "search": return <SearchView onTaskClick={setSelectedTask} />;
       default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
     }
@@ -6410,6 +6447,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
   // Never drop back to browser-local project/task creation. That would create a
   // second source of truth and make the shared-work promises unreliable.
   if (!initialSnapshot) return <SharedWorkspaceRequired />;
+  if (!workspaceHydrated) return <main className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Loading your saved workspace…</main>;
 
   return (
     <CurrentUserContext.Provider value={profile.directoryId}>
@@ -6433,7 +6471,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
         </div>
       )}
       {selectedTask && <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />}
-      {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onThemeChange={changeWorkspaceTheme} onSave={nextProfile => { setProfile(nextProfile); setAccountMessage("Profile updated"); window.setTimeout(() => setAccountMessage(""), 2400); }} onClose={() => setProfileOpen(false)} onSignOut={() => { setProfileOpen(false); setAccountMessage("Signed out of this local preview"); window.setTimeout(() => setAccountMessage(""), 2400); }} />}
+      {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onSave={saveProfile} onResetDemoData={process.env.NODE_ENV === "development" ? resetDevelopmentDemoData : undefined} onClose={() => setProfileOpen(false)} onSignOut={() => { setProfileOpen(false); setAccountMessage("Signed out of this local preview"); window.setTimeout(() => setAccountMessage(""), 2400); }} />}
       {accountMessage && <div role="status" className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl border border-success/20 bg-card px-3.5 py-2 text-[12px] font-medium text-success shadow-[0_8px_22px_rgb(35_41_61_/_0.10)]">{accountMessage}</div>}
     </div>
     </CurrentUserContext.Provider>

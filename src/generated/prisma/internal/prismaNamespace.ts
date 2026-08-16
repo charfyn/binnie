@@ -406,6 +406,7 @@ export const ModelName = {
   ProjectMilestone: 'ProjectMilestone',
   ProjectFocusItem: 'ProjectFocusItem',
   Principal: 'Principal',
+  PrincipalPreference: 'PrincipalPreference',
   PrincipalMembership: 'PrincipalMembership',
   Task: 'Task',
   TaskChecklistItem: 'TaskChecklistItem',
@@ -444,7 +445,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "workspace" | "organization" | "department" | "project" | "projectInvolvedDepartment" | "projectMember" | "projectMilestone" | "projectFocusItem" | "principal" | "principalMembership" | "task" | "taskChecklistItem" | "taskRecurrence" | "savedView" | "taskInvolvedDepartment" | "taskAssignment" | "taskDependency" | "taskReviewCycle" | "taskUpdate" | "taskResource" | "taskEvent" | "inboxCapture" | "captureTask" | "legacyImport" | "workflowTemplate" | "workflowTemplateInvolvedDepartment" | "workflowTemplateTask" | "workflowTemplateChecklistItem" | "workflowTemplateDependency" | "workflowTemplateMilestone" | "workflowTemplateFocusItem" | "workNudge"
+    modelProps: "workspace" | "organization" | "department" | "project" | "projectInvolvedDepartment" | "projectMember" | "projectMilestone" | "projectFocusItem" | "principal" | "principalPreference" | "principalMembership" | "task" | "taskChecklistItem" | "taskRecurrence" | "savedView" | "taskInvolvedDepartment" | "taskAssignment" | "taskDependency" | "taskReviewCycle" | "taskUpdate" | "taskResource" | "taskEvent" | "inboxCapture" | "captureTask" | "legacyImport" | "workflowTemplate" | "workflowTemplateInvolvedDepartment" | "workflowTemplateTask" | "workflowTemplateChecklistItem" | "workflowTemplateDependency" | "workflowTemplateMilestone" | "workflowTemplateFocusItem" | "workNudge"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1111,6 +1112,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.PrincipalCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.PrincipalCountAggregateOutputType> | number
+        }
+      }
+    }
+    PrincipalPreference: {
+      payload: Prisma.$PrincipalPreferencePayload<ExtArgs>
+      fields: Prisma.PrincipalPreferenceFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PrincipalPreferenceFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PrincipalPreferenceFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>
+        }
+        findFirst: {
+          args: Prisma.PrincipalPreferenceFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PrincipalPreferenceFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>
+        }
+        findMany: {
+          args: Prisma.PrincipalPreferenceFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>[]
+        }
+        create: {
+          args: Prisma.PrincipalPreferenceCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>
+        }
+        createMany: {
+          args: Prisma.PrincipalPreferenceCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PrincipalPreferenceCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>[]
+        }
+        delete: {
+          args: Prisma.PrincipalPreferenceDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>
+        }
+        update: {
+          args: Prisma.PrincipalPreferenceUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>
+        }
+        deleteMany: {
+          args: Prisma.PrincipalPreferenceDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PrincipalPreferenceUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PrincipalPreferenceUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>[]
+        }
+        upsert: {
+          args: Prisma.PrincipalPreferenceUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PrincipalPreferencePayload>
+        }
+        aggregate: {
+          args: Prisma.PrincipalPreferenceAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePrincipalPreference>
+        }
+        groupBy: {
+          args: Prisma.PrincipalPreferenceGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PrincipalPreferenceGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PrincipalPreferenceCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PrincipalPreferenceCountAggregateOutputType> | number
         }
       }
     }
@@ -2870,6 +2945,7 @@ export const OrganizationScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
   name: 'name',
+  description: 'description',
   aliases: 'aliases'
 } as const
 
@@ -2958,6 +3034,20 @@ export const PrincipalScalarFieldEnum = {
 } as const
 
 export type PrincipalScalarFieldEnum = (typeof PrincipalScalarFieldEnum)[keyof typeof PrincipalScalarFieldEnum]
+
+
+export const PrincipalPreferenceScalarFieldEnum = {
+  principalId: 'principalId',
+  workspaceId: 'workspaceId',
+  timezone: 'timezone',
+  dateFormat: 'dateFormat',
+  theme: 'theme',
+  storageVersion: 'storageVersion',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PrincipalPreferenceScalarFieldEnum = (typeof PrincipalPreferenceScalarFieldEnum)[keyof typeof PrincipalPreferenceScalarFieldEnum]
 
 
 export const PrincipalMembershipScalarFieldEnum = {
@@ -3836,6 +3926,7 @@ export type GlobalOmitConfig = {
   projectMilestone?: Prisma.ProjectMilestoneOmit
   projectFocusItem?: Prisma.ProjectFocusItemOmit
   principal?: Prisma.PrincipalOmit
+  principalPreference?: Prisma.PrincipalPreferenceOmit
   principalMembership?: Prisma.PrincipalMembershipOmit
   task?: Prisma.TaskOmit
   taskChecklistItem?: Prisma.TaskChecklistItemOmit

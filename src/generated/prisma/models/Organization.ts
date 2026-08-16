@@ -28,18 +28,21 @@ export type OrganizationMinAggregateOutputType = {
   id: string | null
   workspaceId: string | null
   name: string | null
+  description: string | null
 }
 
 export type OrganizationMaxAggregateOutputType = {
   id: string | null
   workspaceId: string | null
   name: string | null
+  description: string | null
 }
 
 export type OrganizationCountAggregateOutputType = {
   id: number
   workspaceId: number
   name: number
+  description: number
   aliases: number
   _all: number
 }
@@ -49,18 +52,21 @@ export type OrganizationMinAggregateInputType = {
   id?: true
   workspaceId?: true
   name?: true
+  description?: true
 }
 
 export type OrganizationMaxAggregateInputType = {
   id?: true
   workspaceId?: true
   name?: true
+  description?: true
 }
 
 export type OrganizationCountAggregateInputType = {
   id?: true
   workspaceId?: true
   name?: true
+  description?: true
   aliases?: true
   _all?: true
 }
@@ -141,6 +147,7 @@ export type OrganizationGroupByOutputType = {
   id: string
   workspaceId: string
   name: string
+  description: string | null
   aliases: string[]
   _count: OrganizationCountAggregateOutputType | null
   _min: OrganizationMinAggregateOutputType | null
@@ -169,6 +176,7 @@ export type OrganizationWhereInput = {
   id?: Prisma.StringFilter<"Organization"> | string
   workspaceId?: Prisma.StringFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
+  description?: Prisma.StringNullableFilter<"Organization"> | string | null
   aliases?: Prisma.StringNullableListFilter<"Organization">
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   departments?: Prisma.DepartmentListRelationFilter
@@ -183,6 +191,7 @@ export type OrganizationOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  description?: Prisma.SortOrderInput | Prisma.SortOrder
   aliases?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
   departments?: Prisma.DepartmentOrderByRelationAggregateInput
@@ -201,6 +210,7 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.OrganizationWhereInput | Prisma.OrganizationWhereInput[]
   workspaceId?: Prisma.StringFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
+  description?: Prisma.StringNullableFilter<"Organization"> | string | null
   aliases?: Prisma.StringNullableListFilter<"Organization">
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   departments?: Prisma.DepartmentListRelationFilter
@@ -215,6 +225,7 @@ export type OrganizationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  description?: Prisma.SortOrderInput | Prisma.SortOrder
   aliases?: Prisma.SortOrder
   _count?: Prisma.OrganizationCountOrderByAggregateInput
   _max?: Prisma.OrganizationMaxOrderByAggregateInput
@@ -228,12 +239,14 @@ export type OrganizationScalarWhereWithAggregatesInput = {
   id?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   workspaceId?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   name?: Prisma.StringWithAggregatesFilter<"Organization"> | string
+  description?: Prisma.StringNullableWithAggregatesFilter<"Organization"> | string | null
   aliases?: Prisma.StringNullableListFilter<"Organization">
 }
 
 export type OrganizationCreateInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
@@ -248,6 +261,7 @@ export type OrganizationUncheckedCreateInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
@@ -260,6 +274,7 @@ export type OrganizationUncheckedCreateInput = {
 export type OrganizationUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
@@ -274,6 +289,7 @@ export type OrganizationUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -287,12 +303,14 @@ export type OrganizationCreateManyInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
 }
 
 export type OrganizationUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
 }
 
@@ -300,6 +318,7 @@ export type OrganizationUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
 }
 
@@ -330,6 +349,7 @@ export type OrganizationCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  description?: Prisma.SortOrder
   aliases?: Prisma.SortOrder
 }
 
@@ -337,12 +357,14 @@ export type OrganizationMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  description?: Prisma.SortOrder
 }
 
 export type OrganizationMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  description?: Prisma.SortOrder
 }
 
 export type OrganizationScalarRelationFilter = {
@@ -399,6 +421,10 @@ export type OrganizationUncheckedUpdateManyWithoutWorkspaceNestedInput = {
 
 export type OrganizationCreatealiasesInput = {
   set: string[]
+}
+
+export type NullableStringFieldUpdateOperationsInput = {
+  set?: string | null
 }
 
 export type OrganizationUpdatealiasesInput = {
@@ -499,6 +525,7 @@ export type OrganizationUpdateOneRequiredWithoutWorkflowTemplatesNestedInput = {
 export type OrganizationCreateWithoutWorkspaceInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
@@ -511,6 +538,7 @@ export type OrganizationCreateWithoutWorkspaceInput = {
 export type OrganizationUncheckedCreateWithoutWorkspaceInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
@@ -553,12 +581,14 @@ export type OrganizationScalarWhereInput = {
   id?: Prisma.StringFilter<"Organization"> | string
   workspaceId?: Prisma.StringFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
+  description?: Prisma.StringNullableFilter<"Organization"> | string | null
   aliases?: Prisma.StringNullableListFilter<"Organization">
 }
 
 export type OrganizationCreateWithoutDepartmentsInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
@@ -572,6 +602,7 @@ export type OrganizationUncheckedCreateWithoutDepartmentsInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
@@ -599,6 +630,7 @@ export type OrganizationUpdateToOneWithWhereWithoutDepartmentsInput = {
 export type OrganizationUpdateWithoutDepartmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
@@ -612,6 +644,7 @@ export type OrganizationUncheckedUpdateWithoutDepartmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -623,6 +656,7 @@ export type OrganizationUncheckedUpdateWithoutDepartmentsInput = {
 export type OrganizationCreateWithoutProjectsInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
@@ -636,6 +670,7 @@ export type OrganizationUncheckedCreateWithoutProjectsInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
@@ -663,6 +698,7 @@ export type OrganizationUpdateToOneWithWhereWithoutProjectsInput = {
 export type OrganizationUpdateWithoutProjectsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
@@ -676,6 +712,7 @@ export type OrganizationUncheckedUpdateWithoutProjectsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -687,6 +724,7 @@ export type OrganizationUncheckedUpdateWithoutProjectsInput = {
 export type OrganizationCreateWithoutMembershipsInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
@@ -700,6 +738,7 @@ export type OrganizationUncheckedCreateWithoutMembershipsInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
@@ -727,6 +766,7 @@ export type OrganizationUpdateToOneWithWhereWithoutMembershipsInput = {
 export type OrganizationUpdateWithoutMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
@@ -740,6 +780,7 @@ export type OrganizationUncheckedUpdateWithoutMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -751,6 +792,7 @@ export type OrganizationUncheckedUpdateWithoutMembershipsInput = {
 export type OrganizationCreateWithoutTasksInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
@@ -764,6 +806,7 @@ export type OrganizationUncheckedCreateWithoutTasksInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
@@ -791,6 +834,7 @@ export type OrganizationUpdateToOneWithWhereWithoutTasksInput = {
 export type OrganizationUpdateWithoutTasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
@@ -804,6 +848,7 @@ export type OrganizationUncheckedUpdateWithoutTasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -815,6 +860,7 @@ export type OrganizationUncheckedUpdateWithoutTasksInput = {
 export type OrganizationCreateWithoutResourcesInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
@@ -828,6 +874,7 @@ export type OrganizationUncheckedCreateWithoutResourcesInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
@@ -855,6 +902,7 @@ export type OrganizationUpdateToOneWithWhereWithoutResourcesInput = {
 export type OrganizationUpdateWithoutResourcesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
@@ -868,6 +916,7 @@ export type OrganizationUncheckedUpdateWithoutResourcesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -879,6 +928,7 @@ export type OrganizationUncheckedUpdateWithoutResourcesInput = {
 export type OrganizationCreateWithoutWorkflowTemplatesInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
@@ -892,6 +942,7 @@ export type OrganizationUncheckedCreateWithoutWorkflowTemplatesInput = {
   id?: string
   workspaceId: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
@@ -919,6 +970,7 @@ export type OrganizationUpdateToOneWithWhereWithoutWorkflowTemplatesInput = {
 export type OrganizationUpdateWithoutWorkflowTemplatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
@@ -932,6 +984,7 @@ export type OrganizationUncheckedUpdateWithoutWorkflowTemplatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -943,12 +996,14 @@ export type OrganizationUncheckedUpdateWithoutWorkflowTemplatesInput = {
 export type OrganizationCreateManyWorkspaceInput = {
   id?: string
   name: string
+  description?: string | null
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
 }
 
 export type OrganizationUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
@@ -961,6 +1016,7 @@ export type OrganizationUpdateWithoutWorkspaceInput = {
 export type OrganizationUncheckedUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -973,6 +1029,7 @@ export type OrganizationUncheckedUpdateWithoutWorkspaceInput = {
 export type OrganizationUncheckedUpdateManyWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
 }
 
@@ -1056,6 +1113,7 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  description?: boolean
   aliases?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   departments?: boolean | Prisma.Organization$departmentsArgs<ExtArgs>
@@ -1071,6 +1129,7 @@ export type OrganizationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  description?: boolean
   aliases?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
@@ -1079,6 +1138,7 @@ export type OrganizationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  description?: boolean
   aliases?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
@@ -1087,10 +1147,11 @@ export type OrganizationSelectScalar = {
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  description?: boolean
   aliases?: boolean
 }
 
-export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "aliases", ExtArgs["result"]["organization"]>
+export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "description" | "aliases", ExtArgs["result"]["organization"]>
 export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   departments?: boolean | Prisma.Organization$departmentsArgs<ExtArgs>
@@ -1123,6 +1184,7 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     id: string
     workspaceId: string
     name: string
+    description: string | null
     aliases: string[]
   }, ExtArgs["result"]["organization"]>
   composites: {}
@@ -1557,6 +1619,7 @@ export interface OrganizationFieldRefs {
   readonly id: Prisma.FieldRef<"Organization", 'String'>
   readonly workspaceId: Prisma.FieldRef<"Organization", 'String'>
   readonly name: Prisma.FieldRef<"Organization", 'String'>
+  readonly description: Prisma.FieldRef<"Organization", 'String'>
   readonly aliases: Prisma.FieldRef<"Organization", 'String[]'>
 }
     

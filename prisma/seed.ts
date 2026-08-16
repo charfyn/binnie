@@ -117,37 +117,32 @@ async function seedTask(input: {
       },
       events: { create: { actorId: "person-charlotte", type: TaskEventType.CREATED, summary: "Created from the Binnie starter workspace" } },
     },
-    update: {
-      title: input.title,
-      description: input.description,
-      priority: input.priority,
-      status: input.status,
-      startDate: input.startDate,
-      targetDate: input.targetDate,
-      deadline: input.deadline,
-      nextActionKind: input.nextActionKind,
-      nextActionPrincipalId: input.nextActionPrincipalId,
-      nextActionDepartmentId: input.nextActionDepartmentId,
-    },
+    // Starter records are create-only. Re-running seed must never overwrite
+    // someone else's task edits, assignments, or status.
+    update: {},
   });
 }
 
-async function main() {
-  await db.workspace.upsert({ where: { id: workspaceId }, create: { id: workspaceId, name: "Binnie" }, update: { name: "Binnie" } });
-  await db.organization.upsert({ where: { workspaceId_name: { workspaceId, name: "Villa Khayangan" } }, create: { id: villaId, workspaceId, name: "Villa Khayangan", aliases: ["khayangan", "villa", "penginapan", "vk"] }, update: { aliases: ["khayangan", "villa", "penginapan", "vk"] } });
-  await db.organization.upsert({ where: { workspaceId_name: { workspaceId, name: "Apotik" } }, create: { id: apotikId, workspaceId, name: "Apotik", aliases: ["apotik", "pharmacy", "obat"] }, update: { aliases: ["apotik", "pharmacy", "obat"] } });
-  await db.organization.upsert({ where: { workspaceId_name: { workspaceId, name: "Personal" } }, create: { id: personalId, workspaceId, name: "Personal", aliases: ["personal", "myself"] }, update: { aliases: ["personal", "myself"] } });
+/** Explicitly creates only missing starter records. It is never run by app
+ * startup, schema migration, or a normal save. */
+export async function seedDemoWorkspace() {
+  await db.workspace.upsert({ where: { id: workspaceId }, create: { id: workspaceId, name: "Binnie" }, update: {} });
+  await db.organization.upsert({ where: { workspaceId_name: { workspaceId, name: "Villa Khayangan" } }, create: { id: villaId, workspaceId, name: "Villa Khayangan", aliases: ["khayangan", "villa", "penginapan", "vk"] }, update: {} });
+  await db.organization.upsert({ where: { workspaceId_name: { workspaceId, name: "Apotik" } }, create: { id: apotikId, workspaceId, name: "Apotik", aliases: ["apotik", "pharmacy", "obat"] }, update: {} });
+  await db.organization.upsert({ where: { workspaceId_name: { workspaceId, name: "Personal" } }, create: { id: personalId, workspaceId, name: "Personal", aliases: ["personal", "myself"] }, update: {} });
 
   for (const [id, organizationId, name, aliases] of departments) {
-    await db.department.upsert({ where: { organizationId_name: { organizationId, name } }, create: { id, organizationId, name, aliases: [...aliases] }, update: { aliases: [...aliases] } });
+    await db.department.upsert({ where: { organizationId_name: { organizationId, name } }, create: { id, organizationId, name, aliases: [...aliases] }, update: {} });
   }
   for (const [id, type, name, email] of principals) {
-    await db.principal.upsert({ where: { workspaceId_name: { workspaceId, name } }, create: { id, workspaceId, type, name, email: email || undefined }, update: { type, email: email || undefined, active: true } });
+    await db.principal.upsert({ where: { workspaceId_name: { workspaceId, name } }, create: { id, workspaceId, type, name, email: email || undefined }, update: {} });
   }
-  await db.principalMembership.deleteMany({ where: { principal: { workspaceId } } });
-  await db.principalMembership.createMany({ data: memberships.map(([principalId, organizationId, departmentId, role]) => ({ principalId, organizationId, departmentId, role })) });
+  for (const [principalId, organizationId, departmentId, role] of memberships) {
+    const exists = await db.principalMembership.findFirst({ where: { principalId, organizationId, departmentId } });
+    if (!exists) await db.principalMembership.create({ data: { principalId, organizationId, departmentId, role } });
+  }
 
-  await db.project.upsert({ where: { organizationId_name: { organizationId: villaId, name: "Villa Website Revamp" } }, create: { id: "project-villa-website", workspaceId, organizationId: villaId, leadDepartmentId: "dept-villa-system-development", createdByPrincipalId: "person-charlotte", name: "Villa Website Revamp", targetDate: new Date("2026-09-30T00:00:00.000Z"), involvedDepartments: { create: [{ departmentId: "dept-villa-system-development" }, { departmentId: "dept-villa-marketing" }, { departmentId: "dept-villa-finance" }] }, members: { create: [{ principalId: "team-development", role: "OWNER" }, { principalId: "team-marketing", role: "MEMBER" }, { principalId: "team-finance", role: "MEMBER" }] }, milestones: { create: [{ title: "Pricing Approved", targetDate: new Date("2026-08-19T00:00:00.000Z") }, { title: "Website Ready", targetDate: new Date("2026-08-26T00:00:00.000Z") }] }, focusItems: { create: [{ text: "Mobile booking flow redesign", position: 0 }, { text: "Accommodation pricing section", position: 1 }] } }, update: { workspaceId, leadDepartmentId: "dept-villa-system-development" } });
+  await db.project.upsert({ where: { organizationId_name: { organizationId: villaId, name: "Villa Website Revamp" } }, create: { id: "project-villa-website", workspaceId, organizationId: villaId, leadDepartmentId: "dept-villa-system-development", createdByPrincipalId: "person-charlotte", name: "Villa Website Revamp", targetDate: new Date("2026-09-30T00:00:00.000Z"), involvedDepartments: { create: [{ departmentId: "dept-villa-system-development" }, { departmentId: "dept-villa-marketing" }, { departmentId: "dept-villa-finance" }] }, members: { create: [{ principalId: "team-development", role: "OWNER" }, { principalId: "team-marketing", role: "MEMBER" }, { principalId: "team-finance", role: "MEMBER" }] }, milestones: { create: [{ title: "Pricing Approved", targetDate: new Date("2026-08-19T00:00:00.000Z") }, { title: "Website Ready", targetDate: new Date("2026-08-26T00:00:00.000Z") }] }, focusItems: { create: [{ text: "Mobile booking flow redesign", position: 0 }, { text: "Accommodation pricing section", position: 1 }] } }, update: {} });
 
   const aug16 = new Date("2026-08-16T00:00:00.000Z");
   await seedTask({
@@ -176,13 +171,14 @@ async function main() {
   await db.taskDependency.upsert({
     where: { id: "dependency-t19-t15" },
     create: { id: "dependency-t19-t15", taskId: "t19", prerequisiteTaskId: "t15", ownerDepartmentId: "dept-villa-finance", type: DependencyType.START_BLOCKER, label: "Confirm accommodation pricing" },
-    update: { prerequisiteTaskId: "t15", ownerDepartmentId: "dept-villa-finance", type: DependencyType.START_BLOCKER, label: "Confirm accommodation pricing" },
+    update: {},
   });
-  await db.workspace.update({ where: { id: workspaceId }, data: { revision: { increment: 1 } } });
 }
 
-main().then(() => db.$disconnect()).catch(async (error) => {
-  console.error(error);
-  await db.$disconnect();
-  process.exit(1);
-});
+if (process.argv[1]?.endsWith("seed.ts")) {
+  seedDemoWorkspace().then(() => db.$disconnect()).catch(async (error) => {
+    console.error(error);
+    await db.$disconnect();
+    process.exit(1);
+  });
+}
