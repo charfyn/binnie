@@ -54,7 +54,7 @@ import {
   uploadProjectFileAction,
 } from "./actions";
 import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
-import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getTaskEffectiveDate as getCanonicalTaskEffectiveDate, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
   Building2, FolderKanban, Search, Sparkles, Paperclip,
@@ -117,7 +117,7 @@ interface Task {
   assignee?: string; assigneeIds?: string[]; nextActionBy: string;
   deadline?: string; deadlineDate?: string; startDate?: string; targetDate?: string; waitingSince?: string; responseDue?: string;
   lastUpdate?: string; isDelegated: boolean; isWaiting: boolean;
-  isOverdue?: boolean; isToday?: boolean; estimatedHours?: number;
+  isOverdue?: boolean; isToday?: boolean; estimatedHours?: number; estimatedMinutes?: number; actualMinutes?: number;
   carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; statusBeforeCompletion?: Exclude<TaskStatus, "done">; staleDays?: number;
   links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; description?: string; notes?: string; contributorIds?: string[]; activity?: Activity[];
   createdAt?: string; createdBy?: string; updatedAt?: string;
@@ -506,6 +506,8 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
     deadline: taskDateLabel(task.deadlineDate),
     deadlineDate: task.deadlineDate,
     followUpDate: task.followUpDate,
+    estimatedMinutes: task.estimatedMinutes,
+    actualMinutes: task.actualMinutes,
     responseDue: task.followUpDate ? taskDateLabel(task.followUpDate) : undefined,
     waitingSince: task.waitingSince,
     isDelegated: task.assigneeIds.some(id => id !== DEFAULT_CURRENT_USER_ID),
@@ -747,7 +749,7 @@ function archiveCanonicalTask(taskId: string) {
 
 function markTaskDone(task: Task, lastUpdate = "Just now") {
   const statusBeforeCompletion = task.status === "done" ? task.statusBeforeCompletion : task.status;
-  const scheduledDate = getTaskRelevantDate(task);
+  const scheduledDate = getTaskEffectiveDate(task);
   Object.assign(task, {
     status: "done" as const,
     statusBeforeCompletion: statusBeforeCompletion || "ready",
@@ -867,33 +869,12 @@ function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function getLegacyDeadlineDate(deadline?: string) {
-  const match = deadline?.trim().match(/^(?:[a-z]+,?\s+)?(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{4}))?$/i);
-  if (!match) return undefined;
-
-  const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-  const month = monthNames.indexOf(match[2].slice(0, 3).toLowerCase());
-  const day = Number(match[1]);
-  const year = Number(match[3] || getWorkspaceCalendarDate().getUTCFullYear());
-  const date = new Date(Date.UTC(year, month, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day ? isoDate(date) : undefined;
-}
-
-function getTaskRelevantDate(task: Task) {
-  // Calendar placement follows the task's target date. Completion is separate
-  // state, so finishing Friday work early never moves it into Thursday.
-  if (task.targetDate) return task.targetDate;
-  if (task.deadlineDate) return task.deadlineDate;
-  if (task.startDate) return task.startDate;
-  const today = getWorkspaceCalendarDate();
-  if (task.isToday || task.deadline === "Today") return isoDate(today);
-  if (task.deadline === "Tomorrow") { const tomorrow = new Date(today); tomorrow.setUTCDate(today.getUTCDate() + 1); return isoDate(tomorrow); }
-  if (task.deadline === "Yesterday") { const yesterday = new Date(today); yesterday.setUTCDate(today.getUTCDate() - 1); return isoDate(yesterday); }
-  return getLegacyDeadlineDate(task.deadline);
+function getTaskEffectiveDate(task: Task) {
+  return getCanonicalTaskEffectiveDate(task, getWorkspaceCalendarDate());
 }
 
 function isTaskOverdue(task: Task) {
-  const relevant = getTaskRelevantDate(task);
+  const relevant = getTaskEffectiveDate(task);
   return Boolean(task.isOverdue || (relevant && relevant < isoDate(getWorkspaceCalendarDate()) && isActiveTask(task)));
 }
 
@@ -902,12 +883,31 @@ function currentDirectoryName(currentUserId = DEFAULT_CURRENT_USER_ID) {
 }
 
 function taskIsForCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
-  return getTaskAssigneeIds(task).includes(currentUserId) || task.nextActionBy === "me" || task.nextActionBy === currentDirectoryName(currentUserId);
+  if (getTaskAssigneeIds(task).includes(currentUserId) || task.nextActionPrincipalId === currentUserId || task.nextActionBy === "me" || task.nextActionBy === currentDirectoryName(currentUserId)) return true;
+
+  const actor = PEOPLE_DIRECTORY.find(person => person.id === currentUserId);
+  if (!actor) return false;
+  const memberships = actor.memberships.filter(membership => membership.organization === task.org);
+
+  // An organization owner is accountable for making its work move. This keeps
+  // the owner view useful without changing ordinary employee/team scope.
+  if (memberships.some(membership => membership.role?.toLowerCase() === "owner")) return true;
+
+  const taskAreas = new Set(getTaskAreas(task));
+  const sharesResponsibleArea = memberships.some(membership => membership.area && taskAreas.has(membership.area));
+  if (sharesResponsibleArea) return true;
+
+  // Teams are represented by their department memberships. A task assigned to
+  // a team is therefore in a member's Today scope when they share that real
+  // organization + area membership; no hard-coded team mapping is needed.
+  return getTaskAssignees(task).some(assignee => assignee.type === "team" && assignee.memberships.some(teamMembership =>
+    memberships.some(membership => membership.area && membership.area === teamMembership.area),
+  ));
 }
 
 function getTasksForToday(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
   const today = isoDate(getWorkspaceCalendarDate());
-  return tasks.filter(task => isActiveTask(task) && getTaskRelevantDate(task) === today && taskIsForCurrentUser(task, currentUserId));
+  return tasks.filter(task => isActiveTask(task) && getTaskEffectiveDate(task) === today && taskIsForCurrentUser(task, currentUserId));
 }
 
 function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
@@ -917,7 +917,7 @@ function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
   const start = isoDate(monday);
   const end = new Date(monday); end.setUTCDate(end.getUTCDate() + 6);
   return tasks.filter(task => {
-    const relevant = getTaskRelevantDate(task);
+    const relevant = getTaskEffectiveDate(task);
     // The week board is both a plan and a record. Keep completed tasks until
     // their scheduled week is no longer being shown; archives remain separate.
     return Boolean(!task.archived && relevant && relevant >= start && relevant <= isoDate(end));
@@ -935,7 +935,41 @@ function weeklyTaskSortOrder(task: Task) {
 
 function getTasksForMonth(tasks = TASKS, date = getWorkspaceCalendarDate()) {
   const prefix = isoDate(date).slice(0, 7);
-  return tasks.filter(task => isActiveTask(task) && getTaskRelevantDate(task)?.startsWith(prefix));
+  return tasks.filter(task => isActiveTask(task) && getTaskEffectiveDate(task)?.startsWith(prefix));
+}
+
+function taskIsPersonallyOwnedByCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getTaskAssigneeIds(task).includes(currentUserId)
+    || task.nextActionPrincipalId === currentUserId
+    || task.nextActionBy === "me"
+    || task.nextActionBy === currentDirectoryName(currentUserId);
+}
+
+function formatEstimatedMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round((minutes / 60) * 2) / 2;
+  return `${Number.isInteger(hours) ? hours.toFixed(0) : hours}h`;
+}
+
+function getTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const personalTasks = tasks.filter(task => taskIsPersonallyOwnedByCurrentUser(task, currentUserId));
+  const teamTasks = tasks.filter(task => !personalTasks.includes(task) && getTaskAssignees(task).some(assignee => assignee.type === "team"));
+  const summarize = (items: Task[]) => ({
+    estimatedMinutes: items.reduce((total, task) => total + (task.estimatedMinutes || 0), 0),
+    unestimatedCount: items.filter(task => !task.estimatedMinutes).length,
+  });
+  return { personal: summarize(personalTasks), team: summarize(teamTasks) };
+}
+
+function formatTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
+  if (!tasks.length) return "0 tasks · Nothing planned";
+  const { personal, team } = getTodayWorkload(tasks, currentUserId);
+  const parts = [`${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`];
+  if (personal.estimatedMinutes) parts.push(`~${formatEstimatedMinutes(personal.estimatedMinutes)} estimated`);
+  if (personal.unestimatedCount) parts.push(personal.estimatedMinutes ? `${personal.unestimatedCount} ${personal.unestimatedCount === 1 ? "task" : "tasks"} unestimated` : "Not estimated yet");
+  if (team.estimatedMinutes) parts.push(`Team workload: ~${formatEstimatedMinutes(team.estimatedMinutes)}`);
+  if (team.unestimatedCount) parts.push(`${team.unestimatedCount} team ${team.unestimatedCount === 1 ? "task" : "tasks"} unestimated`);
+  return parts.join(" · ");
 }
 
 function getDelegatedTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
@@ -1373,6 +1407,8 @@ function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
 
 function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }) {
   const [, setRevision] = useState(0);
+  const [effortDraft, setEffortDraft] = useState(task.estimatedMinutes ? String(task.estimatedMinutes) : "");
+  const [savingEffort, setSavingEffort] = useState(false);
   const [waitingCheckOpen, setWaitingCheckOpen] = useState(false);
   const [blockingKind, setBlockingKind] = useState<DependencyKind>("task");
   const [areasEditOpen, setAreasEditOpen] = useState(false);
@@ -1480,6 +1516,21 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
     Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
     commitTaskStore();
     onClose();
+  }
+
+  async function saveEstimatedEffort(minutes: number | null) {
+    if (!taskStoreUsesServer || !task.version) {
+      setActionMessage("Estimated effort needs the shared workspace connection.");
+      return;
+    }
+    setSavingEffort(true);
+    const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, estimatedMinutes: minutes });
+    setSavingEffort(false);
+    if (!result.ok) { setActionMessage(result.message); return; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setEffortDraft(result.data.estimatedMinutes ? String(result.data.estimatedMinutes) : "");
+    setRevision(current => current + 1);
+    setActionMessage("Estimated effort saved.");
   }
 
   async function markWaiting(canStillMove: boolean) {
@@ -1756,7 +1807,7 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
               { label: "Blocked By", value: task.blockedBy ? <span className="flex items-center gap-1.5 text-sm font-medium text-overdue"><GitBranch className="h-3.5 w-3.5" />{task.blockedBy.label}</span> : <span className="text-sm text-muted-foreground">No blocking dependency</span> },
               { label: "Waiting Since", value: <span className="text-sm font-mono text-muted-foreground">{task.waitingSince || "—"}</span> },
               { label: "Last Update", value: <span className="text-sm text-muted-foreground">{task.lastUpdate || "—"}</span> },
-              { label: "Est. Time", value: <span className="text-sm font-mono text-muted-foreground">{task.estimatedHours ? `${task.estimatedHours}h` : "—"}</span> },
+              { label: "Est. Time", value: <span className="text-sm font-mono text-muted-foreground">{task.estimatedMinutes ? `~${formatEstimatedMinutes(task.estimatedMinutes)}` : "Not estimated"}</span> },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-xl bg-muted/55 p-3">
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
@@ -1764,6 +1815,11 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
               </div>
             ))}
           </div>
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Estimated effort</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. Used for workload planning, never multiplied across collaborators.</p></div>{task.estimatedMinutes && <button onClick={() => void saveEstimatedEffort(null)} disabled={savingEffort} className="rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-overdue disabled:opacity-50">Clear</button>}</div>
+            <div className="mt-3 flex flex-wrap gap-1.5">{[[15, "15m"], [30, "30m"], [60, "1h"], [120, "2h"], [240, "4h"], [480, "1 day"]].map(([minutes, label]) => <button key={String(minutes)} onClick={() => void saveEstimatedEffort(minutes as number)} disabled={savingEffort} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium disabled:opacity-50", task.estimatedMinutes === minutes ? "border-primary/35 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{label}</button>)}</div>
+            <div className="mt-2 flex items-center gap-2"><label className="min-w-0 flex-1 text-[10px] font-medium text-muted-foreground">Custom minutes<input type="number" min="1" max="10080" value={effortDraft} onChange={event => setEffortDraft(event.target.value)} placeholder="e.g. 90" className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><button onClick={() => { const minutes = Number(effortDraft); if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) { setActionMessage("Enter an estimate between 1 minute and 7 days."); return; } void saveEstimatedEffort(minutes); }} disabled={savingEffort || !effortDraft.trim()} className="mt-4 rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-50">Save</button></div>
+          </section>
           <section className="rounded-2xl border border-border bg-card p-3.5">
             <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Shared work</p><p className="mt-0.5 text-[10px] text-muted-foreground">One task stays visible to every involved department.</p></div><button onClick={() => setAreasEditOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{areasEditOpen ? "Done" : "Edit"}</button></div>
             {areasEditOpen && <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Lead Area<select value={task.area} onChange={event => setLeadArea(event.target.value as AreaName)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground">{captureOrgAreas(task.org).map(area => <option key={area}>{area}</option>)}</select></label><div><p className="text-[10px] font-medium text-muted-foreground">Involved Areas</p><div className="mt-1 flex flex-wrap gap-1">{captureOrgAreas(task.org).map(area => <button key={area} onClick={() => toggleInvolvedArea(area)} className={cn("rounded-full border px-2 py-1 text-[10px]", getTaskAreas(task).includes(area) ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{area}</button>)}</div></div></div>}
@@ -2267,6 +2323,16 @@ function captureNotesForAreas(areas: AreaName[]) {
   return areas.length > 1 ? `Coordinate with ${formatCaptureAreas(areas)}.` : undefined;
 }
 
+/** A deliberately broad, opt-in suggestion for captured work—not a saved estimate. */
+function suggestCaptureEstimatedMinutes(text: string) {
+  const normalized = text.toLowerCase();
+  if (/\b(?:reply|email|follow[- ]?up|balas|respond)\b/.test(normalized)) return 15;
+  if (/\b(?:review|read|check|approve|proofread)\b/.test(normalized)) return 30;
+  if (/\b(?:meeting|call)\b/.test(normalized)) return 60;
+  if (/\b(?:prepare|draft|write)\b/.test(normalized) && /\b(?:document|proposal|brief|report)\b/.test(normalized)) return 60;
+  return undefined;
+}
+
 function createCapturePreviews(input: string, organization?: OrgName, defaultArea?: AreaName, project?: string, currentUserId?: string): InlineCapturePreview[] {
   return splitCaptureTasks(input).map(raw => {
     const { description, metadata } = captureMetadataParts(raw);
@@ -2315,6 +2381,7 @@ function createCapturePreviews(input: string, organization?: OrgName, defaultAre
       areaReason: learned?.area ? "Suggested from a previous correction" : inferredArea.reason,
       assigneeReason: inferredAssignees.reason,
       unmatchedAssigneeName,
+      suggestedEstimatedMinutes: suggestCaptureEstimatedMinutes(description),
       uncertain: [],
     };
   });
@@ -2356,6 +2423,7 @@ function saveCapturedTask(capture: ParsedTask, attachments: string[] = [], conte
     startDate: capture.dateKind === "start" ? capture.dateISO : undefined,
     targetDate: capture.dateKind === "target" ? capture.dateISO : undefined,
     responseDue: capture.followUpDate,
+    estimatedMinutes: capture.estimatedMinutes,
     isDelegated,
     isWaiting: capture.suggestedStatus === "waiting",
     blockedBy: capture.suggestedStatus === "blocked" ? dependencyTask ? { kind: "task", type: "blocking", label: dependencyTask.title, taskId: dependencyTask.id, owner: dependencyTask.area } : { kind: "decision", type: "blocking", label: capture.blockedByTitle || "A decision or approval" } : undefined,
@@ -2391,6 +2459,7 @@ async function saveCapturedTaskToServer(capture: ParsedTask, context?: { project
     targetDate: capture.dateKind === "target" ? capture.dateISO : undefined,
     deadlineDate: capture.dateKind === "deadline" ? capture.dateISO : undefined,
     followUpDate: capture.followUpDate,
+    estimatedMinutes: capture.estimatedMinutes,
     dependencies: capture.suggestedStatus === "blocked" && capture.blockedByTitle ? [{ type: "start_blocker" as const, label: capture.blockedByTitle }] : undefined,
     originalCapture: capture.originalText,
   });
@@ -2497,6 +2566,8 @@ function CapturedWorkReviewCard({
             {preview.targetDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Target: {preview.targetDate}</span>}
             {preview.startDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Start: {captureDateLabel(new Date(`${preview.startDate}T00:00:00Z`))}</span>}
             {preview.followUpDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Follow up: {captureDateLabel(new Date(`${preview.followUpDate}T00:00:00Z`))}</span>}
+            {preview.estimatedMinutes && <span>~{formatEstimatedMinutes(preview.estimatedMinutes)} estimated</span>}
+            {!preview.estimatedMinutes && preview.suggestedEstimatedMinutes && <button onClick={() => onChange({ estimatedMinutes: preview.suggestedEstimatedMinutes })} className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary hover:bg-primary/15">Suggested ~{formatEstimatedMinutes(preview.suggestedEstimatedMinutes)} · Use</button>}
             {preview.suggestedStatus === "blocked" && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Blocked by {preview.blockedByTitle || "a dependency"}</span>}
             {preview.link && <span className="inline-flex items-center gap-1 text-info"><Link2 className="h-3 w-3" />Link attached</span>}
           </div>
@@ -2528,6 +2599,8 @@ function CapturedWorkReviewCard({
               <label className="text-[10px] font-medium text-muted-foreground">Project<select value={preview.project || ""} onChange={event => onChange({ project: event.target.value || undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No project</option>{Object.values(PROJECT_DETAILS).filter(project => !preview.org || project.org === preview.org).map(project => <option key={project.id} value={project.name}>{project.name}</option>)}</select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Status<select value={preview.suggestedStatus || "ready"} onChange={event => onChange({ suggestedStatus: event.target.value as TaskStatus })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{PLANNING_COLUMNS.map(column => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Priority<select value={preview.priority} onChange={event => onChange({ priority: event.target.value as Priority, priorityExplicit: true })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{Object.entries(PRIORITY_CONFIG).map(([value, config]) => <option key={value} value={value}>{config.label}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Estimated effort <span className="font-normal">(optional)</span><select value={preview.estimatedMinutes || ""} onChange={event => onChange({ estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">Not estimated</option><option value="15">15m</option><option value="30">30m</option><option value="60">1h</option><option value="120">2h</option><option value="240">4h</option><option value="480">1 day</option></select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Custom effort <span className="font-normal">(minutes)</span><input type="number" min="1" max="10080" value={preview.estimatedMinutes && ![15, 30, 60, 120, 240, 480].includes(preview.estimatedMinutes) ? preview.estimatedMinutes : ""} onChange={event => onChange({ estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} placeholder="e.g. 90" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Target date<input type="date" value={preview.dateKind === "target" ? preview.dateISO || "" : ""} onChange={event => updateDate("target", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Deadline<input type="date" value={preview.dateKind === "deadline" ? preview.dateISO || "" : ""} onChange={event => updateDate("deadline", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Start date<input type="date" value={preview.dateKind === "start" ? preview.dateISO || "" : preview.startDate || ""} onChange={event => updateDate("start", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
@@ -2855,6 +2928,7 @@ function HomeView({
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const workspaceDate = getWorkspaceCalendarDate();
   const todayTasks = getTasksForToday(TASKS, currentUserId);
+  const todayWorkloadLabel = formatTodayWorkload(todayTasks, currentUserId);
   const overdueTasks = TASKS.filter(isTaskOverdue);
   const reviewTasks = TASKS.filter(t => t.status === "review" && taskIsForCurrentUser(t, currentUserId));
   const delegatedTasks = getDelegatedTasks(TASKS, currentUserId);
@@ -2924,7 +2998,7 @@ function HomeView({
       <QuickCapture />
       <div className="mb-8 mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {[
-          { label: "Today", value: todayTasks.length, sub: "~5h of focused work", color: "text-primary", surface: "binnie-summary-today bg-[#eae6ff]/55", icon: <CalendarDays className="w-4 h-4" />, view: "today" as NavView },
+          { label: "Today", value: todayTasks.length, sub: todayWorkloadLabel.replace(/^\d+ tasks? · /, ""), color: "text-primary", surface: "binnie-summary-today bg-[#eae6ff]/55", icon: <CalendarDays className="w-4 h-4" />, view: "today" as NavView },
           { label: "Needs attention", value: overdueTasks.length, sub: "A gentle nudge", color: "text-overdue", surface: "binnie-summary-attention bg-[#f7dde6]/45", icon: <AlertTriangle className="w-4 h-4" />, view: "overdue" as NavView },
           { label: "Delegated", value: delegatedTasks.length, sub: "Across your teams", color: "text-success", surface: "binnie-summary-delegated bg-[#dcede7]/55", icon: <Users className="w-4 h-4" />, view: "delegated" as NavView },
           { label: "Waiting", value: waitingTasks.length, sub: "For a response", color: "text-info", surface: "binnie-summary-waiting bg-[#ddebfa]/55", icon: <Hourglass className="w-4 h-4" />, view: "waiting" as NavView },
@@ -2949,7 +3023,7 @@ function HomeView({
               <div className="flex items-center gap-3">
                 <span className="text-[11px] font-mono text-muted-foreground">
                   <Timer className="w-3 h-3 inline mr-1" />
-                  ~{todayTasks.reduce((a, t) => a + (t.estimatedHours || 0), 0)}h estimated
+                  {todayWorkloadLabel}
                 </span>
                 <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">{todayTasks.length} tasks</span>
               </div>
@@ -3152,6 +3226,8 @@ interface ParsedTask {
   targetDate?: string;
   startDate?: string;
   followUpDate?: string;
+  estimatedMinutes?: number;
+  suggestedEstimatedMinutes?: number;
   dateISO?: string;
   dateKind?: CaptureDateKind;
   priority: Priority;
@@ -3593,7 +3669,7 @@ function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       <div className="mb-8">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">{formatWorkspaceDate(workspaceDate, { weekday: "long", day: "numeric", month: "short" })}</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Today</h1>
-        <p className="text-sm text-muted-foreground mt-1">{todayTasks.length} tasks · ~{todayTasks.reduce((a, t) => a + (t.estimatedHours || 0), 0)}h estimated</p>
+        <p className="text-sm text-muted-foreground mt-1">{formatTodayWorkload(todayTasks, currentUserId)}</p>
       </div>
       <div className="space-y-2">
         {todayTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}
@@ -3647,7 +3723,7 @@ function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const dayColumns = weekDays.map(({ date, index, label }) => {
     const dateId = isoDate(date);
     const tasks = weekTasks
-      .filter(task => getTaskRelevantDate(task) === dateId)
+      .filter(task => getTaskEffectiveDate(task) === dateId)
       .sort((left, right) => weeklyTaskSortOrder(left) - weeklyTaskSortOrder(right));
     return {
       date,
@@ -4012,7 +4088,7 @@ function AllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) =>
   const isInScope = (task: Task) => {
     if (scope === "month") return isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task);
     if (scope === "carried") return isActive(task) && Boolean(task.carriedOver || isTaskOverdue(task));
-    if (scope === "unscheduled") return isActive(task) && !getTaskRelevantDate(task);
+    if (scope === "unscheduled") return isActive(task) && !getTaskEffectiveDate(task);
     return task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task));
   };
   const matchesFilters = (task: Task) => {
@@ -4028,7 +4104,7 @@ function AllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) =>
     if (filterDeadline === "today" && !getTasksForToday([task], currentUserId).length) return false;
     if (filterDeadline === "this-week" && !getTasksForWeek([task]).length) return false;
     if (filterDeadline === "overdue" && !isTaskOverdue(task)) return false;
-    if (filterDeadline === "no-date" && getTaskRelevantDate(task)) return false;
+    if (filterDeadline === "no-date" && getTaskEffectiveDate(task)) return false;
     if (hasFilesOnly && !task.files?.length) return false;
     return true;
   };
@@ -4085,7 +4161,7 @@ function AllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) =>
   const scopeTabs: { id: TaskScope; label: string; count: number }[] = [
     { id: "month", label: "This Month", count: TASKS.filter(task => isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task)).length },
     { id: "carried", label: "Carried Over", count: carriedTasks.length },
-    { id: "unscheduled", label: "Unscheduled", count: TASKS.filter(task => isActive(task) && !getTaskRelevantDate(task)).length },
+    { id: "unscheduled", label: "Unscheduled", count: TASKS.filter(task => isActive(task) && !getTaskEffectiveDate(task)).length },
     { id: "done", label: "Done", count: TASKS.filter(task => task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task))).length },
   ];
   const scopeHelp: Record<TaskScope, string> = { month: "Current work with a target this month.", carried: "Unfinished work brought forward from an earlier period.", unscheduled: "Active work without a target date yet.", done: "Completed work from this month." };
@@ -4409,8 +4485,8 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
     if (taskFilter === "overdue" && !isTaskOverdue(task)) return false;
     if (taskPriority !== "all" && task.priority !== taskPriority) return false;
     if (taskProject && task.project !== taskProject) return false;
-    if (dateFilter === "dated" && !getTaskRelevantDate(task)) return false;
-    if (dateFilter === "none" && getTaskRelevantDate(task)) return false;
+    if (dateFilter === "dated" && !getTaskEffectiveDate(task)) return false;
+    if (dateFilter === "none" && getTaskEffectiveDate(task)) return false;
     if (taskSearch && ![task.title, task.area, task.project || "", task.assignee || "", task.nextActionBy].join(" ").toLowerCase().includes(taskSearch.toLowerCase())) return false;
     return true;
   };
@@ -4885,7 +4961,7 @@ function PlanningBoard({ tasks, areas, selectedArea, onAreaChange, onTaskClick, 
     {tasks[0]?.project && <div className="mb-4"><QuickCapture organization={tasks[0].org} project={tasks[0].project} area={selectedArea === "all" ? undefined : selectedArea} onSaved={onRefresh} /></div>}
     <MilestonePlanner tasks={tasks} onRefresh={onRefresh} />
     {bottlenecks.length > 0 && <div className="mb-4 rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-3"><div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Bottlenecks</p><p className="text-[10px] text-muted-foreground">Only work blocking multiple downstream tasks is surfaced here.</p></div></div><div className="mt-2 flex flex-wrap gap-2">{bottlenecks.map(({ task, dependents }) => <button key={task.id} onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{task.area} · {task.title} <span className="text-overdue">→ {dependents.length} blocked</span></button>)}</div></div>}
-    <div className="mb-4 rounded-2xl border border-border bg-card p-3"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Team workload</p><p className="text-[10px] text-muted-foreground">A light capacity view for active work—enough to spot uneven load without turning it into timesheets.</p></div><BarChart2 className="h-4 w-4 text-primary" /></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from(new Set(tasks.filter(task => task.status !== "done").map(task => task.assignee || task.area))).map(owner => { const ownerTasks = tasks.filter(task => task.status !== "done" && (task.assignee || task.area) === owner); const hours = ownerTasks.reduce((total, task) => total + (task.estimatedHours || 1), 0); const blocked = ownerTasks.filter(task => task.status === "blocked").length; return <div key={owner} className="rounded-xl bg-muted/45 p-2.5"><div className="flex items-center gap-2"><Avatar name={owner} size="xs" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-foreground">{owner}</span><span className={cn("text-[10px]", blocked ? "text-overdue" : "text-muted-foreground")}>{blocked ? `${blocked} blocked` : `${hours}h planned`}</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-card"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, hours * 12)}%` }} /></div></div>; })}</div></div>
+    <div className="mb-4 rounded-2xl border border-border bg-card p-3"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Team workload</p><p className="text-[10px] text-muted-foreground">A light capacity view based only on saved estimates—unestimated work stays visible as such.</p></div><BarChart2 className="h-4 w-4 text-primary" /></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from(new Set(tasks.filter(task => task.status !== "done").map(task => task.assignee || task.area))).map(owner => { const ownerTasks = tasks.filter(task => task.status !== "done" && (task.assignee || task.area) === owner); const minutes = ownerTasks.reduce((total, task) => total + (task.estimatedMinutes || 0), 0); const unestimated = ownerTasks.filter(task => !task.estimatedMinutes).length; const blocked = ownerTasks.filter(task => task.status === "blocked").length; const loadLabel = minutes ? `~${formatEstimatedMinutes(minutes)} planned${unestimated ? ` · ${unestimated} unestimated` : ""}` : unestimated ? `${unestimated} unestimated` : "Not estimated yet"; return <div key={owner} className="rounded-xl bg-muted/45 p-2.5"><div className="flex items-center gap-2"><Avatar name={owner} size="xs" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-foreground">{owner}</span><span className={cn("text-[10px]", blocked ? "text-overdue" : "text-muted-foreground")}>{blocked ? `${blocked} blocked` : loadLabel}</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-card"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.round((minutes / 480) * 100))}%` }} /></div></div>; })}</div></div>
     {pendingWaiting && <div className="mb-4 rounded-2xl border border-info/20 bg-info/[0.055] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end"><div className="flex-1"><p className="text-[12px] font-semibold text-foreground">Does this stop “{pendingWaiting.title}” from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting means someone owes an input; Blocked means there is a real dependency.</p></div><label className="text-[10px] font-medium text-muted-foreground">Blocked by<select value={blockerId} onChange={event => setBlockerId(event.target.value)} className="mt-1 block rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Decision or approval</option>{tasks.filter(task => task.id !== pendingWaiting.id).map(task => <option key={task.id} value={task.id}>{task.area} · {task.title}</option>)}</select></label><div className="flex gap-2"><button onClick={() => confirmWaiting(false)} className="rounded-xl border border-info/25 bg-card px-3 py-2 text-[11px] font-medium text-info">Can still continue</button><button onClick={() => confirmWaiting(true)} className="rounded-xl bg-overdue px-3 py-2 text-[11px] font-medium text-white">Task is blocked</button></div></div></div>}
     <div className="grid gap-3 xl:grid-cols-6">{PLANNING_COLUMNS.map(column => { const columnTasks = visibleTasks.filter(task => task.status === column.id); return <div key={column.id} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); const task = TASKS.find(item => item.id === id); if (task) void setStatus(task, column.id); }} className={cn("min-h-56 rounded-2xl border border-border p-2.5", column.tint)}><div className="mb-2 flex items-start gap-2 px-1"><StatusDot status={column.id} /><div className="min-w-0"><p className={cn("text-[12px] font-semibold", column.text)}>{column.label}</p><p className="text-[10px] text-muted-foreground">{column.help}</p></div><span className="ml-auto rounded-full bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground">{columnTasks.length}</span></div><div className="space-y-2">{columnTasks.map(task => <div key={task.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", task.id)} onClick={() => onTaskClick(task)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter") onTaskClick(task); }} className="cursor-grab rounded-xl border border-border bg-card p-3 text-left shadow-[0_2px_8px_var(--theme-shadow)] transition hover:-translate-y-px hover:border-primary/35 active:cursor-grabbing"><div className="flex gap-2"><p className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-foreground">{task.title}</p>{(task.priority === "urgent" || task.priority === "high") && <PriorityDot priority={task.priority} />}</div><div className="mt-2 flex items-center justify-between gap-2"><AreaBadge area={task.area} />{task.assignee && <Avatar name={task.assignee} size="xs" />}</div><div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground"><span>{task.targetDate || task.deadline || "No target"}</span>{task.blockedBy && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Dependency</span>}</div></div>)}{columnTasks.length === 0 && <p className="px-1 py-6 text-center text-[10px] text-muted-foreground">Drop work here</p>}</div></div>; })}</div>
   </div>;
@@ -6393,12 +6469,17 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
         targetDate: task.targetDate,
         deadlineDate: task.deadlineDate,
         followUpDate: task.followUpDate,
+        estimatedMinutes: task.estimatedMinutes || (task.estimatedHours ? Math.round(task.estimatedHours * 60) : undefined),
         status: task.status === "review" ? "in_progress" as const : task.status,
       };
     });
     const result = await importLocalTasksAction({ fingerprint: `local-${Math.abs(fingerprint)}`, tasks });
     setImportingLegacyTasks(false);
     if (!result.ok) return setAccountMessage(result.message);
+    // Browser-local work has been safely migrated into PostgreSQL. Remove the
+    // retired source only after the server action confirms success so views can
+    // never merge it with canonical work on a later refresh.
+    window.localStorage.removeItem(BINNIE_TASK_STORE_STORAGE_KEY);
     setLegacyTasksToImport(null);
     setAccountMessage(`Imported ${result.data.importedCount} local ${result.data.importedCount === 1 ? "task" : "tasks"}`);
     router.refresh();

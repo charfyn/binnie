@@ -612,14 +612,6 @@ export type TaskRecurrenceUpdateweekDaysInput = {
   push?: number | number[]
 }
 
-export type NullableIntFieldUpdateOperationsInput = {
-  set?: number | null
-  increment?: number
-  decrement?: number
-  multiply?: number
-  divide?: number
-}
-
 export type TaskRecurrenceCreateWithoutWorkspaceInput = {
   id?: string
   frequency: $Enums.RecurrenceFrequency

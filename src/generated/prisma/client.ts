@@ -34,7 +34,7 @@ export * from "./enums.ts"
  * // Fetch zero or more Workspaces
  * const workspaces = await prisma.workspace.findMany()
  * ```
- * 
+ *
  * Read more in our [docs](https://pris.ly/d/client).
  */
 export const PrismaClient = $Class.getPrismaClientClass()

@@ -109,6 +109,41 @@ function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+export type EffectiveDateTask = {
+  startDate?: string;
+  targetDate?: string;
+  deadlineDate?: string;
+  deadline?: string;
+  isToday?: boolean;
+};
+
+function legacyDeadlineDate(deadline: string | undefined, today: Date) {
+  const match = deadline?.trim().match(/^(?:[a-z]+,?\s+)?(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{4}))?$/i);
+  if (!match) return undefined;
+  const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const month = monthNames.indexOf(match[2].slice(0, 3).toLowerCase());
+  const day = Number(match[1]);
+  const year = Number(match[3] || today.getUTCFullYear());
+  const date = new Date(Date.UTC(year, month, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day ? dateKey(date) : undefined;
+}
+
+/**
+ * The one calendar-routing rule used by Today, This Week, and task filters.
+ * `startDate` is the current explicit scheduling field; it therefore wins over
+ * a target date and deadline. The legacy labels are only a read compatibility
+ * fallback and never create a second task source.
+ */
+export function getTaskEffectiveDate(task: EffectiveDateTask, today = new Date()) {
+  if (task.startDate) return task.startDate;
+  if (task.targetDate) return task.targetDate;
+  if (task.deadlineDate) return task.deadlineDate;
+  if (task.isToday || task.deadline === "Today") return dateKey(today);
+  if (task.deadline === "Tomorrow") { const tomorrow = new Date(today); tomorrow.setUTCDate(today.getUTCDate() + 1); return dateKey(tomorrow); }
+  if (task.deadline === "Yesterday") { const yesterday = new Date(today); yesterday.setUTCDate(today.getUTCDate() - 1); return dateKey(yesterday); }
+  return legacyDeadlineDate(task.deadline, today);
+}
+
 function endOfMonth(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
 }

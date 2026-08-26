@@ -258,6 +258,10 @@ export interface TaskDTO {
   targetDate?: string;
   deadlineDate?: string;
   followUpDate?: string;
+  /** Optional planned effort for this task as a whole, stored in minutes. */
+  estimatedMinutes?: number;
+  /** Reserved for future opt-in time tracking; not used for workload yet. */
+  actualMinutes?: number;
   waitingSince?: string;
   isOverdue: boolean;
   isFollowUpDue: boolean;

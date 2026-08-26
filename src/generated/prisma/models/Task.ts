@@ -27,10 +27,14 @@ export type AggregateTask = {
 }
 
 export type TaskAvgAggregateOutputType = {
+  estimatedMinutes: number | null
+  actualMinutes: number | null
   version: number | null
 }
 
 export type TaskSumAggregateOutputType = {
+  estimatedMinutes: number | null
+  actualMinutes: number | null
   version: number | null
 }
 
@@ -58,6 +62,8 @@ export type TaskMinAggregateOutputType = {
   nextActionPrincipalId: string | null
   nextActionDepartmentId: string | null
   nextActionExternalLabel: string | null
+  estimatedMinutes: number | null
+  actualMinutes: number | null
   version: number | null
   legacyLocalId: string | null
   archivedAt: Date | null
@@ -91,6 +97,8 @@ export type TaskMaxAggregateOutputType = {
   nextActionPrincipalId: string | null
   nextActionDepartmentId: string | null
   nextActionExternalLabel: string | null
+  estimatedMinutes: number | null
+  actualMinutes: number | null
   version: number | null
   legacyLocalId: string | null
   archivedAt: Date | null
@@ -124,6 +132,8 @@ export type TaskCountAggregateOutputType = {
   nextActionPrincipalId: number
   nextActionDepartmentId: number
   nextActionExternalLabel: number
+  estimatedMinutes: number
+  actualMinutes: number
   version: number
   legacyLocalId: number
   archivedAt: number
@@ -136,10 +146,14 @@ export type TaskCountAggregateOutputType = {
 
 
 export type TaskAvgAggregateInputType = {
+  estimatedMinutes?: true
+  actualMinutes?: true
   version?: true
 }
 
 export type TaskSumAggregateInputType = {
+  estimatedMinutes?: true
+  actualMinutes?: true
   version?: true
 }
 
@@ -167,6 +181,8 @@ export type TaskMinAggregateInputType = {
   nextActionPrincipalId?: true
   nextActionDepartmentId?: true
   nextActionExternalLabel?: true
+  estimatedMinutes?: true
+  actualMinutes?: true
   version?: true
   legacyLocalId?: true
   archivedAt?: true
@@ -200,6 +216,8 @@ export type TaskMaxAggregateInputType = {
   nextActionPrincipalId?: true
   nextActionDepartmentId?: true
   nextActionExternalLabel?: true
+  estimatedMinutes?: true
+  actualMinutes?: true
   version?: true
   legacyLocalId?: true
   archivedAt?: true
@@ -233,6 +251,8 @@ export type TaskCountAggregateInputType = {
   nextActionPrincipalId?: true
   nextActionDepartmentId?: true
   nextActionExternalLabel?: true
+  estimatedMinutes?: true
+  actualMinutes?: true
   version?: true
   legacyLocalId?: true
   archivedAt?: true
@@ -353,6 +373,8 @@ export type TaskGroupByOutputType = {
   nextActionPrincipalId: string | null
   nextActionDepartmentId: string | null
   nextActionExternalLabel: string | null
+  estimatedMinutes: number | null
+  actualMinutes: number | null
   version: number
   legacyLocalId: string | null
   archivedAt: Date | null
@@ -409,6 +431,8 @@ export type TaskWhereInput = {
   nextActionPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
   nextActionDepartmentId?: Prisma.StringNullableFilter<"Task"> | string | null
   nextActionExternalLabel?: Prisma.StringNullableFilter<"Task"> | string | null
+  estimatedMinutes?: Prisma.IntNullableFilter<"Task"> | number | null
+  actualMinutes?: Prisma.IntNullableFilter<"Task"> | number | null
   version?: Prisma.IntFilter<"Task"> | number
   legacyLocalId?: Prisma.StringNullableFilter<"Task"> | string | null
   archivedAt?: Prisma.DateTimeNullableFilter<"Task"> | Date | string | null
@@ -465,6 +489,8 @@ export type TaskOrderByWithRelationInput = {
   nextActionPrincipalId?: Prisma.SortOrderInput | Prisma.SortOrder
   nextActionDepartmentId?: Prisma.SortOrderInput | Prisma.SortOrder
   nextActionExternalLabel?: Prisma.SortOrderInput | Prisma.SortOrder
+  estimatedMinutes?: Prisma.SortOrderInput | Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrderInput | Prisma.SortOrder
   version?: Prisma.SortOrder
   legacyLocalId?: Prisma.SortOrderInput | Prisma.SortOrder
   archivedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -525,6 +551,8 @@ export type TaskWhereUniqueInput = Prisma.AtLeast<{
   nextActionPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
   nextActionDepartmentId?: Prisma.StringNullableFilter<"Task"> | string | null
   nextActionExternalLabel?: Prisma.StringNullableFilter<"Task"> | string | null
+  estimatedMinutes?: Prisma.IntNullableFilter<"Task"> | number | null
+  actualMinutes?: Prisma.IntNullableFilter<"Task"> | number | null
   version?: Prisma.IntFilter<"Task"> | number
   legacyLocalId?: Prisma.StringNullableFilter<"Task"> | string | null
   archivedAt?: Prisma.DateTimeNullableFilter<"Task"> | Date | string | null
@@ -581,6 +609,8 @@ export type TaskOrderByWithAggregationInput = {
   nextActionPrincipalId?: Prisma.SortOrderInput | Prisma.SortOrder
   nextActionDepartmentId?: Prisma.SortOrderInput | Prisma.SortOrder
   nextActionExternalLabel?: Prisma.SortOrderInput | Prisma.SortOrder
+  estimatedMinutes?: Prisma.SortOrderInput | Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrderInput | Prisma.SortOrder
   version?: Prisma.SortOrder
   legacyLocalId?: Prisma.SortOrderInput | Prisma.SortOrder
   archivedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -622,6 +652,8 @@ export type TaskScalarWhereWithAggregatesInput = {
   nextActionPrincipalId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
   nextActionDepartmentId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
   nextActionExternalLabel?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
+  estimatedMinutes?: Prisma.IntNullableWithAggregatesFilter<"Task"> | number | null
+  actualMinutes?: Prisma.IntNullableWithAggregatesFilter<"Task"> | number | null
   version?: Prisma.IntWithAggregatesFilter<"Task"> | number
   legacyLocalId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
   archivedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Task"> | Date | string | null
@@ -645,6 +677,8 @@ export type TaskCreateInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -701,6 +735,8 @@ export type TaskUncheckedCreateInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -737,6 +773,8 @@ export type TaskUpdateInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -793,6 +831,8 @@ export type TaskUncheckedUpdateInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -839,6 +879,8 @@ export type TaskCreateManyInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -862,6 +904,8 @@ export type TaskUpdateManyMutationInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -895,6 +939,8 @@ export type TaskUncheckedUpdateManyInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -948,6 +994,8 @@ export type TaskCountOrderByAggregateInput = {
   nextActionPrincipalId?: Prisma.SortOrder
   nextActionDepartmentId?: Prisma.SortOrder
   nextActionExternalLabel?: Prisma.SortOrder
+  estimatedMinutes?: Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrder
   version?: Prisma.SortOrder
   legacyLocalId?: Prisma.SortOrder
   archivedAt?: Prisma.SortOrder
@@ -958,6 +1006,8 @@ export type TaskCountOrderByAggregateInput = {
 }
 
 export type TaskAvgOrderByAggregateInput = {
+  estimatedMinutes?: Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrder
   version?: Prisma.SortOrder
 }
 
@@ -985,6 +1035,8 @@ export type TaskMaxOrderByAggregateInput = {
   nextActionPrincipalId?: Prisma.SortOrder
   nextActionDepartmentId?: Prisma.SortOrder
   nextActionExternalLabel?: Prisma.SortOrder
+  estimatedMinutes?: Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrder
   version?: Prisma.SortOrder
   legacyLocalId?: Prisma.SortOrder
   archivedAt?: Prisma.SortOrder
@@ -1018,6 +1070,8 @@ export type TaskMinOrderByAggregateInput = {
   nextActionPrincipalId?: Prisma.SortOrder
   nextActionDepartmentId?: Prisma.SortOrder
   nextActionExternalLabel?: Prisma.SortOrder
+  estimatedMinutes?: Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrder
   version?: Prisma.SortOrder
   legacyLocalId?: Prisma.SortOrder
   archivedAt?: Prisma.SortOrder
@@ -1028,6 +1082,8 @@ export type TaskMinOrderByAggregateInput = {
 }
 
 export type TaskSumOrderByAggregateInput = {
+  estimatedMinutes?: Prisma.SortOrder
+  actualMinutes?: Prisma.SortOrder
   version?: Prisma.SortOrder
 }
 
@@ -1382,6 +1438,14 @@ export type EnumNextActionKindFieldUpdateOperationsInput = {
   set?: $Enums.NextActionKind
 }
 
+export type NullableIntFieldUpdateOperationsInput = {
+  set?: number | null
+  increment?: number
+  decrement?: number
+  multiply?: number
+  divide?: number
+}
+
 export type TaskUpdateOneWithoutSubtasksNestedInput = {
   create?: Prisma.XOR<Prisma.TaskCreateWithoutSubtasksInput, Prisma.TaskUncheckedCreateWithoutSubtasksInput>
   connectOrCreate?: Prisma.TaskCreateOrConnectWithoutSubtasksInput
@@ -1674,6 +1738,8 @@ export type TaskCreateWithoutWorkspaceInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -1728,6 +1794,8 @@ export type TaskUncheckedCreateWithoutWorkspaceInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -1803,6 +1871,8 @@ export type TaskScalarWhereInput = {
   nextActionPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
   nextActionDepartmentId?: Prisma.StringNullableFilter<"Task"> | string | null
   nextActionExternalLabel?: Prisma.StringNullableFilter<"Task"> | string | null
+  estimatedMinutes?: Prisma.IntNullableFilter<"Task"> | number | null
+  actualMinutes?: Prisma.IntNullableFilter<"Task"> | number | null
   version?: Prisma.IntFilter<"Task"> | number
   legacyLocalId?: Prisma.StringNullableFilter<"Task"> | string | null
   archivedAt?: Prisma.DateTimeNullableFilter<"Task"> | Date | string | null
@@ -1826,6 +1896,8 @@ export type TaskCreateWithoutOrganizationInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -1880,6 +1952,8 @@ export type TaskUncheckedCreateWithoutOrganizationInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -1942,6 +2016,8 @@ export type TaskCreateWithoutLeadDepartmentInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -1996,6 +2072,8 @@ export type TaskUncheckedCreateWithoutLeadDepartmentInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2042,6 +2120,8 @@ export type TaskCreateWithoutNextActionDepartmentInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2096,6 +2176,8 @@ export type TaskUncheckedCreateWithoutNextActionDepartmentInput = {
   nextActionKind?: $Enums.NextActionKind
   nextActionPrincipalId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2174,6 +2256,8 @@ export type TaskCreateWithoutProjectInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2228,6 +2312,8 @@ export type TaskUncheckedCreateWithoutProjectInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2290,6 +2376,8 @@ export type TaskCreateWithoutCreatedByInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2344,6 +2432,8 @@ export type TaskUncheckedCreateWithoutCreatedByInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2390,6 +2480,8 @@ export type TaskCreateWithoutNextActionPrincipalInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2444,6 +2536,8 @@ export type TaskUncheckedCreateWithoutNextActionPrincipalInput = {
   nextActionKind?: $Enums.NextActionKind
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2522,6 +2616,8 @@ export type TaskCreateWithoutSubtasksInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2577,6 +2673,8 @@ export type TaskUncheckedCreateWithoutSubtasksInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2617,6 +2715,8 @@ export type TaskCreateWithoutParentTaskInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2671,6 +2771,8 @@ export type TaskUncheckedCreateWithoutParentTaskInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2717,6 +2819,8 @@ export type TaskCreateWithoutSplitTasksInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2772,6 +2876,8 @@ export type TaskUncheckedCreateWithoutSplitTasksInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2812,6 +2918,8 @@ export type TaskCreateWithoutSourceTaskInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2866,6 +2974,8 @@ export type TaskUncheckedCreateWithoutSourceTaskInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -2923,6 +3033,8 @@ export type TaskUpdateWithoutSubtasksInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2978,6 +3090,8 @@ export type TaskUncheckedUpdateWithoutSubtasksInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3040,6 +3154,8 @@ export type TaskUpdateWithoutSplitTasksInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3095,6 +3211,8 @@ export type TaskUncheckedUpdateWithoutSplitTasksInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3146,6 +3264,8 @@ export type TaskCreateWithoutChecklistItemsInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3201,6 +3321,8 @@ export type TaskUncheckedCreateWithoutChecklistItemsInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3252,6 +3374,8 @@ export type TaskUpdateWithoutChecklistItemsInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3307,6 +3431,8 @@ export type TaskUncheckedUpdateWithoutChecklistItemsInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3342,6 +3468,8 @@ export type TaskCreateWithoutRecurrenceInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3396,6 +3524,8 @@ export type TaskUncheckedCreateWithoutRecurrenceInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3458,6 +3588,8 @@ export type TaskCreateWithoutInvolvedDepartmentsInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3513,6 +3645,8 @@ export type TaskUncheckedCreateWithoutInvolvedDepartmentsInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3564,6 +3698,8 @@ export type TaskUpdateWithoutInvolvedDepartmentsInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3619,6 +3755,8 @@ export type TaskUncheckedUpdateWithoutInvolvedDepartmentsInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3654,6 +3792,8 @@ export type TaskCreateWithoutAssignmentsInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3709,6 +3849,8 @@ export type TaskUncheckedCreateWithoutAssignmentsInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3760,6 +3902,8 @@ export type TaskUpdateWithoutAssignmentsInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3815,6 +3959,8 @@ export type TaskUncheckedUpdateWithoutAssignmentsInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3850,6 +3996,8 @@ export type TaskCreateWithoutDependenciesInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3905,6 +4053,8 @@ export type TaskUncheckedCreateWithoutDependenciesInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -3945,6 +4095,8 @@ export type TaskCreateWithoutPrerequisiteForInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4000,6 +4152,8 @@ export type TaskUncheckedCreateWithoutPrerequisiteForInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4051,6 +4205,8 @@ export type TaskUpdateWithoutDependenciesInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4106,6 +4262,8 @@ export type TaskUncheckedUpdateWithoutDependenciesInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4152,6 +4310,8 @@ export type TaskUpdateWithoutPrerequisiteForInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4207,6 +4367,8 @@ export type TaskUncheckedUpdateWithoutPrerequisiteForInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4242,6 +4404,8 @@ export type TaskCreateWithoutReviewCyclesInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4297,6 +4461,8 @@ export type TaskUncheckedCreateWithoutReviewCyclesInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4348,6 +4514,8 @@ export type TaskUpdateWithoutReviewCyclesInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4403,6 +4571,8 @@ export type TaskUncheckedUpdateWithoutReviewCyclesInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4438,6 +4608,8 @@ export type TaskCreateWithoutUpdatesInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4493,6 +4665,8 @@ export type TaskUncheckedCreateWithoutUpdatesInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4544,6 +4718,8 @@ export type TaskUpdateWithoutUpdatesInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4599,6 +4775,8 @@ export type TaskUncheckedUpdateWithoutUpdatesInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4634,6 +4812,8 @@ export type TaskCreateWithoutResourcesInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4689,6 +4869,8 @@ export type TaskUncheckedCreateWithoutResourcesInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4740,6 +4922,8 @@ export type TaskUpdateWithoutResourcesInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4795,6 +4979,8 @@ export type TaskUncheckedUpdateWithoutResourcesInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4830,6 +5016,8 @@ export type TaskCreateWithoutEventsInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4885,6 +5073,8 @@ export type TaskUncheckedCreateWithoutEventsInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -4936,6 +5126,8 @@ export type TaskUpdateWithoutEventsInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4991,6 +5183,8 @@ export type TaskUncheckedUpdateWithoutEventsInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5026,6 +5220,8 @@ export type TaskCreateWithoutCaptureLinksInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5081,6 +5277,8 @@ export type TaskUncheckedCreateWithoutCaptureLinksInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5132,6 +5330,8 @@ export type TaskUpdateWithoutCaptureLinksInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5187,6 +5387,8 @@ export type TaskUncheckedUpdateWithoutCaptureLinksInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5222,6 +5424,8 @@ export type TaskCreateWithoutNudgeStatesInput = {
   waitingSince?: Date | string | null
   nextActionKind?: $Enums.NextActionKind
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5277,6 +5481,8 @@ export type TaskUncheckedCreateWithoutNudgeStatesInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5328,6 +5534,8 @@ export type TaskUpdateWithoutNudgeStatesInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5383,6 +5591,8 @@ export type TaskUncheckedUpdateWithoutNudgeStatesInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5427,6 +5637,8 @@ export type TaskCreateManyWorkspaceInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5450,6 +5662,8 @@ export type TaskUpdateWithoutWorkspaceInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5504,6 +5718,8 @@ export type TaskUncheckedUpdateWithoutWorkspaceInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5549,6 +5765,8 @@ export type TaskUncheckedUpdateManyWithoutWorkspaceInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5581,6 +5799,8 @@ export type TaskCreateManyOrganizationInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5604,6 +5824,8 @@ export type TaskUpdateWithoutOrganizationInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5658,6 +5880,8 @@ export type TaskUncheckedUpdateWithoutOrganizationInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5703,6 +5927,8 @@ export type TaskUncheckedUpdateManyWithoutOrganizationInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5735,6 +5961,8 @@ export type TaskCreateManyLeadDepartmentInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5767,6 +5995,8 @@ export type TaskCreateManyNextActionDepartmentInput = {
   nextActionKind?: $Enums.NextActionKind
   nextActionPrincipalId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -5790,6 +6020,8 @@ export type TaskUpdateWithoutLeadDepartmentInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5844,6 +6076,8 @@ export type TaskUncheckedUpdateWithoutLeadDepartmentInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5889,6 +6123,8 @@ export type TaskUncheckedUpdateManyWithoutLeadDepartmentInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5912,6 +6148,8 @@ export type TaskUpdateWithoutNextActionDepartmentInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5966,6 +6204,8 @@ export type TaskUncheckedUpdateWithoutNextActionDepartmentInput = {
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6011,6 +6251,8 @@ export type TaskUncheckedUpdateManyWithoutNextActionDepartmentInput = {
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6043,6 +6285,8 @@ export type TaskCreateManyProjectInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -6066,6 +6310,8 @@ export type TaskUpdateWithoutProjectInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6120,6 +6366,8 @@ export type TaskUncheckedUpdateWithoutProjectInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6165,6 +6413,8 @@ export type TaskUncheckedUpdateManyWithoutProjectInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6197,6 +6447,8 @@ export type TaskCreateManyCreatedByInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -6229,6 +6481,8 @@ export type TaskCreateManyNextActionPrincipalInput = {
   nextActionKind?: $Enums.NextActionKind
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -6252,6 +6506,8 @@ export type TaskUpdateWithoutCreatedByInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6306,6 +6562,8 @@ export type TaskUncheckedUpdateWithoutCreatedByInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6351,6 +6609,8 @@ export type TaskUncheckedUpdateManyWithoutCreatedByInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6374,6 +6634,8 @@ export type TaskUpdateWithoutNextActionPrincipalInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6428,6 +6690,8 @@ export type TaskUncheckedUpdateWithoutNextActionPrincipalInput = {
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6473,6 +6737,8 @@ export type TaskUncheckedUpdateManyWithoutNextActionPrincipalInput = {
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6505,6 +6771,8 @@ export type TaskCreateManyParentTaskInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -6537,6 +6805,8 @@ export type TaskCreateManySourceTaskInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -6560,6 +6830,8 @@ export type TaskUpdateWithoutParentTaskInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6614,6 +6886,8 @@ export type TaskUncheckedUpdateWithoutParentTaskInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6659,6 +6933,8 @@ export type TaskUncheckedUpdateManyWithoutParentTaskInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6682,6 +6958,8 @@ export type TaskUpdateWithoutSourceTaskInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6736,6 +7014,8 @@ export type TaskUncheckedUpdateWithoutSourceTaskInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6781,6 +7061,8 @@ export type TaskUncheckedUpdateManyWithoutSourceTaskInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6813,6 +7095,8 @@ export type TaskCreateManyRecurrenceInput = {
   nextActionPrincipalId?: string | null
   nextActionDepartmentId?: string | null
   nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
   version?: number
   legacyLocalId?: string | null
   archivedAt?: Date | string | null
@@ -6836,6 +7120,8 @@ export type TaskUpdateWithoutRecurrenceInput = {
   waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6890,6 +7176,8 @@ export type TaskUncheckedUpdateWithoutRecurrenceInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6935,6 +7223,8 @@ export type TaskUncheckedUpdateManyWithoutRecurrenceInput = {
   nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   version?: Prisma.IntFieldUpdateOperationsInput | number
   legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -7107,6 +7397,8 @@ export type TaskSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   nextActionPrincipalId?: boolean
   nextActionDepartmentId?: boolean
   nextActionExternalLabel?: boolean
+  estimatedMinutes?: boolean
+  actualMinutes?: boolean
   version?: boolean
   legacyLocalId?: boolean
   archivedAt?: boolean
@@ -7164,6 +7456,8 @@ export type TaskSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   nextActionPrincipalId?: boolean
   nextActionDepartmentId?: boolean
   nextActionExternalLabel?: boolean
+  estimatedMinutes?: boolean
+  actualMinutes?: boolean
   version?: boolean
   legacyLocalId?: boolean
   archivedAt?: boolean
@@ -7207,6 +7501,8 @@ export type TaskSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   nextActionPrincipalId?: boolean
   nextActionDepartmentId?: boolean
   nextActionExternalLabel?: boolean
+  estimatedMinutes?: boolean
+  actualMinutes?: boolean
   version?: boolean
   legacyLocalId?: boolean
   archivedAt?: boolean
@@ -7250,6 +7546,8 @@ export type TaskSelectScalar = {
   nextActionPrincipalId?: boolean
   nextActionDepartmentId?: boolean
   nextActionExternalLabel?: boolean
+  estimatedMinutes?: boolean
+  actualMinutes?: boolean
   version?: boolean
   legacyLocalId?: boolean
   archivedAt?: boolean
@@ -7259,7 +7557,7 @@ export type TaskSelectScalar = {
   updatedAt?: boolean
 }
 
-export type TaskOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "organizationId" | "leadDepartmentId" | "projectId" | "parentTaskId" | "sourceTaskId" | "recurrenceId" | "mergedIntoTaskId" | "createdByPrincipalId" | "title" | "description" | "status" | "priority" | "startDate" | "targetDate" | "deadline" | "followUpDate" | "waitingSince" | "nextActionKind" | "nextActionPrincipalId" | "nextActionDepartmentId" | "nextActionExternalLabel" | "version" | "legacyLocalId" | "archivedAt" | "deletedAt" | "completedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["task"]>
+export type TaskOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "organizationId" | "leadDepartmentId" | "projectId" | "parentTaskId" | "sourceTaskId" | "recurrenceId" | "mergedIntoTaskId" | "createdByPrincipalId" | "title" | "description" | "status" | "priority" | "startDate" | "targetDate" | "deadline" | "followUpDate" | "waitingSince" | "nextActionKind" | "nextActionPrincipalId" | "nextActionDepartmentId" | "nextActionExternalLabel" | "estimatedMinutes" | "actualMinutes" | "version" | "legacyLocalId" | "archivedAt" | "deletedAt" | "completedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["task"]>
 export type TaskInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   organization?: boolean | Prisma.Task$organizationArgs<ExtArgs>
@@ -7362,6 +7660,8 @@ export type $TaskPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     nextActionPrincipalId: string | null
     nextActionDepartmentId: string | null
     nextActionExternalLabel: string | null
+    estimatedMinutes: number | null
+    actualMinutes: number | null
     version: number
     legacyLocalId: string | null
     archivedAt: Date | null
@@ -7838,6 +8138,8 @@ export interface TaskFieldRefs {
   readonly nextActionPrincipalId: Prisma.FieldRef<"Task", 'String'>
   readonly nextActionDepartmentId: Prisma.FieldRef<"Task", 'String'>
   readonly nextActionExternalLabel: Prisma.FieldRef<"Task", 'String'>
+  readonly estimatedMinutes: Prisma.FieldRef<"Task", 'Int'>
+  readonly actualMinutes: Prisma.FieldRef<"Task", 'Int'>
   readonly version: Prisma.FieldRef<"Task", 'Int'>
   readonly legacyLocalId: Prisma.FieldRef<"Task", 'String'>
   readonly archivedAt: Prisma.FieldRef<"Task", 'DateTime'>

@@ -185,6 +185,7 @@ export interface CreateTaskInput {
   targetDate?: string;
   deadlineDate?: string;
   followUpDate?: string;
+  estimatedMinutes?: number;
   dependencies?: DependencyInput[];
   checklistItems?: string[];
   parentTaskId?: string;
@@ -211,6 +212,7 @@ export interface UpdateTaskInput {
   targetDate?: string | null;
   deadlineDate?: string | null;
   followUpDate?: string | null;
+  estimatedMinutes?: number | null;
 }
 
 export interface LegacyTaskImportInput extends CreateTaskInput {
@@ -488,6 +490,8 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     targetDate: toDateString(task.targetDate),
     deadlineDate,
     followUpDate,
+    estimatedMinutes: task.estimatedMinutes ?? undefined,
+    actualMinutes: task.actualMinutes ?? undefined,
     waitingSince: task.waitingSince?.toISOString(),
     isOverdue: Boolean(isOpen && deadlineDate && deadlineDate < today),
     isFollowUpDue: Boolean(isOpen && followUpDate && followUpDate <= today),
@@ -913,6 +917,16 @@ export function findDuplicateCandidates(title: string, tasks: TaskDTO[]) {
     .filter(({ score }) => score >= 0.6)
     .sort((left, right) => right.score - left.score)
     .slice(0, 3);
+}
+
+function normalizedImportTitle(value: string) {
+  return value.toLocaleLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function legacyImportDuplicateKey(task: Pick<LegacyTaskImportInput, "title" | "organizationId" | "projectId" | "startDate" | "targetDate" | "deadlineDate" | "assignments">) {
+  const effectiveDate = task.startDate || task.targetDate || task.deadlineDate || "";
+  const assignees = (task.assignments || []).map(assignment => assignment.principalId).sort().join(",");
+  return [normalizedImportTitle(task.title), task.organizationId || "", effectiveDate, task.projectId || "", assignees].join("|");
 }
 
 export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): Promise<WorkspaceSnapshotDTO | null> {
@@ -1888,6 +1902,7 @@ export async function createCanonicalTask(input: CreateTaskInput): Promise<Actio
           targetDate: dateOnly(input.targetDate),
           deadline: dateOnly(input.deadlineDate),
           followUpDate: dateOnly(input.followUpDate),
+          estimatedMinutes: input.estimatedMinutes ?? null,
           legacyLocalId: input.legacyLocalId || null,
           ...nextActionData(input.nextAction),
           involvedDepartments: {
@@ -1998,6 +2013,7 @@ export async function updateCanonicalTask(input: UpdateTaskInput): Promise<Actio
     for (const [label, next, previous] of dateChanges) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: `Changed ${label} ${previous || "not set"} → ${next || "not set"}`, before: { value: previous || null }, after: { value: next || null } });
     if (input.description !== undefined && (input.description || null) !== (initial.description || null)) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: "Updated task description" });
     if (input.priority !== undefined && asDbPriority(input.priority) !== initial.priority) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: `Changed priority to ${input.priority}` });
+    if (input.estimatedMinutes !== undefined && (input.estimatedMinutes ?? null) !== initial.estimatedMinutes) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: input.estimatedMinutes ? `Set estimated effort to ${input.estimatedMinutes} minutes` : "Cleared estimated effort" });
     const result = await db.$transaction(async (tx) => {
       const departmentIds = input.involvedDepartmentIds
         ? [...new Set([input.leadDepartmentId === undefined ? initial.leadDepartmentId : input.leadDepartmentId, ...input.involvedDepartmentIds].filter(Boolean) as string[])]
@@ -2015,6 +2031,7 @@ export async function updateCanonicalTask(input: UpdateTaskInput): Promise<Actio
           targetDate: input.targetDate === undefined ? undefined : dateOnly(input.targetDate),
           deadline: input.deadlineDate === undefined ? undefined : dateOnly(input.deadlineDate),
           followUpDate: input.followUpDate === undefined ? undefined : dateOnly(input.followUpDate),
+          estimatedMinutes: input.estimatedMinutes === undefined ? undefined : input.estimatedMinutes,
           ...nextActionData(input.nextAction),
           version: { increment: 1 },
           involvedDepartments: departmentIds ? { deleteMany: {}, create: departmentIds.map((departmentId) => ({ departmentId })) } : undefined,
@@ -2630,7 +2647,7 @@ export async function undoCapturedTasks(taskIds: string[]): Promise<ActionResult
 }
 
 /** Explicit, idempotent migration path for the prototype's browser-only task store. */
-export async function importLegacyTasks(fingerprint: string, tasks: LegacyTaskImportInput[]): Promise<ActionResult<{ importedCount: number }>> {
+export async function importLegacyTasks(fingerprint: string, tasks: LegacyTaskImportInput[]): Promise<ActionResult<{ importedCount: number; skippedDuplicateCount?: number }>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const db = getDb();
   const workspaceId = DEFAULT_WORKSPACE_ID;
@@ -2638,13 +2655,43 @@ export async function importLegacyTasks(fingerprint: string, tasks: LegacyTaskIm
   if (existingImport) return { ok: true, data: { importedCount: existingImport.importedCount } };
   const actor = await resolveActor(workspaceId);
   if (!actorIsOwner(actor)) return forbidden("Only a workspace owner can import browser-local tasks.");
+  const existingTasks = await db.task.findMany({
+    where: { workspaceId, deletedAt: null },
+    select: {
+      legacyLocalId: true,
+      title: true,
+      organizationId: true,
+      projectId: true,
+      startDate: true,
+      targetDate: true,
+      deadline: true,
+      assignments: { select: { principalId: true } },
+    },
+  });
+  const importedLegacyIds = new Set(existingTasks.map(task => task.legacyLocalId).filter((id): id is string => Boolean(id)));
+  const duplicateKeys = new Set(existingTasks.map(task => legacyImportDuplicateKey({
+    title: task.title,
+    organizationId: task.organizationId || undefined,
+    projectId: task.projectId || undefined,
+    startDate: toDateString(task.startDate),
+    targetDate: toDateString(task.targetDate),
+    deadlineDate: toDateString(task.deadline),
+    assignments: task.assignments.map(assignment => ({ principalId: assignment.principalId, role: "collaborator" as const })),
+  })));
   let importedCount = 0;
+  let skippedDuplicateCount = 0;
   for (const task of tasks) {
-    const existing = await db.task.findUnique({ where: { workspaceId_legacyLocalId: { workspaceId, legacyLocalId: task.legacyLocalId } }, select: { id: true } });
-    if (existing) continue;
+    if (importedLegacyIds.has(task.legacyLocalId)) continue;
+    const duplicateKey = legacyImportDuplicateKey(task);
+    if (duplicateKeys.has(duplicateKey)) {
+      skippedDuplicateCount += 1;
+      continue;
+    }
     const created = await createCanonicalTask({ ...task, workspaceId, legacyLocalId: task.legacyLocalId, originalCapture: undefined, assignmentSource: AssignmentSource.IMPORT });
     if (!created.ok) return created;
     importedCount += 1;
+    importedLegacyIds.add(task.legacyLocalId);
+    duplicateKeys.add(duplicateKey);
     const importedStatus = task.status;
     if (importedStatus && importedStatus !== "ready" && importedStatus !== "review") {
       const moved = await transitionCanonicalTask(created.data.id, created.data.version, importedStatus);
@@ -2655,5 +2702,5 @@ export async function importLegacyTasks(fingerprint: string, tasks: LegacyTaskIm
     await tx.legacyImport.create({ data: { workspaceId, fingerprint, importedCount } });
     return (await incrementRevision(tx, workspaceId)).revision;
   });
-  return { ok: true, data: { importedCount }, revision };
+  return { ok: true, data: { importedCount, skippedDuplicateCount }, revision };
 }

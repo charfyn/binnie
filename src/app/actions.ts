@@ -68,6 +68,7 @@ const nextAction = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ready") }),
 ]);
 const assignment = z.object({ principalId: id, role: z.enum(["primary_owner", "collaborator"]) });
+const estimatedMinutes = z.number().int().min(1).max(10_080);
 const dependency = z.object({
   type: z.enum(["start_blocker", "completion_blocker", "related"]),
   label: z.string().trim().min(1).max(500),
@@ -122,6 +123,7 @@ export async function createTaskAction(raw: unknown) {
     targetDate: date.transform((value) => value ?? undefined),
     deadlineDate: date.transform((value) => value ?? undefined),
     followUpDate: date.transform((value) => value ?? undefined),
+    estimatedMinutes: estimatedMinutes.optional(),
     dependencies: z.array(dependency).max(30).optional(),
     checklistItems: z.array(z.string().trim().min(1).max(500)).max(60).optional(),
     parentTaskId: id.optional(),
@@ -431,6 +433,7 @@ export async function updateTaskAction(raw: unknown) {
     targetDate: date,
     deadlineDate: date,
     followUpDate: date,
+    estimatedMinutes: estimatedMinutes.nullable().optional(),
   }).safeParse(raw);
   if (!parsed.success) return invalid("Some task details are incomplete or invalid.");
   const result = await updateCanonicalTask(parsed.data);
@@ -661,6 +664,7 @@ export async function importLocalTasksAction(raw: unknown) {
       targetDate: date.transform(value => value ?? undefined),
       deadlineDate: date.transform(value => value ?? undefined),
       followUpDate: date.transform(value => value ?? undefined),
+      estimatedMinutes: estimatedMinutes.optional(),
       status: z.enum(["ready", "in_progress", "waiting", "blocked", "review", "done"]).optional(),
     })).max(500),
   }).safeParse(raw);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
+import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getTaskEffectiveDate, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
 
 test("a completion dependency permits parallel work but not final completion", () => {
   assert.equal(taskTransitionBlockReason({ targetStatus: "in_progress", unresolvedStartBlockers: 0, unresolvedCompletionBlockers: 1 }), undefined);
@@ -24,6 +24,13 @@ test("a weekly recurrence respects the selected weekdays", () => {
 test("monthly recurrence clamps an unavailable day to the end of month", () => {
   const next = nextOccurrenceDate(new Date("2026-01-30T00:00:00Z"), { frequency: "monthly", interval: 1, weekDays: [], monthDay: 30 });
   assert.equal(next.toISOString().slice(0, 10), "2026-02-28");
+});
+
+test("Today and week share scheduled, target, then deadline routing", () => {
+  const today = new Date("2026-08-19T00:00:00Z");
+  assert.equal(getTaskEffectiveDate({ startDate: "2026-08-19", targetDate: "2026-08-20", deadlineDate: "2026-08-21" }, today), "2026-08-19");
+  assert.equal(getTaskEffectiveDate({ targetDate: "2026-08-19", deadlineDate: "2026-08-21" }, today), "2026-08-19");
+  assert.equal(getTaskEffectiveDate({ deadlineDate: "2026-08-19" }, today), "2026-08-19");
 });
 
 test("natural search recognizes a department, waiting owner, and month without AI", () => {

@@ -19,7 +19,7 @@ export * as $Enums from './enums.ts'
 export * from './enums.ts';
 /**
  * Model Workspace
- * 
+ *
  */
 export type Workspace = Prisma.WorkspaceModel
 /**

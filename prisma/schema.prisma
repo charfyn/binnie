@@ -362,6 +362,11 @@ model Task {
   nextActionPrincipalId   String?
   nextActionDepartmentId  String?
   nextActionExternalLabel String?
+  // Estimates are deliberately optional. `estimatedMinutes` is the planned
+  // effort for the task as a whole; it is never multiplied for shared work.
+  // `actualMinutes` is reserved for a future, opt-in time-tracking workflow.
+  estimatedMinutes        Int?
+  actualMinutes           Int?
   version                 Int                      @default(1)
   legacyLocalId           String?
   archivedAt              DateTime?

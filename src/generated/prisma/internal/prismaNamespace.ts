@@ -3085,6 +3085,8 @@ export const TaskScalarFieldEnum = {
   nextActionPrincipalId: 'nextActionPrincipalId',
   nextActionDepartmentId: 'nextActionDepartmentId',
   nextActionExternalLabel: 'nextActionExternalLabel',
+  estimatedMinutes: 'estimatedMinutes',
+  actualMinutes: 'actualMinutes',
   version: 'version',
   legacyLocalId: 'legacyLocalId',
   archivedAt: 'archivedAt',

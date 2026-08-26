@@ -57,13 +57,14 @@ async function main() {
     const pricing = await db.task.create({
       data: {
         workspaceId, organizationId: organization.id, leadDepartmentId: finance.id, createdByPrincipalId: owner.id,
-        title: "Confirm pricing", status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, nextActionKind: NextActionKind.PRINCIPAL, nextActionPrincipalId: financeTeam.id,
+        title: "Confirm pricing", status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, estimatedMinutes: 30, nextActionKind: NextActionKind.PRINCIPAL, nextActionPrincipalId: financeTeam.id,
         involvedDepartments: { create: [{ departmentId: finance.id }, { departmentId: marketing.id }] },
         assignments: { create: [{ principalId: financeTeam.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id }, { principalId: marketingTeam.id, role: AssignmentRole.COLLABORATOR, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id }] },
       }, include: { assignments: true, involvedDepartments: true },
     });
     assert.equal(pricing.assignments.length, 2, "one task has multiple assignees");
     assert.equal(pricing.involvedDepartments.length, 2, "one task is visible across departments");
+    assert.equal(pricing.estimatedMinutes, 30, "optional task effort persists as canonical minutes");
 
     const publication = await db.task.create({ data: { workspaceId, organizationId: organization.id, leadDepartmentId: marketing.id, createdByPrincipalId: owner.id, title: "Publish pricing", status: TaskStatus.READY, priority: TaskPriority.MEDIUM, dependencies: { create: { prerequisiteTaskId: pricing.id, type: DependencyType.COMPLETION_BLOCKER, label: "Final pricing required" } } } });
     const dependency = await db.taskDependency.findFirstOrThrow({ where: { taskId: publication.id } });
