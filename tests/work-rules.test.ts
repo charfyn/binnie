@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getTaskEffectiveDate, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
+import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getPersonalPlannerTasksForDate, getPersonalPlannerTasksForWeek, getTaskEffectiveDate, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
 
 test("a completion dependency permits parallel work but not final completion", () => {
   assert.equal(taskTransitionBlockReason({ targetStatus: "in_progress", unresolvedStartBlockers: 0, unresolvedCompletionBlockers: 1 }), undefined);
@@ -31,6 +31,50 @@ test("Today and week share scheduled, target, then deadline routing", () => {
   assert.equal(getTaskEffectiveDate({ startDate: "2026-08-19", targetDate: "2026-08-20", deadlineDate: "2026-08-21" }, today), "2026-08-19");
   assert.equal(getTaskEffectiveDate({ targetDate: "2026-08-19", deadlineDate: "2026-08-21" }, today), "2026-08-19");
   assert.equal(getTaskEffectiveDate({ deadlineDate: "2026-08-19" }, today), "2026-08-19");
+});
+
+test("Today IDs equal this week's selected-day IDs for the same personal work", () => {
+  const tasks = [
+    { id: "task-a", status: "in_progress" as const, startDate: "2026-08-27", assigneeIds: ["person-charlotte"] },
+  ];
+  const today = getPersonalPlannerTasksForDate(tasks, "person-charlotte", "2026-08-27");
+  const week = getPersonalPlannerTasksForWeek(tasks, "person-charlotte", "2026-08-24", "2026-08-30");
+  assert.deepEqual(today.map(task => task.id), ["task-a"]);
+  assert.deepEqual(week.filter(task => getTaskEffectiveDate(task) === "2026-08-27").map(task => task.id), today.map(task => task.id));
+});
+
+test("personal planners include direct, team, creator, and review work but not another person's task", () => {
+  const tasks = [
+    { id: "direct", status: "ready" as const, targetDate: "2026-08-27", assigneeIds: ["person-charlotte"] },
+    { id: "team", status: "ready" as const, targetDate: "2026-08-27", assigneeIds: ["team-marketing"] },
+    { id: "owned", status: "in_progress" as const, targetDate: "2026-08-27", createdByPrincipalId: "person-charlotte" },
+    { id: "review", status: "review" as const, targetDate: "2026-08-27", reviewerPrincipalId: "person-charlotte" },
+    { id: "other", status: "ready" as const, targetDate: "2026-08-27", assigneeIds: ["person-bu-desti"] },
+    { id: "delegated-other", status: "ready" as const, targetDate: "2026-08-27", createdByPrincipalId: "person-charlotte", assigneeIds: ["person-bu-desti"] },
+    { id: "tomorrow", status: "ready" as const, targetDate: "2026-08-28", assigneeIds: ["person-charlotte"] },
+    { id: "done", status: "done" as const, targetDate: "2026-08-27", assigneeIds: ["person-charlotte"] },
+  ];
+  const today = getPersonalPlannerTasksForDate(tasks, "person-charlotte", "2026-08-27", ["team-marketing"]);
+  const week = getPersonalPlannerTasksForWeek(tasks, "person-charlotte", "2026-08-24", "2026-08-30", ["team-marketing"]);
+  assert.deepEqual(today.map(task => task.id), ["direct", "team", "owned", "review"]);
+  assert.deepEqual(week.filter(task => getTaskEffectiveDate(task) === "2026-08-27" && task.status !== "done").map(task => task.id), today.map(task => task.id));
+  assert.equal(week.some(task => task.id === "done"), true, "This Week keeps completed work as history while Today excludes remaining workload");
+  assert.equal(today.some(task => task.id === "other"), false);
+  assert.equal(week.some(task => task.id === "other"), false);
+  assert.equal(today.some(task => task.id === "delegated-other"), false, "creating someone else's assigned task does not pollute the creator's Today");
+  assert.equal(week.some(task => task.id === "delegated-other"), false);
+});
+
+test("a canonical date move updates Today and the weekly column without creating another task", () => {
+  const original = [{ id: "task-a", status: "ready" as const, startDate: "2026-08-27", assigneeIds: ["person-charlotte"] }];
+  const moved = [{ ...original[0], startDate: "2026-08-28" }];
+  const idsFor = (tasks: typeof original, date: string) => getPersonalPlannerTasksForWeek(tasks, "person-charlotte", "2026-08-24", "2026-08-30").filter(task => getTaskEffectiveDate(task) === date).map(task => task.id);
+  assert.deepEqual(getPersonalPlannerTasksForDate(original, "person-charlotte", "2026-08-27").map(task => task.id), ["task-a"]);
+  assert.deepEqual(idsFor(original, "2026-08-27"), ["task-a"]);
+  assert.deepEqual(getPersonalPlannerTasksForDate(moved, "person-charlotte", "2026-08-27").map(task => task.id), []);
+  assert.deepEqual(idsFor(moved, "2026-08-27"), []);
+  assert.deepEqual(idsFor(moved, "2026-08-28"), ["task-a"]);
+  assert.deepEqual(idsFor(moved, "2026-08-28"), ["task-a"], "a refresh reads the same one canonical task ID");
 });
 
 test("natural search recognizes a department, waiting owner, and month without AI", () => {

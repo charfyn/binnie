@@ -6,7 +6,7 @@
 /*
  * This file should be your main import to use Prisma-related types and utilities in a browser. 
  * Use it to get access to models, enums, and input types.
- *
+ * 
  * This file does not contain a `PrismaClient` class, nor several other helpers that are intended as server-side only.
  * See `client.ts` for the standard, server-side entry point.
  *
@@ -19,7 +19,7 @@ export * as $Enums from './enums.ts'
 export * from './enums.ts';
 /**
  * Model Workspace
- *
+ * 
  */
 export type Workspace = Prisma.WorkspaceModel
 /**
@@ -64,7 +64,7 @@ export type ProjectFocusItem = Prisma.ProjectFocusItemModel
 export type Principal = Prisma.PrincipalModel
 /**
  * Model PrincipalPreference
- *
+ * 
  */
 export type PrincipalPreference = Prisma.PrincipalPreferenceModel
 /**
@@ -72,6 +72,71 @@ export type PrincipalPreference = Prisma.PrincipalPreferenceModel
  * 
  */
 export type PrincipalMembership = Prisma.PrincipalMembershipModel
+/**
+ * Model OrganizationMembership
+ * 
+ */
+export type OrganizationMembership = Prisma.OrganizationMembershipModel
+/**
+ * Model DepartmentMembership
+ * 
+ */
+export type DepartmentMembership = Prisma.DepartmentMembershipModel
+/**
+ * Model TeamMembership
+ * 
+ */
+export type TeamMembership = Prisma.TeamMembershipModel
+/**
+ * Model TeamScope
+ * 
+ */
+export type TeamScope = Prisma.TeamScopeModel
+/**
+ * Model UserAccount
+ * 
+ */
+export type UserAccount = Prisma.UserAccountModel
+/**
+ * Model Invitation
+ * 
+ */
+export type Invitation = Prisma.InvitationModel
+/**
+ * Model AuthRateLimit
+ * 
+ */
+export type AuthRateLimit = Prisma.AuthRateLimitModel
+/**
+ * Model CredentialLoginThrottle
+ * 
+ */
+export type CredentialLoginThrottle = Prisma.CredentialLoginThrottleModel
+/**
+ * Model AccessAuditLog
+ * 
+ */
+export type AccessAuditLog = Prisma.AccessAuditLogModel
+/**
+ * Model AuthUser
+ * 
+ */
+export type AuthUser = Prisma.AuthUserModel
+/**
+ * Model AuthSession
+ * 
+ */
+export type AuthSession = Prisma.AuthSessionModel
+/**
+ * Model AuthAccount
+ * 
+ */
+export type AuthAccount = Prisma.AuthAccountModel
+/**
+ * Model AuthVerification
+ * 
+ */
+export type AuthVerification = Prisma.AuthVerificationModel
 /**
  * Model Task
  * 

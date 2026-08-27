@@ -172,6 +172,8 @@ export type DepartmentWhereInput = {
   aliases?: Prisma.StringNullableListFilter<"Department">
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
   memberships?: Prisma.PrincipalMembershipListRelationFilter
+  accessMemberships?: Prisma.DepartmentMembershipListRelationFilter
+  teamScopes?: Prisma.TeamScopeListRelationFilter
   leadTasks?: Prisma.TaskListRelationFilter
   involvedTasks?: Prisma.TaskInvolvedDepartmentListRelationFilter
   nextActionTasks?: Prisma.TaskListRelationFilter
@@ -190,6 +192,8 @@ export type DepartmentOrderByWithRelationInput = {
   aliases?: Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
   memberships?: Prisma.PrincipalMembershipOrderByRelationAggregateInput
+  accessMemberships?: Prisma.DepartmentMembershipOrderByRelationAggregateInput
+  teamScopes?: Prisma.TeamScopeOrderByRelationAggregateInput
   leadTasks?: Prisma.TaskOrderByRelationAggregateInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentOrderByRelationAggregateInput
   nextActionTasks?: Prisma.TaskOrderByRelationAggregateInput
@@ -212,6 +216,8 @@ export type DepartmentWhereUniqueInput = Prisma.AtLeast<{
   aliases?: Prisma.StringNullableListFilter<"Department">
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
   memberships?: Prisma.PrincipalMembershipListRelationFilter
+  accessMemberships?: Prisma.DepartmentMembershipListRelationFilter
+  teamScopes?: Prisma.TeamScopeListRelationFilter
   leadTasks?: Prisma.TaskListRelationFilter
   involvedTasks?: Prisma.TaskInvolvedDepartmentListRelationFilter
   nextActionTasks?: Prisma.TaskListRelationFilter
@@ -249,6 +255,8 @@ export type DepartmentCreateInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -266,6 +274,8 @@ export type DepartmentUncheckedCreateInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -283,6 +293,8 @@ export type DepartmentUpdateInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -300,6 +312,8 @@ export type DepartmentUncheckedUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -472,6 +486,36 @@ export type DepartmentUpdateOneWithoutMembershipsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.DepartmentUpdateToOneWithWhereWithoutMembershipsInput, Prisma.DepartmentUpdateWithoutMembershipsInput>, Prisma.DepartmentUncheckedUpdateWithoutMembershipsInput>
 }
 
+export type DepartmentCreateNestedOneWithoutAccessMembershipsInput = {
+  create?: Prisma.XOR<Prisma.DepartmentCreateWithoutAccessMembershipsInput, Prisma.DepartmentUncheckedCreateWithoutAccessMembershipsInput>
+  connectOrCreate?: Prisma.DepartmentCreateOrConnectWithoutAccessMembershipsInput
+  connect?: Prisma.DepartmentWhereUniqueInput
+}
+
+export type DepartmentUpdateOneRequiredWithoutAccessMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.DepartmentCreateWithoutAccessMembershipsInput, Prisma.DepartmentUncheckedCreateWithoutAccessMembershipsInput>
+  connectOrCreate?: Prisma.DepartmentCreateOrConnectWithoutAccessMembershipsInput
+  upsert?: Prisma.DepartmentUpsertWithoutAccessMembershipsInput
+  connect?: Prisma.DepartmentWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.DepartmentUpdateToOneWithWhereWithoutAccessMembershipsInput, Prisma.DepartmentUpdateWithoutAccessMembershipsInput>, Prisma.DepartmentUncheckedUpdateWithoutAccessMembershipsInput>
+}
+
+export type DepartmentCreateNestedOneWithoutTeamScopesInput = {
+  create?: Prisma.XOR<Prisma.DepartmentCreateWithoutTeamScopesInput, Prisma.DepartmentUncheckedCreateWithoutTeamScopesInput>
+  connectOrCreate?: Prisma.DepartmentCreateOrConnectWithoutTeamScopesInput
+  connect?: Prisma.DepartmentWhereUniqueInput
+}
+
+export type DepartmentUpdateOneWithoutTeamScopesNestedInput = {
+  create?: Prisma.XOR<Prisma.DepartmentCreateWithoutTeamScopesInput, Prisma.DepartmentUncheckedCreateWithoutTeamScopesInput>
+  connectOrCreate?: Prisma.DepartmentCreateOrConnectWithoutTeamScopesInput
+  upsert?: Prisma.DepartmentUpsertWithoutTeamScopesInput
+  disconnect?: Prisma.DepartmentWhereInput | boolean
+  delete?: Prisma.DepartmentWhereInput | boolean
+  connect?: Prisma.DepartmentWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.DepartmentUpdateToOneWithWhereWithoutTeamScopesInput, Prisma.DepartmentUpdateWithoutTeamScopesInput>, Prisma.DepartmentUncheckedUpdateWithoutTeamScopesInput>
+}
+
 export type DepartmentCreateNestedOneWithoutLeadTasksInput = {
   create?: Prisma.XOR<Prisma.DepartmentCreateWithoutLeadTasksInput, Prisma.DepartmentUncheckedCreateWithoutLeadTasksInput>
   connectOrCreate?: Prisma.DepartmentCreateOrConnectWithoutLeadTasksInput
@@ -585,6 +629,8 @@ export type DepartmentCreateWithoutOrganizationInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -601,6 +647,8 @@ export type DepartmentUncheckedCreateWithoutOrganizationInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -654,6 +702,8 @@ export type DepartmentCreateWithoutLeadProjectsInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -670,6 +720,8 @@ export type DepartmentUncheckedCreateWithoutLeadProjectsInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -702,6 +754,8 @@ export type DepartmentUpdateWithoutLeadProjectsInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -718,6 +772,8 @@ export type DepartmentUncheckedUpdateWithoutLeadProjectsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -734,6 +790,8 @@ export type DepartmentCreateWithoutProjectInvolvementInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -750,6 +808,8 @@ export type DepartmentUncheckedCreateWithoutProjectInvolvementInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -782,6 +842,8 @@ export type DepartmentUpdateWithoutProjectInvolvementInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -798,6 +860,8 @@ export type DepartmentUncheckedUpdateWithoutProjectInvolvementInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -813,6 +877,8 @@ export type DepartmentCreateWithoutMembershipsInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -829,6 +895,8 @@ export type DepartmentUncheckedCreateWithoutMembershipsInput = {
   organizationId: string
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -861,6 +929,8 @@ export type DepartmentUpdateWithoutMembershipsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -877,6 +947,184 @@ export type DepartmentUncheckedUpdateWithoutMembershipsInput = {
   organizationId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
+  leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerDepartmentNestedInput
+  leadProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  templateLeadProjects?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
+}
+
+export type DepartmentCreateWithoutAccessMembershipsInput = {
+  id?: string
+  name: string
+  aliases?: Prisma.DepartmentCreatealiasesInput | string[]
+  organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
+  leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerDepartmentInput
+  leadProjects?: Prisma.ProjectCreateNestedManyWithoutLeadDepartmentInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutLeadDepartmentInput
+  templateLeadProjects?: Prisma.WorkflowTemplateCreateNestedManyWithoutLeadDepartmentInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
+}
+
+export type DepartmentUncheckedCreateWithoutAccessMembershipsInput = {
+  id?: string
+  organizationId: string
+  name: string
+  aliases?: Prisma.DepartmentCreatealiasesInput | string[]
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
+  leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerDepartmentInput
+  leadProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  templateLeadProjects?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
+}
+
+export type DepartmentCreateOrConnectWithoutAccessMembershipsInput = {
+  where: Prisma.DepartmentWhereUniqueInput
+  create: Prisma.XOR<Prisma.DepartmentCreateWithoutAccessMembershipsInput, Prisma.DepartmentUncheckedCreateWithoutAccessMembershipsInput>
+}
+
+export type DepartmentUpsertWithoutAccessMembershipsInput = {
+  update: Prisma.XOR<Prisma.DepartmentUpdateWithoutAccessMembershipsInput, Prisma.DepartmentUncheckedUpdateWithoutAccessMembershipsInput>
+  create: Prisma.XOR<Prisma.DepartmentCreateWithoutAccessMembershipsInput, Prisma.DepartmentUncheckedCreateWithoutAccessMembershipsInput>
+  where?: Prisma.DepartmentWhereInput
+}
+
+export type DepartmentUpdateToOneWithWhereWithoutAccessMembershipsInput = {
+  where?: Prisma.DepartmentWhereInput
+  data: Prisma.XOR<Prisma.DepartmentUpdateWithoutAccessMembershipsInput, Prisma.DepartmentUncheckedUpdateWithoutAccessMembershipsInput>
+}
+
+export type DepartmentUpdateWithoutAccessMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
+  leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerDepartmentNestedInput
+  leadProjects?: Prisma.ProjectUpdateManyWithoutLeadDepartmentNestedInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskUpdateManyWithoutLeadDepartmentNestedInput
+  templateLeadProjects?: Prisma.WorkflowTemplateUpdateManyWithoutLeadDepartmentNestedInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
+}
+
+export type DepartmentUncheckedUpdateWithoutAccessMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
+  leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerDepartmentNestedInput
+  leadProjects?: Prisma.ProjectUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  templateLeadProjects?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutLeadDepartmentNestedInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
+}
+
+export type DepartmentCreateWithoutTeamScopesInput = {
+  id?: string
+  name: string
+  aliases?: Prisma.DepartmentCreatealiasesInput | string[]
+  organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerDepartmentInput
+  leadProjects?: Prisma.ProjectCreateNestedManyWithoutLeadDepartmentInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutLeadDepartmentInput
+  templateLeadProjects?: Prisma.WorkflowTemplateCreateNestedManyWithoutLeadDepartmentInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
+}
+
+export type DepartmentUncheckedCreateWithoutTeamScopesInput = {
+  id?: string
+  organizationId: string
+  name: string
+  aliases?: Prisma.DepartmentCreatealiasesInput | string[]
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerDepartmentInput
+  leadProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  templateLeadProjects?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutLeadDepartmentInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
+}
+
+export type DepartmentCreateOrConnectWithoutTeamScopesInput = {
+  where: Prisma.DepartmentWhereUniqueInput
+  create: Prisma.XOR<Prisma.DepartmentCreateWithoutTeamScopesInput, Prisma.DepartmentUncheckedCreateWithoutTeamScopesInput>
+}
+
+export type DepartmentUpsertWithoutTeamScopesInput = {
+  update: Prisma.XOR<Prisma.DepartmentUpdateWithoutTeamScopesInput, Prisma.DepartmentUncheckedUpdateWithoutTeamScopesInput>
+  create: Prisma.XOR<Prisma.DepartmentCreateWithoutTeamScopesInput, Prisma.DepartmentUncheckedCreateWithoutTeamScopesInput>
+  where?: Prisma.DepartmentWhereInput
+}
+
+export type DepartmentUpdateToOneWithWhereWithoutTeamScopesInput = {
+  where?: Prisma.DepartmentWhereInput
+  data: Prisma.XOR<Prisma.DepartmentUpdateWithoutTeamScopesInput, Prisma.DepartmentUncheckedUpdateWithoutTeamScopesInput>
+}
+
+export type DepartmentUpdateWithoutTeamScopesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
+  involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerDepartmentNestedInput
+  leadProjects?: Prisma.ProjectUpdateManyWithoutLeadDepartmentNestedInput
+  projectInvolvement?: Prisma.ProjectInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
+  templateLeadTasks?: Prisma.WorkflowTemplateTaskUpdateManyWithoutLeadDepartmentNestedInput
+  templateLeadProjects?: Prisma.WorkflowTemplateUpdateManyWithoutLeadDepartmentNestedInput
+  templateInvolvement?: Prisma.WorkflowTemplateInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
+}
+
+export type DepartmentUncheckedUpdateWithoutTeamScopesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -894,6 +1142,8 @@ export type DepartmentCreateWithoutLeadTasksInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
   dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerDepartmentInput
@@ -910,6 +1160,8 @@ export type DepartmentUncheckedCreateWithoutLeadTasksInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerDepartmentInput
@@ -931,6 +1183,8 @@ export type DepartmentCreateWithoutNextActionTasksInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerDepartmentInput
@@ -947,6 +1201,8 @@ export type DepartmentUncheckedCreateWithoutNextActionTasksInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerDepartmentInput
@@ -979,6 +1235,8 @@ export type DepartmentUpdateWithoutLeadTasksInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
   dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerDepartmentNestedInput
@@ -995,6 +1253,8 @@ export type DepartmentUncheckedUpdateWithoutLeadTasksInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerDepartmentNestedInput
@@ -1022,6 +1282,8 @@ export type DepartmentUpdateWithoutNextActionTasksInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerDepartmentNestedInput
@@ -1038,6 +1300,8 @@ export type DepartmentUncheckedUpdateWithoutNextActionTasksInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerDepartmentNestedInput
@@ -1054,6 +1318,8 @@ export type DepartmentCreateWithoutInvolvedTasksInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
   dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerDepartmentInput
@@ -1070,6 +1336,8 @@ export type DepartmentUncheckedCreateWithoutInvolvedTasksInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerDepartmentInput
@@ -1102,6 +1370,8 @@ export type DepartmentUpdateWithoutInvolvedTasksInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
   dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerDepartmentNestedInput
@@ -1118,6 +1388,8 @@ export type DepartmentUncheckedUpdateWithoutInvolvedTasksInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
   dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerDepartmentNestedInput
@@ -1134,6 +1406,8 @@ export type DepartmentCreateWithoutDependencyOwnersInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -1150,6 +1424,8 @@ export type DepartmentUncheckedCreateWithoutDependencyOwnersInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -1182,6 +1458,8 @@ export type DepartmentUpdateWithoutDependencyOwnersInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1198,6 +1476,8 @@ export type DepartmentUncheckedUpdateWithoutDependencyOwnersInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1214,6 +1494,8 @@ export type DepartmentCreateWithoutTemplateLeadProjectsInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -1230,6 +1512,8 @@ export type DepartmentUncheckedCreateWithoutTemplateLeadProjectsInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -1262,6 +1546,8 @@ export type DepartmentUpdateWithoutTemplateLeadProjectsInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1278,6 +1564,8 @@ export type DepartmentUncheckedUpdateWithoutTemplateLeadProjectsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1294,6 +1582,8 @@ export type DepartmentCreateWithoutTemplateInvolvementInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -1310,6 +1600,8 @@ export type DepartmentUncheckedCreateWithoutTemplateInvolvementInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -1342,6 +1634,8 @@ export type DepartmentUpdateWithoutTemplateInvolvementInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1358,6 +1652,8 @@ export type DepartmentUncheckedUpdateWithoutTemplateInvolvementInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1374,6 +1670,8 @@ export type DepartmentCreateWithoutTemplateLeadTasksInput = {
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   organization: Prisma.OrganizationCreateNestedOneWithoutDepartmentsInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionDepartmentInput
@@ -1390,6 +1688,8 @@ export type DepartmentUncheckedCreateWithoutTemplateLeadTasksInput = {
   name: string
   aliases?: Prisma.DepartmentCreatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutDepartmentInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutDepartmentInput
   leadTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutLeadDepartmentInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutDepartmentInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionDepartmentInput
@@ -1422,6 +1722,8 @@ export type DepartmentUpdateWithoutTemplateLeadTasksInput = {
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutDepartmentsNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1438,6 +1740,8 @@ export type DepartmentUncheckedUpdateWithoutTemplateLeadTasksInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1459,6 +1763,8 @@ export type DepartmentUpdateWithoutOrganizationInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1475,6 +1781,8 @@ export type DepartmentUncheckedUpdateWithoutOrganizationInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.DepartmentUpdatealiasesInput | string[]
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  accessMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutDepartmentNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutDepartmentNestedInput
   leadTasks?: Prisma.TaskUncheckedUpdateManyWithoutLeadDepartmentNestedInput
   involvedTasks?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutDepartmentNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionDepartmentNestedInput
@@ -1499,6 +1807,8 @@ export type DepartmentUncheckedUpdateManyWithoutOrganizationInput = {
 
 export type DepartmentCountOutputType = {
   memberships: number
+  accessMemberships: number
+  teamScopes: number
   leadTasks: number
   involvedTasks: number
   nextActionTasks: number
@@ -1512,6 +1822,8 @@ export type DepartmentCountOutputType = {
 
 export type DepartmentCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   memberships?: boolean | DepartmentCountOutputTypeCountMembershipsArgs
+  accessMemberships?: boolean | DepartmentCountOutputTypeCountAccessMembershipsArgs
+  teamScopes?: boolean | DepartmentCountOutputTypeCountTeamScopesArgs
   leadTasks?: boolean | DepartmentCountOutputTypeCountLeadTasksArgs
   involvedTasks?: boolean | DepartmentCountOutputTypeCountInvolvedTasksArgs
   nextActionTasks?: boolean | DepartmentCountOutputTypeCountNextActionTasksArgs
@@ -1538,6 +1850,20 @@ export type DepartmentCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.E
  */
 export type DepartmentCountOutputTypeCountMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.PrincipalMembershipWhereInput
+}
+
+/**
+ * DepartmentCountOutputType without action
+ */
+export type DepartmentCountOutputTypeCountAccessMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.DepartmentMembershipWhereInput
+}
+
+/**
+ * DepartmentCountOutputType without action
+ */
+export type DepartmentCountOutputTypeCountTeamScopesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TeamScopeWhereInput
 }
 
 /**
@@ -1611,6 +1937,8 @@ export type DepartmentSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   aliases?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   memberships?: boolean | Prisma.Department$membershipsArgs<ExtArgs>
+  accessMemberships?: boolean | Prisma.Department$accessMembershipsArgs<ExtArgs>
+  teamScopes?: boolean | Prisma.Department$teamScopesArgs<ExtArgs>
   leadTasks?: boolean | Prisma.Department$leadTasksArgs<ExtArgs>
   involvedTasks?: boolean | Prisma.Department$involvedTasksArgs<ExtArgs>
   nextActionTasks?: boolean | Prisma.Department$nextActionTasksArgs<ExtArgs>
@@ -1650,6 +1978,8 @@ export type DepartmentOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs
 export type DepartmentInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   memberships?: boolean | Prisma.Department$membershipsArgs<ExtArgs>
+  accessMemberships?: boolean | Prisma.Department$accessMembershipsArgs<ExtArgs>
+  teamScopes?: boolean | Prisma.Department$teamScopesArgs<ExtArgs>
   leadTasks?: boolean | Prisma.Department$leadTasksArgs<ExtArgs>
   involvedTasks?: boolean | Prisma.Department$involvedTasksArgs<ExtArgs>
   nextActionTasks?: boolean | Prisma.Department$nextActionTasksArgs<ExtArgs>
@@ -1673,6 +2003,8 @@ export type $DepartmentPayload<ExtArgs extends runtime.Types.Extensions.Internal
   objects: {
     organization: Prisma.$OrganizationPayload<ExtArgs>
     memberships: Prisma.$PrincipalMembershipPayload<ExtArgs>[]
+    accessMemberships: Prisma.$DepartmentMembershipPayload<ExtArgs>[]
+    teamScopes: Prisma.$TeamScopePayload<ExtArgs>[]
     leadTasks: Prisma.$TaskPayload<ExtArgs>[]
     involvedTasks: Prisma.$TaskInvolvedDepartmentPayload<ExtArgs>[]
     nextActionTasks: Prisma.$TaskPayload<ExtArgs>[]
@@ -2084,6 +2416,8 @@ export interface Prisma__DepartmentClient<T, Null = never, ExtArgs extends runti
   readonly [Symbol.toStringTag]: "PrismaPromise"
   organization<T extends Prisma.OrganizationDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.OrganizationDefaultArgs<ExtArgs>>): Prisma.Prisma__OrganizationClient<runtime.Types.Result.GetResult<Prisma.$OrganizationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   memberships<T extends Prisma.Department$membershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Department$membershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PrincipalMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  accessMemberships<T extends Prisma.Department$accessMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Department$accessMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DepartmentMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  teamScopes<T extends Prisma.Department$teamScopesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Department$teamScopesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TeamScopePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   leadTasks<T extends Prisma.Department$leadTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Department$leadTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   involvedTasks<T extends Prisma.Department$involvedTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Department$involvedTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskInvolvedDepartmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   nextActionTasks<T extends Prisma.Department$nextActionTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Department$nextActionTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -2548,6 +2882,54 @@ export type Department$membershipsArgs<ExtArgs extends runtime.Types.Extensions.
   take?: number
   skip?: number
   distinct?: Prisma.PrincipalMembershipScalarFieldEnum | Prisma.PrincipalMembershipScalarFieldEnum[]
+}
+
+/**
+ * Department.accessMemberships
+ */
+export type Department$accessMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the DepartmentMembership
+   */
+  select?: Prisma.DepartmentMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the DepartmentMembership
+   */
+  omit?: Prisma.DepartmentMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.DepartmentMembershipInclude<ExtArgs> | null
+  where?: Prisma.DepartmentMembershipWhereInput
+  orderBy?: Prisma.DepartmentMembershipOrderByWithRelationInput | Prisma.DepartmentMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.DepartmentMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.DepartmentMembershipScalarFieldEnum | Prisma.DepartmentMembershipScalarFieldEnum[]
+}
+
+/**
+ * Department.teamScopes
+ */
+export type Department$teamScopesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the TeamScope
+   */
+  select?: Prisma.TeamScopeSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the TeamScope
+   */
+  omit?: Prisma.TeamScopeOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TeamScopeInclude<ExtArgs> | null
+  where?: Prisma.TeamScopeWhereInput
+  orderBy?: Prisma.TeamScopeOrderByWithRelationInput | Prisma.TeamScopeOrderByWithRelationInput[]
+  cursor?: Prisma.TeamScopeWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TeamScopeScalarFieldEnum | Prisma.TeamScopeScalarFieldEnum[]
 }
 
 /**

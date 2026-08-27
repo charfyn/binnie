@@ -12,6 +12,66 @@ enum WorkspaceRole {
   ORGANIZATION_MANAGER
   DEPARTMENT_MANAGER
   EMPLOYEE
+  VIEWER
+}
+
+enum PrincipalStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum AccessLevel {
+  OWNER
+  ORGANIZATION_MANAGER
+  DEPARTMENT_HEAD
+  MEMBER
+  VIEWER
+}
+
+enum UserAccountStatus {
+  ACTIVE
+  SUSPENDED
+  ACCESS_REMOVED
+}
+
+enum InvitationStatus {
+  PENDING_OWNER_APPROVAL
+  APPROVED
+  SENT
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum AccessAuditAction {
+  PERSON_CREATED
+  PERSON_ARCHIVED
+  ORGANIZATION_MEMBERSHIP_ADDED
+  ORGANIZATION_MEMBERSHIP_REMOVED
+  DEPARTMENT_MEMBERSHIP_CHANGED
+  TEAM_MEMBERSHIP_CHANGED
+  ACCESS_REQUESTED
+  INVITATION_APPROVED
+  INVITATION_SENT
+  INVITATION_RESENT
+  INVITATION_ACCEPTED
+  INVITATION_REJECTED
+  INVITATION_CANCELLED
+  ACCESS_LEVEL_CHANGED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_REACTIVATED
+  ACCESS_REMOVED
+  SESSIONS_REVOKED
+  ACCOUNT_CREATED
+  USERNAME_CHANGED
+  PASSWORD_RESET
+  PASSWORD_CHANGED
 }
 
 enum PrincipalType {
@@ -162,11 +222,17 @@ model Organization {
   workspaceId       String
   name              String
   description       String?
+  /// Semantic Binnie palette key. UI themes resolve this key to their own tokens.
+  colorKey          String                @default("powderBlue")
   aliases           String[]              @default([])
   workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   departments       Department[]
   projects          Project[]
   memberships       PrincipalMembership[]
+  accessMemberships OrganizationMembership[]
+  teamScopes        TeamScope[]
+  invitations       Invitation[]
+  accessAuditLogs   AccessAuditLog[]
   tasks             Task[]
   resources         TaskResource[]
   workflowTemplates WorkflowTemplate[]
@@ -181,6 +247,8 @@ model Department {
   aliases              String[]                             @default([])
   organization         Organization                         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   memberships          PrincipalMembership[]
+  accessMemberships    DepartmentMembership[]
+  teamScopes           TeamScope[]
   leadTasks            Task[]                               @relation("LeadDepartment")
   involvedTasks        TaskInvolvedDepartment[]
   nextActionTasks      Task[]                               @relation("NextActionDepartment")
@@ -279,9 +347,25 @@ model Principal {
   workspaceId                String
   type                       PrincipalType
   name                       String
+  jobTitle                   String?
   email                      String?
+  phone                      String?
+  notes                      String?
   active                     Boolean                     @default(true)
+  status                     PrincipalStatus             @default(ACTIVE)
   workspace                  Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userAccount                UserAccount?
+  organizationMemberships    OrganizationMembership[]
+  departmentMemberships      DepartmentMembership[]
+  teamMemberships            TeamMembership[]            @relation("PersonTeamMembership")
+  teamMemberMemberships      TeamMembership[]            @relation("TeamMember")
+  teamScopes                 TeamScope[]                 @relation("TeamScope")
+  invitationPerson           Invitation[]                @relation("InvitationPerson")
+  requestedInvitations       Invitation[]                @relation("InvitationRequester")
+  approvedInvitations        Invitation[]                @relation("InvitationApprover")
+  rejectedInvitations        Invitation[]                @relation("InvitationRejector")
+  accessAuditActor           AccessAuditLog[]            @relation("AccessAuditActor")
+  accessAuditTarget          AccessAuditLog[]            @relation("AccessAuditTarget")
   memberships                PrincipalMembership[]
   preferences                PrincipalPreference?
   assignments                TaskAssignment[]            @relation("AssignedPrincipal")
@@ -316,6 +400,7 @@ model PrincipalPreference {
   timezone       String   @default("Asia/Jakarta")
   dateFormat     String   @default("12 Aug 2026")
   theme          String   @default("soft")
+  taskListColumns Json?
   storageVersion Int      @default(1)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -325,6 +410,11 @@ model PrincipalPreference {
   @@index([workspaceId])
 }
 
+// LEGACY COMPATIBILITY ONLY: its departmentId was backfilled into
+// DepartmentMembership by 20260826113000_multi_user_access_foundation. New
+// application reads and writes use OrganizationMembership,
+// DepartmentMembership, TeamMembership, and TeamScope exclusively. Retire
+// this model/table only in a later verified cleanup migration.
 model PrincipalMembership {
   id             String        @id @default(uuid())
   principalId    String
@@ -336,6 +426,251 @@ model PrincipalMembership {
   department     Department?   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
   @@index([principalId, organizationId, departmentId])
+}
+
+// Canonical Person-to-organization affiliation. A NULL accessLevel means the
+// Person is in the directory only and cannot gain Binnie access accidentally.
+model OrganizationMembership {
+  id          String           @id @default(uuid())
+  personId    String
+  organizationId String
+  accessLevel AccessLevel?
+  status      MembershipStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  removedAt   DateTime?
+  person      Principal        @relation(fields: [personId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, organizationId])
+  @@index([organizationId, status, accessLevel])
+}
+
+// The only canonical Person-to-department affiliation after the legacy
+// PrincipalMembership.departmentId compatibility window is retired.
+model DepartmentMembership {
+  id           String           @id @default(uuid())
+  personId     String
+  departmentId String
+  status       MembershipStatus @default(ACTIVE)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  removedAt    DateTime?
+  person       Principal        @relation(fields: [personId], references: [id], onDelete: Cascade)
+  department   Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, departmentId])
+  @@index([departmentId, status])
+}
+
+// Person-to-team affiliation. Teams continue to use Principal(type=TEAM), so
+// task assignment IDs and historical records remain unchanged.
+model TeamMembership {
+  id        String           @id @default(uuid())
+  personId  String
+  teamId    String
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  removedAt DateTime?
+  person    Principal        @relation("PersonTeamMembership", fields: [personId], references: [id], onDelete: Cascade)
+  team      Principal        @relation("TeamMember", fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, teamId])
+  @@index([teamId, status])
+}
+
+// Team scope is intentionally separate from a Person's department membership.
+// It preserves the existing team-to-organization/department routing data.
+model TeamScope {
+  id             String           @id @default(uuid())
+  teamId         String
+  organizationId String
+  departmentId   String?
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  removedAt      DateTime?
+  team           Principal        @relation("TeamScope", fields: [teamId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@unique([teamId, organizationId, departmentId])
+  @@index([organizationId, departmentId, status])
+}
+
+model UserAccount {
+  id                   String            @id @default(uuid())
+  authUserId           String            @unique
+  personId             String            @unique
+  // Login credentials belong to the account, never to the Person name. The
+  // normalized value is the case-insensitive unique login key; username keeps
+  // the Owner-approved display spelling for account administration.
+  username             String?
+  usernameNormalized   String?           @unique
+  // Legacy compatibility only. This may retain an old magic-link email, but
+  // is optional and is never consulted for username/password authentication.
+  loginEmailNormalized String?           @unique
+  status               UserAccountStatus @default(ACTIVE)
+  requiresPasswordChange Boolean         @default(true)
+  temporaryPasswordExpiresAt DateTime?
+  passwordChangedAt    DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  lastLoginAt          DateTime?
+  suspendedAt          DateTime?
+  accessRemovedAt      DateTime?
+  authUser             AuthUser          @relation(fields: [authUserId], references: [id], onDelete: Restrict)
+  person               Principal         @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@index([personId, status])
+  @@index([usernameNormalized, status])
+}
+
+// A single record covers both a Manager access request and the delivered
+// workspace invitation. It never represents directory affiliation.
+model Invitation {
+  id                  String           @id @default(uuid())
+  personId            String
+  organizationId      String
+  // Retained solely to preserve previously issued email invitations. New
+  // account requests do not require an email and use requestedUsername.
+  emailNormalized     String?
+  requestedUsername   String?
+  requestedUsernameNormalized String?
+  approvedUsername    String?
+  approvedUsernameNormalized String?
+  requestedAccessLevel AccessLevel
+  approvedAccessLevel AccessLevel?
+  status              InvitationStatus @default(PENDING_OWNER_APPROVAL)
+  requestedById       String
+  approvedById        String?
+  rejectedById        String?
+  rejectionReason     String?
+  tokenHash           String?
+  tokenVersion        Int              @default(0)
+  expiresAt           DateTime?
+  sentAt              DateTime?
+  acceptedAt          DateTime?
+  cancelledAt         DateTime?
+  rejectedAt          DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  person              Principal        @relation("InvitationPerson", fields: [personId], references: [id], onDelete: Restrict)
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  requestedBy         Principal        @relation("InvitationRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy          Principal?       @relation("InvitationApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy          Principal?       @relation("InvitationRejector", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([personId, status])
+  @@index([emailNormalized, status])
+  @@index([requestedUsernameNormalized, status])
+}
+
+// Better Auth's own shared database-backed request rate limiter. This protects
+// the public credential endpoint by source IP; Binnie's additional throttle
+// below also keys failures by normalized username plus source IP.
+model AuthRateLimit {
+  id          String @id @default(uuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+// Short-lived failed credential counters. The IP is hashed before persistence;
+// this table is not an account directory and is never exposed to clients.
+model CredentialLoginThrottle {
+  id                 String   @id @default(uuid())
+  usernameNormalized String
+  ipAddressHash      String
+  failureCount       Int      @default(0)
+  windowStartedAt    DateTime @default(now())
+  blockedUntil       DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([usernameNormalized, ipAddressHash])
+  @@index([blockedUntil])
+}
+
+model AccessAuditLog {
+  id            String            @id @default(uuid())
+  actorPersonId String?
+  targetPersonId String?
+  organizationId String?
+  action        AccessAuditAction
+  before        Json?
+  after         Json?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+  actor         Principal?        @relation("AccessAuditActor", fields: [actorPersonId], references: [id], onDelete: SetNull)
+  target        Principal?        @relation("AccessAuditTarget", fields: [targetPersonId], references: [id], onDelete: SetNull)
+  organization  Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([targetPersonId, createdAt])
+}
+
+// Better Auth core records. Their names are explicitly configured in
+// src/lib/auth.ts so they cannot collide with Binnie's domain identity.
+model AuthUser {
+  id            String       @id @default(uuid())
+  name          String
+  email         String       @unique
+  emailVerified Boolean      @default(false)
+  image         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  sessions      AuthSession[]
+  accounts      AuthAccount[]
+  userAccount   UserAccount?
+}
+
+model AuthSession {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthAccount {
+  id                    String   @id @default(uuid())
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([issuer, accountId])
+  @@index([userId])
+}
+
+model AuthVerification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
 }
 
 model Task {

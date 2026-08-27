@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { ORGANIZATION_COLOR_KEYS } from "@/lib/organization-colors";
+import { TASK_LIST_COLUMN_IDS } from "@/lib/task-list";
+import { TASK_WORKSPACE_SCOPES } from "@/lib/work-types";
 import {
   addCanonicalTaskFile,
   addCanonicalTaskUpdateFile,
@@ -30,6 +33,7 @@ import {
   createCanonicalWorkflowTemplate,
   updateCanonicalWorkflowTemplate,
   createCanonicalProject,
+  getCanonicalTaskScope,
   deleteCanonicalProject,
   archiveCanonicalProject,
   createCanonicalOrganization,
@@ -47,6 +51,7 @@ import {
   resolveCanonicalInboxCapture,
   saveCanonicalView,
   saveCaptureForManualOrganization,
+  saveCanonicalTaskListColumns,
   setCanonicalTaskRecurrence,
   setCanonicalAssignments,
   setCanonicalNudgeState,
@@ -86,6 +91,12 @@ const recurrence = z.object({
 });
 const projectMember = z.object({ principalId: id, role: z.enum(["owner", "member", "collaborator"]) });
 const projectMilestone = z.object({ title: z.string().trim().min(1).max(500), targetDate: date.transform(value => value ?? undefined), ownerPrincipalId: id.optional() });
+const taskScope = z.object({
+  workspaceId: id.optional(),
+  scope: z.enum(TASK_WORKSPACE_SCOPES),
+  personId: id.optional(),
+  teamId: id.optional(),
+});
 const templateTask = z.object({
   title: z.string().trim().min(1).max(500),
   description: z.string().trim().max(10_000).optional(),
@@ -185,8 +196,9 @@ export async function createOrganizationAction(raw: unknown) {
     workspaceId: id.optional(),
     name: z.string().trim().min(1).max(240),
     description: z.string().trim().max(2_000).optional(),
+    colorKey: z.enum(ORGANIZATION_COLOR_KEYS).optional(),
   }).safeParse(raw);
-  if (!parsed.success) return invalid("Organization name is required.");
+  if (!parsed.success) return invalid("Provide an organization name and an approved Binnie color.");
   const result = await createCanonicalOrganization(parsed.data);
   if (result.ok) refreshWorkspace();
   return result;
@@ -196,14 +208,12 @@ export async function updateProfileAction(raw: unknown) {
   const parsed = z.object({
     workspaceId: id.optional(),
     displayName: z.string().trim().min(1).max(240),
-    role: z.enum(["owner", "organization_manager", "department_manager", "employee"]),
-    email: z.string().trim().email().max(320).or(z.literal("")).optional(),
     timezone: z.string().trim().min(1).max(120),
     dateFormat: z.string().trim().min(1).max(80),
     theme: z.enum(["soft", "clear", "dark"]),
   }).safeParse(raw);
   if (!parsed.success) return invalid("Complete the required profile fields before saving.");
-  const result = await updateCanonicalProfile({ ...parsed.data, email: parsed.data.email || undefined });
+  const result = await updateCanonicalProfile(parsed.data);
   if (result.ok) refreshWorkspace();
   return result;
 }
@@ -410,9 +420,9 @@ export async function deleteOrganizationResourceAction(raw: unknown) {
 }
 
 export async function updateOrganizationVocabularyAction(raw: unknown) {
-  const parsed = z.object({ organizationId: id, aliases: z.array(z.string().trim().min(1).max(120)).max(40).optional(), departments: z.array(z.object({ departmentId: id, aliases: z.array(z.string().trim().min(1).max(120)).max(40) })).max(60).optional() }).safeParse(raw);
+  const parsed = z.object({ organizationId: id, aliases: z.array(z.string().trim().min(1).max(120)).max(40).optional(), departments: z.array(z.object({ departmentId: id, aliases: z.array(z.string().trim().min(1).max(120)).max(40) })).max(60).optional(), colorKey: z.enum(ORGANIZATION_COLOR_KEYS).optional() }).safeParse(raw);
   if (!parsed.success) return invalid("Use short, valid organization and department aliases.");
-  const result = await updateCanonicalOrganizationVocabulary(parsed.data.organizationId, { aliases: parsed.data.aliases, departments: parsed.data.departments });
+  const result = await updateCanonicalOrganizationVocabulary(parsed.data.organizationId, { aliases: parsed.data.aliases, departments: parsed.data.departments, colorKey: parsed.data.colorKey });
   if (result.ok) refreshWorkspace();
   return result;
 }
@@ -581,6 +591,19 @@ export async function transitionTaskAction(raw: unknown) {
   const result = await transitionCanonicalTask(parsed.data.taskId, parsed.data.expectedVersion, parsed.data.status, parsed.data.blocker);
   if (result.ok) refreshWorkspace();
   return result;
+}
+
+/** Reads one server-authorized Tasks scope; it never relies on client row hiding. */
+export async function getTaskScopeAction(raw: unknown) {
+  const parsed = taskScope.safeParse(raw);
+  if (!parsed.success) return invalid("Choose a valid task scope.");
+  return getCanonicalTaskScope(parsed.data);
+}
+
+export async function saveTaskListColumnsAction(raw: unknown) {
+  const parsed = z.object({ workspaceId: id.optional(), columns: z.array(z.enum(TASK_LIST_COLUMN_IDS)).min(1).max(15) }).safeParse(raw);
+  if (!parsed.success || !parsed.data.columns.includes("task")) return invalid("Keep the Task column visible.");
+  return saveCanonicalTaskListColumns(parsed.data.columns, parsed.data.workspaceId);
 }
 
 export async function postTaskUpdateAction(raw: unknown) {

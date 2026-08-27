@@ -29,6 +29,7 @@ export type OrganizationMinAggregateOutputType = {
   workspaceId: string | null
   name: string | null
   description: string | null
+  colorKey: string | null
 }
 
 export type OrganizationMaxAggregateOutputType = {
@@ -36,6 +37,7 @@ export type OrganizationMaxAggregateOutputType = {
   workspaceId: string | null
   name: string | null
   description: string | null
+  colorKey: string | null
 }
 
 export type OrganizationCountAggregateOutputType = {
@@ -43,6 +45,7 @@ export type OrganizationCountAggregateOutputType = {
   workspaceId: number
   name: number
   description: number
+  colorKey: number
   aliases: number
   _all: number
 }
@@ -53,6 +56,7 @@ export type OrganizationMinAggregateInputType = {
   workspaceId?: true
   name?: true
   description?: true
+  colorKey?: true
 }
 
 export type OrganizationMaxAggregateInputType = {
@@ -60,6 +64,7 @@ export type OrganizationMaxAggregateInputType = {
   workspaceId?: true
   name?: true
   description?: true
+  colorKey?: true
 }
 
 export type OrganizationCountAggregateInputType = {
@@ -67,6 +72,7 @@ export type OrganizationCountAggregateInputType = {
   workspaceId?: true
   name?: true
   description?: true
+  colorKey?: true
   aliases?: true
   _all?: true
 }
@@ -148,6 +154,7 @@ export type OrganizationGroupByOutputType = {
   workspaceId: string
   name: string
   description: string | null
+  colorKey: string
   aliases: string[]
   _count: OrganizationCountAggregateOutputType | null
   _min: OrganizationMinAggregateOutputType | null
@@ -177,11 +184,16 @@ export type OrganizationWhereInput = {
   workspaceId?: Prisma.StringFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
   description?: Prisma.StringNullableFilter<"Organization"> | string | null
+  colorKey?: Prisma.StringFilter<"Organization"> | string
   aliases?: Prisma.StringNullableListFilter<"Organization">
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   departments?: Prisma.DepartmentListRelationFilter
   projects?: Prisma.ProjectListRelationFilter
   memberships?: Prisma.PrincipalMembershipListRelationFilter
+  accessMemberships?: Prisma.OrganizationMembershipListRelationFilter
+  teamScopes?: Prisma.TeamScopeListRelationFilter
+  invitations?: Prisma.InvitationListRelationFilter
+  accessAuditLogs?: Prisma.AccessAuditLogListRelationFilter
   tasks?: Prisma.TaskListRelationFilter
   resources?: Prisma.TaskResourceListRelationFilter
   workflowTemplates?: Prisma.WorkflowTemplateListRelationFilter
@@ -192,11 +204,16 @@ export type OrganizationOrderByWithRelationInput = {
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
   description?: Prisma.SortOrderInput | Prisma.SortOrder
+  colorKey?: Prisma.SortOrder
   aliases?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
   departments?: Prisma.DepartmentOrderByRelationAggregateInput
   projects?: Prisma.ProjectOrderByRelationAggregateInput
   memberships?: Prisma.PrincipalMembershipOrderByRelationAggregateInput
+  accessMemberships?: Prisma.OrganizationMembershipOrderByRelationAggregateInput
+  teamScopes?: Prisma.TeamScopeOrderByRelationAggregateInput
+  invitations?: Prisma.InvitationOrderByRelationAggregateInput
+  accessAuditLogs?: Prisma.AccessAuditLogOrderByRelationAggregateInput
   tasks?: Prisma.TaskOrderByRelationAggregateInput
   resources?: Prisma.TaskResourceOrderByRelationAggregateInput
   workflowTemplates?: Prisma.WorkflowTemplateOrderByRelationAggregateInput
@@ -211,11 +228,16 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   workspaceId?: Prisma.StringFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
   description?: Prisma.StringNullableFilter<"Organization"> | string | null
+  colorKey?: Prisma.StringFilter<"Organization"> | string
   aliases?: Prisma.StringNullableListFilter<"Organization">
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   departments?: Prisma.DepartmentListRelationFilter
   projects?: Prisma.ProjectListRelationFilter
   memberships?: Prisma.PrincipalMembershipListRelationFilter
+  accessMemberships?: Prisma.OrganizationMembershipListRelationFilter
+  teamScopes?: Prisma.TeamScopeListRelationFilter
+  invitations?: Prisma.InvitationListRelationFilter
+  accessAuditLogs?: Prisma.AccessAuditLogListRelationFilter
   tasks?: Prisma.TaskListRelationFilter
   resources?: Prisma.TaskResourceListRelationFilter
   workflowTemplates?: Prisma.WorkflowTemplateListRelationFilter
@@ -226,6 +248,7 @@ export type OrganizationOrderByWithAggregationInput = {
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
   description?: Prisma.SortOrderInput | Prisma.SortOrder
+  colorKey?: Prisma.SortOrder
   aliases?: Prisma.SortOrder
   _count?: Prisma.OrganizationCountOrderByAggregateInput
   _max?: Prisma.OrganizationMaxOrderByAggregateInput
@@ -240,6 +263,7 @@ export type OrganizationScalarWhereWithAggregatesInput = {
   workspaceId?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   name?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   description?: Prisma.StringNullableWithAggregatesFilter<"Organization"> | string | null
+  colorKey?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   aliases?: Prisma.StringNullableListFilter<"Organization">
 }
 
@@ -247,11 +271,16 @@ export type OrganizationCreateInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
@@ -262,10 +291,15 @@ export type OrganizationUncheckedCreateInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
@@ -275,11 +309,16 @@ export type OrganizationUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
@@ -290,10 +329,15 @@ export type OrganizationUncheckedUpdateInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -304,6 +348,7 @@ export type OrganizationCreateManyInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
 }
 
@@ -311,6 +356,7 @@ export type OrganizationUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
 }
 
@@ -319,6 +365,7 @@ export type OrganizationUncheckedUpdateManyInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
 }
 
@@ -350,6 +397,7 @@ export type OrganizationCountOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  colorKey?: Prisma.SortOrder
   aliases?: Prisma.SortOrder
 }
 
@@ -358,6 +406,7 @@ export type OrganizationMaxOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  colorKey?: Prisma.SortOrder
 }
 
 export type OrganizationMinOrderByAggregateInput = {
@@ -365,6 +414,7 @@ export type OrganizationMinOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  colorKey?: Prisma.SortOrder
 }
 
 export type OrganizationScalarRelationFilter = {
@@ -476,6 +526,64 @@ export type OrganizationUpdateOneWithoutMembershipsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutMembershipsInput, Prisma.OrganizationUpdateWithoutMembershipsInput>, Prisma.OrganizationUncheckedUpdateWithoutMembershipsInput>
 }
 
+export type OrganizationCreateNestedOneWithoutAccessMembershipsInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutAccessMembershipsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutAccessMembershipsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutAccessMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutAccessMembershipsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutAccessMembershipsInput
+  upsert?: Prisma.OrganizationUpsertWithoutAccessMembershipsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutAccessMembershipsInput, Prisma.OrganizationUpdateWithoutAccessMembershipsInput>, Prisma.OrganizationUncheckedUpdateWithoutAccessMembershipsInput>
+}
+
+export type OrganizationCreateNestedOneWithoutTeamScopesInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutTeamScopesInput, Prisma.OrganizationUncheckedCreateWithoutTeamScopesInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutTeamScopesInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutTeamScopesNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutTeamScopesInput, Prisma.OrganizationUncheckedCreateWithoutTeamScopesInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutTeamScopesInput
+  upsert?: Prisma.OrganizationUpsertWithoutTeamScopesInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutTeamScopesInput, Prisma.OrganizationUpdateWithoutTeamScopesInput>, Prisma.OrganizationUncheckedUpdateWithoutTeamScopesInput>
+}
+
+export type OrganizationCreateNestedOneWithoutInvitationsInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutInvitationsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutInvitationsNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutInvitationsInput
+  upsert?: Prisma.OrganizationUpsertWithoutInvitationsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutInvitationsInput, Prisma.OrganizationUpdateWithoutInvitationsInput>, Prisma.OrganizationUncheckedUpdateWithoutInvitationsInput>
+}
+
+export type OrganizationCreateNestedOneWithoutAccessAuditLogsInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessAuditLogsInput, Prisma.OrganizationUncheckedCreateWithoutAccessAuditLogsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutAccessAuditLogsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneWithoutAccessAuditLogsNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessAuditLogsInput, Prisma.OrganizationUncheckedCreateWithoutAccessAuditLogsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutAccessAuditLogsInput
+  upsert?: Prisma.OrganizationUpsertWithoutAccessAuditLogsInput
+  disconnect?: Prisma.OrganizationWhereInput | boolean
+  delete?: Prisma.OrganizationWhereInput | boolean
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutAccessAuditLogsInput, Prisma.OrganizationUpdateWithoutAccessAuditLogsInput>, Prisma.OrganizationUncheckedUpdateWithoutAccessAuditLogsInput>
+}
+
 export type OrganizationCreateNestedOneWithoutTasksInput = {
   create?: Prisma.XOR<Prisma.OrganizationCreateWithoutTasksInput, Prisma.OrganizationUncheckedCreateWithoutTasksInput>
   connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutTasksInput
@@ -526,10 +634,15 @@ export type OrganizationCreateWithoutWorkspaceInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
@@ -539,10 +652,15 @@ export type OrganizationUncheckedCreateWithoutWorkspaceInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
@@ -582,6 +700,7 @@ export type OrganizationScalarWhereInput = {
   workspaceId?: Prisma.StringFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
   description?: Prisma.StringNullableFilter<"Organization"> | string | null
+  colorKey?: Prisma.StringFilter<"Organization"> | string
   aliases?: Prisma.StringNullableListFilter<"Organization">
 }
 
@@ -589,10 +708,15 @@ export type OrganizationCreateWithoutDepartmentsInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
@@ -603,9 +727,14 @@ export type OrganizationUncheckedCreateWithoutDepartmentsInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
@@ -631,10 +760,15 @@ export type OrganizationUpdateWithoutDepartmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
@@ -645,9 +779,14 @@ export type OrganizationUncheckedUpdateWithoutDepartmentsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -657,10 +796,15 @@ export type OrganizationCreateWithoutProjectsInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
@@ -671,9 +815,14 @@ export type OrganizationUncheckedCreateWithoutProjectsInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
@@ -699,10 +848,15 @@ export type OrganizationUpdateWithoutProjectsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
@@ -713,9 +867,14 @@ export type OrganizationUncheckedUpdateWithoutProjectsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -725,10 +884,15 @@ export type OrganizationCreateWithoutMembershipsInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
@@ -739,9 +903,14 @@ export type OrganizationUncheckedCreateWithoutMembershipsInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
@@ -767,10 +936,15 @@ export type OrganizationUpdateWithoutMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
@@ -781,9 +955,366 @@ export type OrganizationUncheckedUpdateWithoutMembershipsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutAccessMembershipsInput = {
+  id?: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
+  departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutAccessMembershipsInput = {
+  id?: string
+  workspaceId: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutAccessMembershipsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutAccessMembershipsInput>
+}
+
+export type OrganizationUpsertWithoutAccessMembershipsInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutAccessMembershipsInput, Prisma.OrganizationUncheckedUpdateWithoutAccessMembershipsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutAccessMembershipsInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutAccessMembershipsInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutAccessMembershipsInput, Prisma.OrganizationUncheckedUpdateWithoutAccessMembershipsInput>
+}
+
+export type OrganizationUpdateWithoutAccessMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
+  departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutAccessMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutTeamScopesInput = {
+  id?: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
+  departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutTeamScopesInput = {
+  id?: string
+  workspaceId: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutTeamScopesInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutTeamScopesInput, Prisma.OrganizationUncheckedCreateWithoutTeamScopesInput>
+}
+
+export type OrganizationUpsertWithoutTeamScopesInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutTeamScopesInput, Prisma.OrganizationUncheckedUpdateWithoutTeamScopesInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutTeamScopesInput, Prisma.OrganizationUncheckedCreateWithoutTeamScopesInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutTeamScopesInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutTeamScopesInput, Prisma.OrganizationUncheckedUpdateWithoutTeamScopesInput>
+}
+
+export type OrganizationUpdateWithoutTeamScopesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
+  departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutTeamScopesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutInvitationsInput = {
+  id?: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
+  departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutInvitationsInput = {
+  id?: string
+  workspaceId: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutInvitationsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+}
+
+export type OrganizationUpsertWithoutInvitationsInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutInvitationsInput, Prisma.OrganizationUncheckedUpdateWithoutInvitationsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutInvitationsInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutInvitationsInput, Prisma.OrganizationUncheckedUpdateWithoutInvitationsInput>
+}
+
+export type OrganizationUpdateWithoutInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
+  departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutAccessAuditLogsInput = {
+  id?: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
+  departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutAccessAuditLogsInput = {
+  id?: string
+  workspaceId: string
+  name: string
+  description?: string | null
+  colorKey?: string
+  aliases?: Prisma.OrganizationCreatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
+  projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
+  resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
+  workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutAccessAuditLogsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessAuditLogsInput, Prisma.OrganizationUncheckedCreateWithoutAccessAuditLogsInput>
+}
+
+export type OrganizationUpsertWithoutAccessAuditLogsInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutAccessAuditLogsInput, Prisma.OrganizationUncheckedUpdateWithoutAccessAuditLogsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutAccessAuditLogsInput, Prisma.OrganizationUncheckedCreateWithoutAccessAuditLogsInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutAccessAuditLogsInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutAccessAuditLogsInput, Prisma.OrganizationUncheckedUpdateWithoutAccessAuditLogsInput>
+}
+
+export type OrganizationUpdateWithoutAccessAuditLogsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
+  departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
+  resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
+  workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutAccessAuditLogsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
+  aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
+  departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -793,11 +1324,16 @@ export type OrganizationCreateWithoutTasksInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
 }
@@ -807,10 +1343,15 @@ export type OrganizationUncheckedCreateWithoutTasksInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
 }
@@ -835,11 +1376,16 @@ export type OrganizationUpdateWithoutTasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
 }
@@ -849,10 +1395,15 @@ export type OrganizationUncheckedUpdateWithoutTasksInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
 }
@@ -861,11 +1412,16 @@ export type OrganizationCreateWithoutResourcesInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutOrganizationInput
 }
@@ -875,10 +1431,15 @@ export type OrganizationUncheckedCreateWithoutResourcesInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutOrganizationInput
 }
@@ -903,11 +1464,16 @@ export type OrganizationUpdateWithoutResourcesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
 }
@@ -917,10 +1483,15 @@ export type OrganizationUncheckedUpdateWithoutResourcesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
 }
@@ -929,11 +1500,16 @@ export type OrganizationCreateWithoutWorkflowTemplatesInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   workspace: Prisma.WorkspaceCreateNestedOneWithoutOrganizationsInput
   departments?: Prisma.DepartmentCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceCreateNestedManyWithoutOrganizationInput
 }
@@ -943,10 +1519,15 @@ export type OrganizationUncheckedCreateWithoutWorkflowTemplatesInput = {
   workspaceId: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedCreateNestedManyWithoutOrganizationInput
   projects?: Prisma.ProjectUncheckedCreateNestedManyWithoutOrganizationInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   tasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOrganizationInput
   resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutOrganizationInput
 }
@@ -971,11 +1552,16 @@ export type OrganizationUpdateWithoutWorkflowTemplatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutOrganizationsNestedInput
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
 }
@@ -985,10 +1571,15 @@ export type OrganizationUncheckedUpdateWithoutWorkflowTemplatesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
 }
@@ -997,6 +1588,7 @@ export type OrganizationCreateManyWorkspaceInput = {
   id?: string
   name: string
   description?: string | null
+  colorKey?: string
   aliases?: Prisma.OrganizationCreatealiasesInput | string[]
 }
 
@@ -1004,10 +1596,15 @@ export type OrganizationUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutOrganizationNestedInput
@@ -1017,10 +1614,15 @@ export type OrganizationUncheckedUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
   departments?: Prisma.DepartmentUncheckedUpdateManyWithoutOrganizationNestedInput
   projects?: Prisma.ProjectUncheckedUpdateManyWithoutOrganizationNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  accessAuditLogs?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   tasks?: Prisma.TaskUncheckedUpdateManyWithoutOrganizationNestedInput
   resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutOrganizationNestedInput
   workflowTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1030,6 +1632,7 @@ export type OrganizationUncheckedUpdateManyWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  colorKey?: Prisma.StringFieldUpdateOperationsInput | string
   aliases?: Prisma.OrganizationUpdatealiasesInput | string[]
 }
 
@@ -1042,6 +1645,10 @@ export type OrganizationCountOutputType = {
   departments: number
   projects: number
   memberships: number
+  accessMemberships: number
+  teamScopes: number
+  invitations: number
+  accessAuditLogs: number
   tasks: number
   resources: number
   workflowTemplates: number
@@ -1051,6 +1658,10 @@ export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Exte
   departments?: boolean | OrganizationCountOutputTypeCountDepartmentsArgs
   projects?: boolean | OrganizationCountOutputTypeCountProjectsArgs
   memberships?: boolean | OrganizationCountOutputTypeCountMembershipsArgs
+  accessMemberships?: boolean | OrganizationCountOutputTypeCountAccessMembershipsArgs
+  teamScopes?: boolean | OrganizationCountOutputTypeCountTeamScopesArgs
+  invitations?: boolean | OrganizationCountOutputTypeCountInvitationsArgs
+  accessAuditLogs?: boolean | OrganizationCountOutputTypeCountAccessAuditLogsArgs
   tasks?: boolean | OrganizationCountOutputTypeCountTasksArgs
   resources?: boolean | OrganizationCountOutputTypeCountResourcesArgs
   workflowTemplates?: boolean | OrganizationCountOutputTypeCountWorkflowTemplatesArgs
@@ -1090,6 +1701,34 @@ export type OrganizationCountOutputTypeCountMembershipsArgs<ExtArgs extends runt
 /**
  * OrganizationCountOutputType without action
  */
+export type OrganizationCountOutputTypeCountAccessMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.OrganizationMembershipWhereInput
+}
+
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountTeamScopesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TeamScopeWhereInput
+}
+
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.InvitationWhereInput
+}
+
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountAccessAuditLogsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AccessAuditLogWhereInput
+}
+
+/**
+ * OrganizationCountOutputType without action
+ */
 export type OrganizationCountOutputTypeCountTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.TaskWhereInput
 }
@@ -1114,11 +1753,16 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   workspaceId?: boolean
   name?: boolean
   description?: boolean
+  colorKey?: boolean
   aliases?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   departments?: boolean | Prisma.Organization$departmentsArgs<ExtArgs>
   projects?: boolean | Prisma.Organization$projectsArgs<ExtArgs>
   memberships?: boolean | Prisma.Organization$membershipsArgs<ExtArgs>
+  accessMemberships?: boolean | Prisma.Organization$accessMembershipsArgs<ExtArgs>
+  teamScopes?: boolean | Prisma.Organization$teamScopesArgs<ExtArgs>
+  invitations?: boolean | Prisma.Organization$invitationsArgs<ExtArgs>
+  accessAuditLogs?: boolean | Prisma.Organization$accessAuditLogsArgs<ExtArgs>
   tasks?: boolean | Prisma.Organization$tasksArgs<ExtArgs>
   resources?: boolean | Prisma.Organization$resourcesArgs<ExtArgs>
   workflowTemplates?: boolean | Prisma.Organization$workflowTemplatesArgs<ExtArgs>
@@ -1130,6 +1774,7 @@ export type OrganizationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   workspaceId?: boolean
   name?: boolean
   description?: boolean
+  colorKey?: boolean
   aliases?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
@@ -1139,6 +1784,7 @@ export type OrganizationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   workspaceId?: boolean
   name?: boolean
   description?: boolean
+  colorKey?: boolean
   aliases?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
@@ -1148,15 +1794,20 @@ export type OrganizationSelectScalar = {
   workspaceId?: boolean
   name?: boolean
   description?: boolean
+  colorKey?: boolean
   aliases?: boolean
 }
 
-export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "description" | "aliases", ExtArgs["result"]["organization"]>
+export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "description" | "colorKey" | "aliases", ExtArgs["result"]["organization"]>
 export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   departments?: boolean | Prisma.Organization$departmentsArgs<ExtArgs>
   projects?: boolean | Prisma.Organization$projectsArgs<ExtArgs>
   memberships?: boolean | Prisma.Organization$membershipsArgs<ExtArgs>
+  accessMemberships?: boolean | Prisma.Organization$accessMembershipsArgs<ExtArgs>
+  teamScopes?: boolean | Prisma.Organization$teamScopesArgs<ExtArgs>
+  invitations?: boolean | Prisma.Organization$invitationsArgs<ExtArgs>
+  accessAuditLogs?: boolean | Prisma.Organization$accessAuditLogsArgs<ExtArgs>
   tasks?: boolean | Prisma.Organization$tasksArgs<ExtArgs>
   resources?: boolean | Prisma.Organization$resourcesArgs<ExtArgs>
   workflowTemplates?: boolean | Prisma.Organization$workflowTemplatesArgs<ExtArgs>
@@ -1176,6 +1827,10 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     departments: Prisma.$DepartmentPayload<ExtArgs>[]
     projects: Prisma.$ProjectPayload<ExtArgs>[]
     memberships: Prisma.$PrincipalMembershipPayload<ExtArgs>[]
+    accessMemberships: Prisma.$OrganizationMembershipPayload<ExtArgs>[]
+    teamScopes: Prisma.$TeamScopePayload<ExtArgs>[]
+    invitations: Prisma.$InvitationPayload<ExtArgs>[]
+    accessAuditLogs: Prisma.$AccessAuditLogPayload<ExtArgs>[]
     tasks: Prisma.$TaskPayload<ExtArgs>[]
     resources: Prisma.$TaskResourcePayload<ExtArgs>[]
     workflowTemplates: Prisma.$WorkflowTemplatePayload<ExtArgs>[]
@@ -1185,6 +1840,10 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     workspaceId: string
     name: string
     description: string | null
+    /**
+     * Semantic Binnie palette key. UI themes resolve this key to their own tokens.
+     */
+    colorKey: string
     aliases: string[]
   }, ExtArgs["result"]["organization"]>
   composites: {}
@@ -1584,6 +2243,10 @@ export interface Prisma__OrganizationClient<T, Null = never, ExtArgs extends run
   departments<T extends Prisma.Organization$departmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$departmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DepartmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   projects<T extends Prisma.Organization$projectsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$projectsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   memberships<T extends Prisma.Organization$membershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$membershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PrincipalMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  accessMemberships<T extends Prisma.Organization$accessMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$accessMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrganizationMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  teamScopes<T extends Prisma.Organization$teamScopesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$teamScopesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TeamScopePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  invitations<T extends Prisma.Organization$invitationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$invitationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  accessAuditLogs<T extends Prisma.Organization$accessAuditLogsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$accessAuditLogsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AccessAuditLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   tasks<T extends Prisma.Organization$tasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$tasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   resources<T extends Prisma.Organization$resourcesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$resourcesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskResourcePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   workflowTemplates<T extends Prisma.Organization$workflowTemplatesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$workflowTemplatesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkflowTemplatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -1620,6 +2283,7 @@ export interface OrganizationFieldRefs {
   readonly workspaceId: Prisma.FieldRef<"Organization", 'String'>
   readonly name: Prisma.FieldRef<"Organization", 'String'>
   readonly description: Prisma.FieldRef<"Organization", 'String'>
+  readonly colorKey: Prisma.FieldRef<"Organization", 'String'>
   readonly aliases: Prisma.FieldRef<"Organization", 'String[]'>
 }
     
@@ -2091,6 +2755,102 @@ export type Organization$membershipsArgs<ExtArgs extends runtime.Types.Extension
   take?: number
   skip?: number
   distinct?: Prisma.PrincipalMembershipScalarFieldEnum | Prisma.PrincipalMembershipScalarFieldEnum[]
+}
+
+/**
+ * Organization.accessMemberships
+ */
+export type Organization$accessMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the OrganizationMembership
+   */
+  select?: Prisma.OrganizationMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the OrganizationMembership
+   */
+  omit?: Prisma.OrganizationMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.OrganizationMembershipInclude<ExtArgs> | null
+  where?: Prisma.OrganizationMembershipWhereInput
+  orderBy?: Prisma.OrganizationMembershipOrderByWithRelationInput | Prisma.OrganizationMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.OrganizationMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.OrganizationMembershipScalarFieldEnum | Prisma.OrganizationMembershipScalarFieldEnum[]
+}
+
+/**
+ * Organization.teamScopes
+ */
+export type Organization$teamScopesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the TeamScope
+   */
+  select?: Prisma.TeamScopeSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the TeamScope
+   */
+  omit?: Prisma.TeamScopeOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TeamScopeInclude<ExtArgs> | null
+  where?: Prisma.TeamScopeWhereInput
+  orderBy?: Prisma.TeamScopeOrderByWithRelationInput | Prisma.TeamScopeOrderByWithRelationInput[]
+  cursor?: Prisma.TeamScopeWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TeamScopeScalarFieldEnum | Prisma.TeamScopeScalarFieldEnum[]
+}
+
+/**
+ * Organization.invitations
+ */
+export type Organization$invitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+  orderBy?: Prisma.InvitationOrderByWithRelationInput | Prisma.InvitationOrderByWithRelationInput[]
+  cursor?: Prisma.InvitationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.InvitationScalarFieldEnum | Prisma.InvitationScalarFieldEnum[]
+}
+
+/**
+ * Organization.accessAuditLogs
+ */
+export type Organization$accessAuditLogsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AccessAuditLog
+   */
+  select?: Prisma.AccessAuditLogSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AccessAuditLog
+   */
+  omit?: Prisma.AccessAuditLogOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AccessAuditLogInclude<ExtArgs> | null
+  where?: Prisma.AccessAuditLogWhereInput
+  orderBy?: Prisma.AccessAuditLogOrderByWithRelationInput | Prisma.AccessAuditLogOrderByWithRelationInput[]
+  cursor?: Prisma.AccessAuditLogWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AccessAuditLogScalarFieldEnum | Prisma.AccessAuditLogScalarFieldEnum[]
 }
 
 /**

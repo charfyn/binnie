@@ -13,10 +13,88 @@ export const WorkspaceRole = {
   OWNER: 'OWNER',
   ORGANIZATION_MANAGER: 'ORGANIZATION_MANAGER',
   DEPARTMENT_MANAGER: 'DEPARTMENT_MANAGER',
-  EMPLOYEE: 'EMPLOYEE'
+  EMPLOYEE: 'EMPLOYEE',
+  VIEWER: 'VIEWER'
 } as const
 
 export type WorkspaceRole = (typeof WorkspaceRole)[keyof typeof WorkspaceRole]
+
+
+export const PrincipalStatus = {
+  ACTIVE: 'ACTIVE',
+  ARCHIVED: 'ARCHIVED'
+} as const
+
+export type PrincipalStatus = (typeof PrincipalStatus)[keyof typeof PrincipalStatus]
+
+
+export const MembershipStatus = {
+  ACTIVE: 'ACTIVE',
+  REMOVED: 'REMOVED'
+} as const
+
+export type MembershipStatus = (typeof MembershipStatus)[keyof typeof MembershipStatus]
+
+
+export const AccessLevel = {
+  OWNER: 'OWNER',
+  ORGANIZATION_MANAGER: 'ORGANIZATION_MANAGER',
+  DEPARTMENT_HEAD: 'DEPARTMENT_HEAD',
+  MEMBER: 'MEMBER',
+  VIEWER: 'VIEWER'
+} as const
+
+export type AccessLevel = (typeof AccessLevel)[keyof typeof AccessLevel]
+
+
+export const UserAccountStatus = {
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ACCESS_REMOVED: 'ACCESS_REMOVED'
+} as const
+
+export type UserAccountStatus = (typeof UserAccountStatus)[keyof typeof UserAccountStatus]
+
+
+export const InvitationStatus = {
+  PENDING_OWNER_APPROVAL: 'PENDING_OWNER_APPROVAL',
+  APPROVED: 'APPROVED',
+  SENT: 'SENT',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+  EXPIRED: 'EXPIRED'
+} as const
+
+export type InvitationStatus = (typeof InvitationStatus)[keyof typeof InvitationStatus]
+
+
+export const AccessAuditAction = {
+  PERSON_CREATED: 'PERSON_CREATED',
+  PERSON_ARCHIVED: 'PERSON_ARCHIVED',
+  ORGANIZATION_MEMBERSHIP_ADDED: 'ORGANIZATION_MEMBERSHIP_ADDED',
+  ORGANIZATION_MEMBERSHIP_REMOVED: 'ORGANIZATION_MEMBERSHIP_REMOVED',
+  DEPARTMENT_MEMBERSHIP_CHANGED: 'DEPARTMENT_MEMBERSHIP_CHANGED',
+  TEAM_MEMBERSHIP_CHANGED: 'TEAM_MEMBERSHIP_CHANGED',
+  ACCESS_REQUESTED: 'ACCESS_REQUESTED',
+  INVITATION_APPROVED: 'INVITATION_APPROVED',
+  INVITATION_SENT: 'INVITATION_SENT',
+  INVITATION_RESENT: 'INVITATION_RESENT',
+  INVITATION_ACCEPTED: 'INVITATION_ACCEPTED',
+  INVITATION_REJECTED: 'INVITATION_REJECTED',
+  INVITATION_CANCELLED: 'INVITATION_CANCELLED',
+  ACCESS_LEVEL_CHANGED: 'ACCESS_LEVEL_CHANGED',
+  ACCOUNT_SUSPENDED: 'ACCOUNT_SUSPENDED',
+  ACCOUNT_REACTIVATED: 'ACCOUNT_REACTIVATED',
+  ACCESS_REMOVED: 'ACCESS_REMOVED',
+  SESSIONS_REVOKED: 'SESSIONS_REVOKED',
+  ACCOUNT_CREATED: 'ACCOUNT_CREATED',
+  USERNAME_CHANGED: 'USERNAME_CHANGED',
+  PASSWORD_RESET: 'PASSWORD_RESET',
+  PASSWORD_CHANGED: 'PASSWORD_CHANGED'
+} as const
+
+export type AccessAuditAction = (typeof AccessAuditAction)[keyof typeof AccessAuditAction]
 
 
 export const PrincipalType = {

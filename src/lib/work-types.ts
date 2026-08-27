@@ -1,3 +1,5 @@
+import type { OrganizationColorKey } from "@/lib/organization-colors";
+
 export const TASK_STATUSES = ["ready", "in_progress", "waiting", "blocked", "review", "done"] as const;
 export const TASK_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 export const DEPENDENCY_TYPES = ["start_blocker", "completion_blocker", "related"] as const;
@@ -13,6 +15,7 @@ export interface DirectoryDTO {
   name: string;
   type: "person" | "team";
   active: boolean;
+  accountStatus: "PERSON_ONLY" | "ACTIVE" | "SUSPENDED" | "ACCESS_REMOVED";
   email?: string;
   memberships: Array<{
     organizationId?: string;
@@ -28,6 +31,8 @@ export type WorkspaceThemeValue = "soft" | "clear" | "dark";
 export interface UserProfileDTO {
   principalId: string;
   displayName: string;
+  /** Login credential only; Person IDs remain the canonical identity. */
+  username?: string;
   role: DirectoryDTO["memberships"][number]["role"];
   email?: string;
   timezone: string;
@@ -35,6 +40,13 @@ export interface UserProfileDTO {
   theme: WorkspaceThemeValue;
   /** 0 denotes a profile created before durable preferences were introduced. */
   storageVersion: number;
+  /** Canonical TeamMembership IDs used for personal Today filtering. */
+  teamIds: string[];
+  /** Personal column choices for the canonical Tasks List view. */
+  taskListColumns: string[];
+  accountStatus: "ACTIVE";
+  workspaces: Array<{ organizationId: string; organization: string; accessLevel: string }>;
+  pendingAccessRequestCount: number;
 }
 
 /** A raw thought Binnie retained because it could not safely organize it yet. */
@@ -53,7 +65,35 @@ export interface TaskAssignmentDTO {
   role: "primary_owner" | "collaborator";
   source: "manual" | "department_routing" | "smart_inbox" | "claim" | "import";
   assignedAt: string;
+  assignedByPrincipalId?: string;
+  assignedBy?: string;
   claimedFromAssignmentId?: string;
+}
+
+/**
+ * Tasks has one intentionally small set of scopes. Broader visibility is
+ * reached through People/Team selection rather than a separate "all work"
+ * dashboard, which keeps the default workspace personal and calm.
+ */
+export const TASK_WORKSPACE_SCOPES = ["my", "team", "people"] as const;
+export type TaskWorkspaceScope = (typeof TASK_WORKSPACE_SCOPES)[number];
+
+/** A deliberately narrow option set for the Tasks scope selector. */
+export interface TaskScopeOptionDTO {
+  id: string;
+  name: string;
+  subtitle?: string;
+  /** Team scope may represent a real Team or an authorized Department. */
+  kind?: "team" | "department";
+}
+
+/** Server-authorized task data for one Tasks page scope. */
+export interface TaskScopeResultDTO {
+  scope: TaskWorkspaceScope;
+  tasks: TaskDTO[];
+  people: TaskScopeOptionDTO[];
+  teams: TaskScopeOptionDTO[];
+  allowedScopes: TaskWorkspaceScope[];
 }
 
 export interface TaskDependencyDTO {
@@ -81,6 +121,8 @@ export interface OrganizationDTO {
   id: string;
   name: string;
   description?: string;
+  /** Persistent semantic identity, shared by organization and project cards. */
+  colorKey: OrganizationColorKey;
   aliases: string[];
   departments: Array<{ id: string; name: string; aliases: string[]; teamId?: string }>;
   resources: TaskResourceDTO[];
@@ -249,6 +291,8 @@ export interface TaskDTO {
   assigneeIds: string[];
   assignee?: string;
   primaryOwner?: TaskAssignmentDTO;
+  /** Stable Person identity that created/owns unassigned captured work. */
+  createdByPrincipalId?: string;
   nextActionKind: NextActionKindValue;
   nextActionBy: string;
   nextActionPrincipalId?: string;
@@ -263,6 +307,7 @@ export interface TaskDTO {
   /** Reserved for future opt-in time tracking; not used for workload yet. */
   actualMinutes?: number;
   waitingSince?: string;
+  completedAt?: string;
   isOverdue: boolean;
   isFollowUpDue: boolean;
   canStartNow: boolean;

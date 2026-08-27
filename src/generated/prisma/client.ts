@@ -24,7 +24,7 @@ export * as $Enums from './enums.ts'
 export * from "./enums.ts"
 /**
  * ## Prisma Client
- *
+ * 
  * Type-safe database client for TypeScript
  * @example
  * ```
@@ -34,7 +34,7 @@ export * from "./enums.ts"
  * // Fetch zero or more Workspaces
  * const workspaces = await prisma.workspace.findMany()
  * ```
- *
+ * 
  * Read more in our [docs](https://pris.ly/d/client).
  */
 export const PrismaClient = $Class.getPrismaClientClass()
@@ -88,7 +88,7 @@ export type ProjectFocusItem = Prisma.ProjectFocusItemModel
 export type Principal = Prisma.PrincipalModel
 /**
  * Model PrincipalPreference
- *
+ * 
  */
 export type PrincipalPreference = Prisma.PrincipalPreferenceModel
 /**
@@ -96,6 +96,71 @@ export type PrincipalPreference = Prisma.PrincipalPreferenceModel
  * 
  */
 export type PrincipalMembership = Prisma.PrincipalMembershipModel
+/**
+ * Model OrganizationMembership
+ * 
+ */
+export type OrganizationMembership = Prisma.OrganizationMembershipModel
+/**
+ * Model DepartmentMembership
+ * 
+ */
+export type DepartmentMembership = Prisma.DepartmentMembershipModel
+/**
+ * Model TeamMembership
+ * 
+ */
+export type TeamMembership = Prisma.TeamMembershipModel
+/**
+ * Model TeamScope
+ * 
+ */
+export type TeamScope = Prisma.TeamScopeModel
+/**
+ * Model UserAccount
+ * 
+ */
+export type UserAccount = Prisma.UserAccountModel
+/**
+ * Model Invitation
+ * 
+ */
+export type Invitation = Prisma.InvitationModel
+/**
+ * Model AuthRateLimit
+ * 
+ */
+export type AuthRateLimit = Prisma.AuthRateLimitModel
+/**
+ * Model CredentialLoginThrottle
+ * 
+ */
+export type CredentialLoginThrottle = Prisma.CredentialLoginThrottleModel
+/**
+ * Model AccessAuditLog
+ * 
+ */
+export type AccessAuditLog = Prisma.AccessAuditLogModel
+/**
+ * Model AuthUser
+ * 
+ */
+export type AuthUser = Prisma.AuthUserModel
+/**
+ * Model AuthSession
+ * 
+ */
+export type AuthSession = Prisma.AuthSessionModel
+/**
+ * Model AuthAccount
+ * 
+ */
+export type AuthAccount = Prisma.AuthAccountModel
+/**
+ * Model AuthVerification
+ * 
+ */
+export type AuthVerification = Prisma.AuthVerificationModel
 /**
  * Model Task
  * 

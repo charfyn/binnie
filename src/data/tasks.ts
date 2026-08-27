@@ -12,18 +12,32 @@ import {
   MilestoneStatus,
   RecurrenceFrequency,
   PrincipalType,
+  PrincipalStatus,
+  MembershipStatus,
+  InvitationStatus,
   ReviewDecision,
   TaskEventType,
   TaskPriority,
   TaskStatus,
-  WorkspaceRole,
   WorkflowTemplateStatus,
   NudgeDisposition,
   type Prisma,
 } from "@/generated/prisma/client";
+import {
+  AuthenticationRequiredError,
+  AuthorizationError,
+  canManageDepartment,
+  canManageOrganization,
+  isViewer,
+  isWorkspaceOwner,
+  requireCurrentUser,
+  type CurrentUserContext,
+} from "@/lib/access";
 import { getDb, hasDatabaseConfiguration } from "@/lib/db";
 import { seedDemoWorkspace } from "../../prisma/seed";
-import { nextOccurrenceDate, taskTransitionBlockReason } from "@/lib/work-rules";
+import { calendarDateKey, nextOccurrenceDate, taskTransitionBlockReason } from "@/lib/work-rules";
+import { defaultOrganizationColorKey, isOrganizationColorKey, type OrganizationColorKey } from "@/lib/organization-colors";
+import { TASK_LIST_COLUMN_IDS } from "@/lib/task-list";
 import type {
   ActionResult,
   DependencyTypeValue,
@@ -38,13 +52,15 @@ import type {
   TaskDTO,
   TaskPriorityValue,
   TaskStatusValue,
+  TaskScopeOptionDTO,
+  TaskScopeResultDTO,
+  TaskWorkspaceScope,
   UserProfileDTO,
   WorkflowTemplateDTO,
   WorkspaceSnapshotDTO,
 } from "@/lib/work-types";
 
 const DEFAULT_WORKSPACE_ID = "workspace-binnie";
-const DEFAULT_ACTOR_ID = "person-charlotte";
 const workspaceTimeZone = "Asia/Jakarta";
 
 const taskInclude = {
@@ -54,7 +70,7 @@ const taskInclude = {
   nextActionPrincipal: true,
   nextActionDepartment: true,
   involvedDepartments: { include: { department: true } },
-  assignments: { include: { principal: { include: { memberships: { select: { departmentId: true } } } } }, orderBy: [{ role: "asc" }, { assignedAt: "asc" }] },
+  assignments: { include: { principal: { include: { teamScopes: { where: { status: "ACTIVE" }, select: { departmentId: true } } } }, assignedBy: { select: { id: true, name: true } } }, orderBy: [{ role: "asc" }, { assignedAt: "asc" }] },
   dependencies: {
     include: {
       prerequisiteTask: { select: { id: true, title: true, status: true } },
@@ -82,9 +98,17 @@ const taskInclude = {
 } satisfies Prisma.TaskInclude;
 
 type TaskRecord = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;
-type ActorRecord = Prisma.PrincipalGetPayload<{
-  include: { memberships: { include: { organization: true; department: true } } };
-}>;
+type ActorRecord = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  username: string;
+  email: string;
+  context: CurrentUserContext;
+  organizationMemberships: CurrentUserContext["organizationMemberships"];
+  departmentMemberships: CurrentUserContext["departmentMemberships"];
+  teamIds: string[];
+};
 
 const projectInclude = {
   organization: true,
@@ -157,8 +181,6 @@ export interface CreatePrincipalInput {
 export interface UpdateCanonicalProfileInput {
   workspaceId?: string;
   displayName: string;
-  role: DirectoryDTO["memberships"][number]["role"];
-  email?: string;
   timezone: string;
   dateFormat: string;
   theme: UserProfileDTO["theme"];
@@ -168,6 +190,8 @@ export interface CreateOrganizationInput {
   workspaceId?: string;
   name: string;
   description?: string;
+  /** Optional approved visual identity; unset uses the deterministic default. */
+  colorKey?: OrganizationColorKey;
 }
 
 export interface CreateTaskInput {
@@ -310,7 +334,10 @@ function recurrenceValidationMessage(recurrence?: RecurrenceInput) {
 }
 
 function toDateString(value?: Date | null) {
-  return value ? value.toISOString().slice(0, 10) : undefined;
+  // These fields are PostgreSQL DATE values. Preserve their calendar day with
+  // the same normalizer the browser planners use; never reinterpret them as a
+  // user's local timestamp.
+  return value ? calendarDateKey(value) : undefined;
 }
 
 function workspaceToday() {
@@ -352,38 +379,77 @@ function assignmentSource(value: AssignmentSource): TaskAssignmentDTO["source"] 
   return value.toLowerCase() as TaskAssignmentDTO["source"];
 }
 
-function toDirectoryDTO(principal: Prisma.PrincipalGetPayload<{ include: { memberships: { include: { organization: true; department: true } } } }>): DirectoryDTO {
+function directoryRole(accessLevel: import("@/generated/prisma/client").AccessLevel | null | undefined): DirectoryDTO["memberships"][number]["role"] {
+  if (accessLevel === "OWNER") return "owner";
+  if (accessLevel === "ORGANIZATION_MANAGER") return "organization_manager";
+  if (accessLevel === "DEPARTMENT_HEAD") return "department_manager";
+  return "employee";
+}
+
+function toDirectoryDTO(principal: Prisma.PrincipalGetPayload<{ include: {
+  organizationMemberships: { include: { organization: true } };
+  departmentMemberships: { include: { department: true } };
+  teamScopes: { include: { organization: true; department: true } };
+  userAccount: true;
+} }>, includeContactEmail = false): DirectoryDTO {
+  const organizationMemberships = principal.type === PrincipalType.TEAM
+    ? principal.teamScopes.map((scope) => ({ organizationId: scope.organizationId, organization: scope.organization, departmentId: scope.departmentId, department: scope.department, accessLevel: null }))
+    : principal.organizationMemberships.map((membership) => ({
+      organizationId: membership.organizationId,
+      organization: membership.organization,
+      departmentId: principal.departmentMemberships.find((department) => department.department.organizationId === membership.organizationId)?.departmentId,
+      department: principal.departmentMemberships.find((department) => department.department.organizationId === membership.organizationId)?.department,
+      accessLevel: membership.accessLevel,
+    }));
   return {
     id: principal.id,
     name: principal.name,
     type: principal.type === PrincipalType.PERSON ? "person" : "team",
-    active: principal.active,
-    email: principal.email || undefined,
-    memberships: principal.memberships.map(membership => ({
-      organizationId: membership.organizationId || undefined,
-      organization: membership.organization?.name,
+    active: principal.active && principal.status === "ACTIVE",
+    accountStatus: principal.userAccount?.status || "PERSON_ONLY",
+    // Contact email is deliberately not part of the shared directory payload
+    // for non-Owners. Access workflows use it only on the server.
+    email: includeContactEmail ? principal.email || undefined : undefined,
+    memberships: organizationMemberships.map(membership => ({
+      organizationId: membership.organizationId,
+      organization: membership.organization.name,
       departmentId: membership.departmentId || undefined,
       department: membership.department?.name,
-      role: membership.role.toLowerCase() as DirectoryDTO["memberships"][number]["role"],
+      role: directoryRole(membership.accessLevel),
     })),
   };
 }
 
-function toProfileDTO(actor: ActorRecord, preference?: { timezone: string; dateFormat: string; theme: string; storageVersion: number } | null): UserProfileDTO {
-  const preferredMembership = actor.memberships.find(membership => membership.role === WorkspaceRole.OWNER)
-    || actor.memberships.find(membership => membership.role === WorkspaceRole.ORGANIZATION_MANAGER)
-    || actor.memberships.find(membership => membership.role === WorkspaceRole.DEPARTMENT_MANAGER)
-    || actor.memberships[0];
+function persistedTaskListColumns(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((column): column is string => typeof column === "string" && taskListColumnIds.has(column)))];
+}
+
+const taskListColumnIds = new Set<string>(TASK_LIST_COLUMN_IDS);
+
+function toProfileDTO(actor: ActorRecord, preference?: { timezone: string; dateFormat: string; theme: string; taskListColumns?: unknown; storageVersion: number } | null, pendingAccessRequestCount = 0): UserProfileDTO {
+  const preferredMembership = actor.organizationMemberships.find(membership => membership.accessLevel === "OWNER")
+    || actor.organizationMemberships.find(membership => membership.accessLevel === "ORGANIZATION_MANAGER")
+    || actor.organizationMemberships.find(membership => membership.accessLevel === "DEPARTMENT_HEAD")
+    || actor.organizationMemberships.find(membership => membership.accessLevel);
   const theme = preference?.theme === "clear" || preference?.theme === "dark" ? preference.theme : "soft";
   return {
     principalId: actor.id,
     displayName: actor.name,
-    role: (preferredMembership?.role || WorkspaceRole.EMPLOYEE).toLowerCase() as UserProfileDTO["role"],
-    email: actor.email || undefined,
+    username: actor.username || undefined,
+    role: directoryRole(preferredMembership?.accessLevel),
+    email: actor.email,
     timezone: preference?.timezone || "Asia/Jakarta",
     dateFormat: preference?.dateFormat || "12 Aug 2026",
     theme,
     storageVersion: preference?.storageVersion || 0,
+    teamIds: actor.teamIds,
+    taskListColumns: persistedTaskListColumns(preference?.taskListColumns),
+    accountStatus: "ACTIVE",
+    workspaces: actor.organizationMemberships
+      .filter((membership) => membership.accessLevel)
+      .map((membership) => ({ organizationId: membership.organizationId, organization: membership.organizationName, accessLevel: membership.accessLevel! })),
+    pendingAccessRequestCount,
   };
 }
 
@@ -411,20 +477,22 @@ function toOrganizationDTO(organization: {
   id: string;
   name: string;
   description: string | null;
+  colorKey: string;
   aliases: string[];
-  departments: Array<{ id: string; name: string; aliases: string[]; memberships: Array<{ principal: { id: string; type: PrincipalType } }> }>;
+  departments: Array<{ id: string; name: string; aliases: string[]; teamScopes: Array<{ team: { id: string; type: PrincipalType } }> }>;
   resources: TaskRecord["resources"];
 }): OrganizationDTO {
   return {
     id: organization.id,
     name: organization.name,
     description: organization.description || undefined,
+    colorKey: isOrganizationColorKey(organization.colorKey) ? organization.colorKey : defaultOrganizationColorKey(organization.name),
     aliases: organization.aliases,
     departments: organization.departments.map((department) => ({
       id: department.id,
       name: department.name,
       aliases: department.aliases,
-      teamId: department.memberships.find(({ principal }) => principal.type === PrincipalType.TEAM)?.principal.id,
+      teamId: department.teamScopes.find(({ team }) => team.type === PrincipalType.TEAM)?.team.id,
     })),
     resources: organization.resources.map(toResourceDTO),
   };
@@ -449,6 +517,8 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     role: assignmentRole(assignment.role),
     source: assignmentSource(assignment.source),
     assignedAt: assignment.assignedAt.toISOString(),
+    assignedByPrincipalId: assignment.assignedByPrincipalId || undefined,
+    assignedBy: assignment.assignedBy?.name || undefined,
     claimedFromAssignmentId: assignment.claimedFromAssignmentId || undefined,
   }));
   const primaryOwner = assignments.find((assignment) => assignment.role === "primary_owner");
@@ -481,6 +551,7 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     assigneeIds: assignments.map((assignment) => assignment.principalId),
     assignee: primaryOwner?.name || assignments[0]?.name,
     primaryOwner,
+    createdByPrincipalId: task.createdByPrincipalId || undefined,
     nextActionKind: asNextActionKind(task.nextActionKind),
     nextActionBy: readableNextAction(task, actorId),
     nextActionPrincipalId: task.nextActionPrincipalId || undefined,
@@ -493,6 +564,7 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     estimatedMinutes: task.estimatedMinutes ?? undefined,
     actualMinutes: task.actualMinutes ?? undefined,
     waitingSince: task.waitingSince?.toISOString(),
+    completedAt: task.completedAt?.toISOString(),
     isOverdue: Boolean(isOpen && deadlineDate && deadlineDate < today),
     isFollowUpDue: Boolean(isOpen && followUpDate && followUpDate <= today),
     canStartNow: startBlockedBy.length === 0,
@@ -657,48 +729,68 @@ function toWorkflowTemplateDTO(template: WorkflowTemplateRecord): WorkflowTempla
 }
 
 async function resolveActor(workspaceId: string): Promise<ActorRecord> {
-  const db = getDb();
-  const actorId = process.env.BINNIE_ACTOR_ID || DEFAULT_ACTOR_ID;
-  const actor = await db.principal.findFirst({
-    where: { id: actorId, workspaceId, active: true, type: PrincipalType.PERSON },
-    include: { memberships: { include: { organization: true, department: true } } },
-  });
-  if (!actor) throw new Error("BINNIE_ACTOR_NOT_FOUND");
-  return actor;
+  const context = await requireCurrentUser(workspaceId);
+  return {
+    id: context.personId,
+    workspaceId: context.workspaceId,
+    name: context.displayName,
+    username: context.username,
+    email: context.contactEmail || "",
+    context,
+    organizationMemberships: context.organizationMemberships,
+    departmentMemberships: context.departmentMemberships,
+    teamIds: context.teamIds,
+  };
 }
 
 function actorIsOwner(actor: ActorRecord) {
-  return actor.memberships.some((membership) => membership.role === WorkspaceRole.OWNER);
+  return isWorkspaceOwner(actor.context, actor.workspaceId);
 }
 
 function actorManagesOrganization(actor: ActorRecord, organizationId?: string | null) {
-  return Boolean(organizationId && actor.memberships.some((membership) => membership.organizationId === organizationId && (membership.role === WorkspaceRole.OWNER || membership.role === WorkspaceRole.ORGANIZATION_MANAGER)));
+  return Boolean(organizationId && canManageOrganization(actor.context, actor.workspaceId, organizationId));
 }
 
 function actorManagesDepartment(actor: ActorRecord, departmentId?: string | null) {
-  return Boolean(departmentId && actor.memberships.some((membership) => membership.departmentId === departmentId && (membership.role === WorkspaceRole.OWNER || membership.role === WorkspaceRole.ORGANIZATION_MANAGER || membership.role === WorkspaceRole.DEPARTMENT_MANAGER)));
+  const membership = departmentId ? actor.departmentMemberships.find((candidate) => candidate.departmentId === departmentId) : undefined;
+  return Boolean(membership && canManageDepartment(actor.context, actor.workspaceId, membership.organizationId, membership.departmentId));
+}
+
+function actorDepartmentHeadIds(actor: ActorRecord) {
+  const departmentHeadOrganizationIds = new Set(actor.organizationMemberships
+    .filter((membership) => membership.accessLevel === "DEPARTMENT_HEAD")
+    .map((membership) => membership.organizationId));
+  return new Set(actor.departmentMemberships
+    .filter((membership) => departmentHeadOrganizationIds.has(membership.organizationId))
+    .map((membership) => membership.departmentId));
 }
 
 function canViewTask(actor: ActorRecord, task: TaskRecord) {
   if (actorIsOwner(actor) || actorManagesOrganization(actor, task.organizationId)) return true;
-  if (task.assignments.some((assignment) => assignment.principalId === actor.id)) return true;
-  const memberDepartmentIds = new Set(actor.memberships.map((membership) => membership.departmentId).filter(Boolean));
+  if (task.organizationId && isViewer(actor.context, task.organizationId)) {
+    return task.assignments.some((assignment) => assignment.principalId === actor.id || actor.teamIds.includes(assignment.principalId));
+  }
+  if (task.assignments.some((assignment) => assignment.principalId === actor.id || actor.teamIds.includes(assignment.principalId))) return true;
+  if (task.createdByPrincipalId === actor.id || task.reviewCycles.some((review) => review.reviewerPrincipalId === actor.id)) return true;
+  const memberDepartmentIds = actorDepartmentHeadIds(actor);
   return Boolean(
     (task.leadDepartmentId && memberDepartmentIds.has(task.leadDepartmentId)) ||
     task.involvedDepartments.some(({ departmentId }) => memberDepartmentIds.has(departmentId)) ||
-    task.assignments.some(({ principal }) => principal.type === PrincipalType.TEAM && principal.memberships.some((membership) => membership.departmentId && memberDepartmentIds.has(membership.departmentId))),
+    task.assignments.some(({ principal }) => principal.type === PrincipalType.TEAM && principal.teamScopes.some((membership) => membership.departmentId && memberDepartmentIds.has(membership.departmentId))),
   );
 }
 
 function canManageTask(actor: ActorRecord, task: TaskRecord) {
+  if (task.organizationId && isViewer(actor.context, task.organizationId)) return false;
   if (actorIsOwner(actor) || actorManagesOrganization(actor, task.organizationId) || actorManagesDepartment(actor, task.leadDepartmentId)) return true;
   return task.assignments.some((assignment) => assignment.principalId === actor.id && assignment.role === AssignmentRole.PRIMARY_OWNER);
 }
 
 function canViewProject(actor: ActorRecord, project: ProjectRecord) {
   if (actorIsOwner(actor) || actorManagesOrganization(actor, project.organizationId)) return true;
-  if (project.members.some(member => member.principalId === actor.id)) return true;
-  const memberDepartmentIds = new Set(actor.memberships.map(membership => membership.departmentId).filter(Boolean));
+  if (project.members.some(member => member.principalId === actor.id || actor.teamIds.includes(member.principalId))) return true;
+  if (isViewer(actor.context, project.organizationId)) return false;
+  const memberDepartmentIds = actorDepartmentHeadIds(actor);
   return Boolean(
     (project.leadDepartmentId && memberDepartmentIds.has(project.leadDepartmentId))
     || project.involvedDepartments.some(({ departmentId }) => memberDepartmentIds.has(departmentId)),
@@ -706,10 +798,242 @@ function canViewProject(actor: ActorRecord, project: ProjectRecord) {
 }
 
 function canManageProject(actor: ActorRecord, project: ProjectRecord) {
+  if (isViewer(actor.context, project.organizationId)) return false;
   return actorIsOwner(actor)
     || actorManagesOrganization(actor, project.organizationId)
     || actorManagesDepartment(actor, project.leadDepartmentId)
     || project.members.some(member => member.principalId === actor.id && member.role === ProjectMemberRole.OWNER);
+}
+
+function managedOrganizationIds(actor: ActorRecord) {
+  return actor.organizationMemberships
+    .filter((membership) => membership.accessLevel === "ORGANIZATION_MANAGER")
+    .map((membership) => membership.organizationId);
+}
+
+function taskVisibilityWhere(actor: ActorRecord, workspaceId: string): Prisma.TaskWhereInput {
+  if (actorIsOwner(actor)) return { workspaceId, deletedAt: null };
+  const managedOrganizations = managedOrganizationIds(actor);
+  const departmentIds = [...actorDepartmentHeadIds(actor)];
+  const visiblePrincipalIds = [actor.id, ...actor.teamIds];
+  const branches: Prisma.TaskWhereInput[] = [
+    { assignments: { some: { principalId: { in: visiblePrincipalIds } } } },
+    { createdByPrincipalId: actor.id },
+    { reviewCycles: { some: { reviewerPrincipalId: actor.id } } },
+  ];
+  if (managedOrganizations.length) branches.push({ organizationId: { in: managedOrganizations } });
+  if (departmentIds.length) branches.push(
+    { leadDepartmentId: { in: departmentIds } },
+    { involvedDepartments: { some: { departmentId: { in: departmentIds } } } },
+  );
+  return { workspaceId, deletedAt: null, OR: branches };
+}
+
+function canBrowseTaskPeople(actor: ActorRecord) {
+  return actorIsOwner(actor) || managedOrganizationIds(actor).length > 0 || actorDepartmentHeadIds(actor).size > 0;
+}
+
+function isTaskForPerson(task: TaskRecord, personId: string, teamIds: string[] = []) {
+  return task.assignments.some((assignment) => assignment.principalId === personId || teamIds.includes(assignment.principalId))
+    || task.createdByPrincipalId === personId
+    || task.reviewCycles.some((review) => review.reviewerPrincipalId === personId);
+}
+
+function isTaskForTeam(task: TaskRecord, teamId: string) {
+  return task.assignments.some((assignment) => assignment.principalId === teamId);
+}
+
+function isTaskForDepartment(task: TaskRecord, departmentId: string) {
+  return task.leadDepartmentId === departmentId
+    || task.involvedDepartments.some((department) => department.departmentId === departmentId)
+    || task.assignments.some((assignment) => assignment.principal.type === PrincipalType.TEAM && assignment.principal.teamScopes.some((scope) => scope.departmentId === departmentId));
+}
+
+async function taskScopeOptions(actor: ActorRecord): Promise<{ people: TaskScopeOptionDTO[]; teams: TaskScopeOptionDTO[] }> {
+  const db = getDb();
+  const departmentIds = [...actorDepartmentHeadIds(actor)];
+  const organizationIds = managedOrganizationIds(actor);
+  const canBrowsePeople = canBrowseTaskPeople(actor);
+  const peopleWhere: Prisma.PrincipalWhereInput = actorIsOwner(actor)
+    ? { workspaceId: actor.workspaceId, type: PrincipalType.PERSON, active: true, status: PrincipalStatus.ACTIVE }
+    : {
+      workspaceId: actor.workspaceId,
+      type: PrincipalType.PERSON,
+      active: true,
+      status: PrincipalStatus.ACTIVE,
+      OR: [
+        ...(organizationIds.length ? [{ organizationMemberships: { some: { status: MembershipStatus.ACTIVE, organizationId: { in: organizationIds } } } }] : []),
+        ...(departmentIds.length ? [{ departmentMemberships: { some: { status: MembershipStatus.ACTIVE, departmentId: { in: departmentIds } } } }] : []),
+      ],
+    };
+  const teamWhere: Prisma.PrincipalWhereInput = {
+    workspaceId: actor.workspaceId,
+    type: PrincipalType.TEAM,
+    active: true,
+    status: PrincipalStatus.ACTIVE,
+    OR: [
+      ...(actor.teamIds.length ? [{ id: { in: actor.teamIds } }] : []),
+      ...(actorIsOwner(actor) ? [{ teamScopes: { some: { status: MembershipStatus.ACTIVE } } }] : []),
+      ...(organizationIds.length ? [{ teamScopes: { some: { status: MembershipStatus.ACTIVE, organizationId: { in: organizationIds } } } }] : []),
+      ...(departmentIds.length ? [{ teamScopes: { some: { status: MembershipStatus.ACTIVE, departmentId: { in: departmentIds } } } }] : []),
+    ],
+  };
+  const departmentWhere: Prisma.DepartmentWhereInput = actorIsOwner(actor)
+    ? { organization: { workspaceId: actor.workspaceId } }
+    : {
+      OR: [
+        ...(organizationIds.length ? [{ organizationId: { in: organizationIds } }] : []),
+        ...(departmentIds.length ? [{ id: { in: departmentIds } }] : []),
+      ],
+    };
+  const [people, teams, departments] = await Promise.all([
+    canBrowsePeople
+      ? db.principal.findMany({
+        where: peopleWhere,
+        select: {
+          id: true,
+          name: true,
+          departmentMemberships: { where: { status: MembershipStatus.ACTIVE }, select: { department: { select: { name: true, organization: { select: { name: true } } } } }, take: 1 },
+        },
+        orderBy: { name: "asc" },
+      })
+      : Promise.resolve([]),
+    db.principal.findMany({
+      where: teamWhere,
+      select: {
+        id: true,
+        name: true,
+        teamScopes: { where: { status: MembershipStatus.ACTIVE }, select: { department: { select: { name: true } }, organization: { select: { name: true } } }, take: 1 },
+      },
+      orderBy: { name: "asc" },
+    }),
+    (actorIsOwner(actor) || organizationIds.length || departmentIds.length)
+      ? db.department.findMany({
+        where: departmentWhere,
+        select: { id: true, name: true, organization: { select: { name: true } } },
+        orderBy: [{ organization: { name: "asc" } }, { name: "asc" }],
+      })
+      : Promise.resolve([]),
+  ]);
+  return {
+    people: people.map((person) => ({
+      id: person.id,
+      name: person.name,
+      subtitle: person.departmentMemberships[0] ? `${person.departmentMemberships[0].department.organization.name} · ${person.departmentMemberships[0].department.name}` : undefined,
+    })),
+    teams: [
+      ...teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        kind: "team" as const,
+        subtitle: team.teamScopes[0] ? `${team.teamScopes[0].organization.name}${team.teamScopes[0].department ? ` · ${team.teamScopes[0].department.name}` : ""}` : undefined,
+      })),
+      ...departments.map((department) => ({
+        id: department.id,
+        name: department.name,
+        kind: "department" as const,
+        subtitle: department.organization.name,
+      })),
+    ],
+  };
+}
+
+/**
+ * Fetches one permission-checked task page scope. The client never receives a
+ * broad directory or an unscoped task list and then hides rows in React.
+ */
+export async function getCanonicalTaskScope(input: {
+  workspaceId?: string;
+  scope: TaskWorkspaceScope;
+  personId?: string;
+  teamId?: string;
+}): Promise<ActionResult<TaskScopeResultDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
+  try {
+    const db = getDb();
+    const actor = await resolveActor(workspaceId);
+    const options = await taskScopeOptions(actor);
+    const allowedScopes: TaskWorkspaceScope[] = ["my"];
+    if (options.teams.length) allowedScopes.push("team");
+    if (canBrowseTaskPeople(actor)) allowedScopes.push("people");
+    if (!allowedScopes.includes(input.scope)) return forbidden("You do not have permission to view that task scope.");
+
+    let targetPersonId: string | undefined;
+    let targetTeamId: string | undefined;
+    let targetDepartmentId: string | undefined;
+    if (input.scope === "people") {
+      // Opening People should remain one click. If no selector value has been
+      // established yet, safely use the first server-authorized directory row;
+      // the response still contains only that scoped task set and never a
+      // broad directory for the browser to filter.
+      targetPersonId = input.personId || options.people[0]?.id;
+      if (!targetPersonId || !options.people.some((person) => person.id === targetPersonId)) return forbidden("You do not have permission to view that person's work.");
+    }
+    if (input.scope === "team") {
+      const selectedScope = options.teams.find((team) => team.id === (input.teamId || options.teams[0]?.id));
+      if (!selectedScope) return forbidden("You do not have permission to view that team's work.");
+      if (selectedScope.kind === "department") targetDepartmentId = selectedScope.id;
+      else targetTeamId = selectedScope.id;
+    }
+
+    const targetPersonTeamIds = targetPersonId
+      ? (await db.teamMembership.findMany({
+        where: { personId: targetPersonId, status: MembershipStatus.ACTIVE },
+        select: { teamId: true },
+      })).map((membership) => membership.teamId)
+      : [];
+
+    const records = await db.task.findMany({
+      where: taskVisibilityWhere(actor, workspaceId),
+      include: taskInclude,
+      orderBy: { updatedAt: "desc" },
+    });
+    const visible = records.filter((task) => !task.archivedAt && canViewTask(actor, task)).filter((task) => {
+      if (input.scope === "my") return isTaskForPerson(task, actor.id) || actor.teamIds.some((teamId) => isTaskForTeam(task, teamId));
+      if (targetPersonId) return isTaskForPerson(task, targetPersonId, targetPersonTeamIds);
+      if (targetTeamId) return isTaskForTeam(task, targetTeamId);
+      if (targetDepartmentId) return isTaskForDepartment(task, targetDepartmentId);
+      return true;
+    });
+    return {
+      ok: true,
+      data: {
+        scope: input.scope,
+        tasks: visible.map((task) => toTaskDTO(task, actor.id)),
+        people: options.people,
+        teams: options.teams,
+        allowedScopes,
+      },
+    };
+  } catch (error) {
+    if (error instanceof AuthenticationRequiredError) return { ok: false, code: "UNAUTHORIZED", message: "Sign in to view tasks." };
+    if (error instanceof AuthorizationError) return forbidden("You do not have permission to view that task scope.");
+    return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Could not load tasks." };
+  }
+}
+
+function projectVisibilityWhere(actor: ActorRecord, workspaceId: string): Prisma.ProjectWhereInput {
+  if (actorIsOwner(actor)) return { workspaceId, status: { not: ProjectStatus.ARCHIVED } };
+  const managedOrganizations = managedOrganizationIds(actor);
+  const departmentIds = [...actorDepartmentHeadIds(actor)];
+  const visiblePrincipalIds = [actor.id, ...actor.teamIds];
+  const branches: Prisma.ProjectWhereInput[] = [
+    { members: { some: { principalId: { in: visiblePrincipalIds } } } },
+    { createdByPrincipalId: actor.id },
+    // A person who can read a task must also receive that task's project
+    // context. This stays in the database query rather than being inferred
+    // after a broad project read.
+    { tasks: { some: { assignments: { some: { principalId: { in: visiblePrincipalIds } } } } } },
+    { tasks: { some: { createdByPrincipalId: actor.id } } },
+    { tasks: { some: { reviewCycles: { some: { reviewerPrincipalId: actor.id } } } } },
+  ];
+  if (managedOrganizations.length) branches.push({ organizationId: { in: managedOrganizations } });
+  if (departmentIds.length) branches.push(
+    { leadDepartmentId: { in: departmentIds } },
+    { involvedDepartments: { some: { departmentId: { in: departmentIds } } } },
+  );
+  return { workspaceId, status: { not: ProjectStatus.ARCHIVED }, OR: branches };
 }
 
 function forbidden<T>(message = "You do not have permission to change this task."): ActionResult<T> {
@@ -791,14 +1115,14 @@ async function validateTaskReferences(
 
 async function defaultTeamAssignmentForDepartments(db: ReturnType<typeof getDb>, workspaceId: string, departmentIds: string[], assignments: AssignmentInput[]) {
   if (assignments.length || !departmentIds.length) return assignments;
-  const memberships = await db.principalMembership.findMany({
-    where: { departmentId: { in: departmentIds }, principal: { workspaceId, active: true, type: PrincipalType.TEAM } },
+  const memberships = await db.teamScope.findMany({
+    where: { departmentId: { in: departmentIds }, status: MembershipStatus.ACTIVE, team: { workspaceId, active: true, type: PrincipalType.TEAM } },
     orderBy: { id: "asc" },
-    select: { principalId: true, departmentId: true },
+    select: { teamId: true, departmentId: true },
   });
   const leadTeam = memberships.find(membership => membership.departmentId === departmentIds[0]);
-  const teams = Array.from(new Set(memberships.map(membership => membership.principalId)));
-  return teams.map(principalId => ({ principalId, role: principalId === leadTeam?.principalId ? "primary_owner" as const : "collaborator" as const }));
+  const teams = Array.from(new Set(memberships.map(membership => membership.teamId)));
+  return teams.map(principalId => ({ principalId, role: principalId === leadTeam?.teamId ? "primary_owner" as const : "collaborator" as const }));
 }
 
 async function taskById(taskId: string) {
@@ -938,21 +1262,10 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
       resolveActor(workspaceId),
     ]);
     if (!workspace) return null;
-    const [records, projects, principals, organizations, savedViews, workflowTemplates, nudgeStates, inboxCaptures, preference] = await Promise.all([
-      db.task.findMany({ where: { workspaceId, deletedAt: null }, include: taskInclude, orderBy: { updatedAt: "desc" } }),
-      db.project.findMany({ where: { workspaceId, status: { not: ProjectStatus.ARCHIVED } }, include: projectInclude, orderBy: { updatedAt: "desc" } }),
-      db.principal.findMany({
-        where: { workspaceId, active: true },
-        include: { memberships: { include: { organization: true, department: true } } },
-        orderBy: { name: "asc" },
-      }),
-      db.organization.findMany({
-        where: { workspaceId },
-        include: { departments: { include: { memberships: { include: { principal: true } } }, orderBy: { name: "asc" } }, resources: { orderBy: { createdAt: "desc" } } },
-        orderBy: { name: "asc" },
-      }),
+    const [records, projects, savedViews, nudgeStates, inboxCaptures, preference, pendingAccessRequestCount] = await Promise.all([
+      db.task.findMany({ where: taskVisibilityWhere(actor, workspaceId), include: taskInclude, orderBy: { updatedAt: "desc" } }),
+      db.project.findMany({ where: projectVisibilityWhere(actor, workspaceId), include: projectInclude, orderBy: { updatedAt: "desc" } }),
       db.savedView.findMany({ where: { workspaceId, OR: [{ ownerId: null }, { ownerId: actor.id }] }, orderBy: { updatedAt: "desc" } }),
-      db.workflowTemplate.findMany({ where: { workspaceId, status: WorkflowTemplateStatus.ACTIVE }, include: workflowTemplateInclude, orderBy: { updatedAt: "desc" } }),
       db.workNudge.findMany({ where: { workspaceId, recipientId: actor.id }, select: { dedupKey: true, disposition: true, taskId: true, snoozedUntil: true } }),
       db.inboxCapture.findMany({
         where: { workspaceId, actorId: actor.id, status: { in: [CaptureStatus.NEEDS_ORGANIZATION, CaptureStatus.REVIEWING] } },
@@ -960,24 +1273,84 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
         take: 20,
       }),
       db.principalPreference.findUnique({ where: { principalId: actor.id } }),
+      actorIsOwner(actor)
+        ? db.invitation.count({ where: { organization: { workspaceId }, status: InvitationStatus.PENDING_OWNER_APPROVAL } })
+        : Promise.resolve(0),
     ]);
-    const visibleTasks = records.filter((task) => canViewTask(actor, task));
-    const visibleProjectIds = new Set(visibleTasks.map(task => task.projectId).filter((projectId): projectId is string => Boolean(projectId)));
-    const directory: DirectoryDTO[] = principals.map(toDirectoryDTO);
+    const visibleProjectIds = new Set(records.map(task => task.projectId).filter((projectId): projectId is string => Boolean(projectId)));
+    const visibleOrganizationIds = new Set([
+      ...records.map((task) => task.organizationId).filter((organizationId): organizationId is string => Boolean(organizationId)),
+      ...projects.map((project) => project.organizationId),
+      ...(actorIsOwner(actor) ? [] : managedOrganizationIds(actor)),
+    ]);
+    const visiblePrincipalIds = new Set([
+      actor.id,
+      ...actor.teamIds,
+      ...records.flatMap((task) => task.assignments.map((assignment) => assignment.principalId)),
+      ...projects.flatMap((project) => project.members.map((member) => member.principalId)),
+    ]);
+    const directoryWhere: Prisma.PrincipalWhereInput = actorIsOwner(actor)
+      ? { workspaceId, active: true, status: PrincipalStatus.ACTIVE }
+      : {
+        workspaceId,
+        active: true,
+        status: PrincipalStatus.ACTIVE,
+        OR: [
+          { id: { in: [...visiblePrincipalIds] } },
+          ...(managedOrganizationIds(actor).length ? [{ organizationMemberships: { some: { organizationId: { in: managedOrganizationIds(actor) }, status: MembershipStatus.ACTIVE } } }] : []),
+          ...([...actorDepartmentHeadIds(actor)].length ? [{ departmentMemberships: { some: { departmentId: { in: [...actorDepartmentHeadIds(actor)] }, status: MembershipStatus.ACTIVE } } }] : []),
+        ],
+      };
+    const [principals, organizations, workflowTemplates] = await Promise.all([
+      db.principal.findMany({
+        where: directoryWhere,
+        include: {
+          organizationMemberships: { where: { status: MembershipStatus.ACTIVE }, include: { organization: true } },
+          departmentMemberships: { where: { status: MembershipStatus.ACTIVE }, include: { department: true } },
+          teamScopes: { where: { status: MembershipStatus.ACTIVE }, include: { organization: true, department: true } },
+          userAccount: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+      db.organization.findMany({
+        where: actorIsOwner(actor) ? { workspaceId } : { workspaceId, id: { in: [...visibleOrganizationIds] } },
+        include: {
+          departments: { include: { teamScopes: { where: { status: MembershipStatus.ACTIVE }, include: { team: { select: { id: true, type: true } } } } }, orderBy: { name: "asc" } },
+          // Organization resources are intentionally Owner-only until an
+          // explicit resource-level permission model exists. A manager of one
+          // organization must never receive another organization's resources.
+          resources: actorIsOwner(actor) ? { orderBy: { createdAt: "desc" } } : { where: { id: { in: [] } } },
+        },
+        orderBy: { name: "asc" },
+      }),
+      db.workflowTemplate.findMany({
+        where: actorIsOwner(actor)
+          ? { workspaceId, status: WorkflowTemplateStatus.ACTIVE }
+          : {
+            workspaceId,
+            status: WorkflowTemplateStatus.ACTIVE,
+            OR: [
+              ...(managedOrganizationIds(actor).length ? [{ organizationId: { in: managedOrganizationIds(actor) } }] : []),
+              ...([...actorDepartmentHeadIds(actor)].length ? [{ OR: [{ leadDepartmentId: { in: [...actorDepartmentHeadIds(actor)] } }, { involvedDepartments: { some: { departmentId: { in: [...actorDepartmentHeadIds(actor)] } } } }] }] : []),
+            ],
+          },
+        include: workflowTemplateInclude,
+        orderBy: { updatedAt: "desc" },
+      }),
+    ]);
+    const directory: DirectoryDTO[] = principals.map((principal) => toDirectoryDTO(principal, actorIsOwner(actor)));
     return {
       workspaceId: workspace.id,
       workspaceName: workspace.name,
       revision: workspace.revision,
       actorId: actor.id,
-      profile: toProfileDTO(actor, preference),
-      tasks: visibleTasks.map((task) => toTaskDTO(task, actor.id)),
+      profile: toProfileDTO(actor, preference, pendingAccessRequestCount),
+      tasks: records.map((task) => toTaskDTO(task, actor.id)),
       projects: projects.filter(project => canViewProject(actor, project) || visibleProjectIds.has(project.id)).map(toProjectDTO),
       directory,
       organizations: organizations.map(toOrganizationDTO),
       savedViews: savedViews.map((view): SavedViewDTO => ({ id: view.id, name: view.name, filters: view.filters as Record<string, unknown>, ownerId: view.ownerId || undefined })),
-      workflowTemplates: workflowTemplates
-        .filter(template => actorIsOwner(actor) || actorManagesOrganization(actor, template.organizationId) || actor.memberships.some(membership => membership.departmentId === template.leadDepartmentId || template.involvedDepartments.some(({ departmentId }) => departmentId === membership.departmentId)))
-        .map(toWorkflowTemplateDTO),
+      workflowTemplates: workflowTemplates.map(toWorkflowTemplateDTO),
       nudgeStates: nudgeStates.map((state): NudgeStateDTO => ({
         dedupKey: state.dedupKey,
         disposition: state.disposition === NudgeDisposition.SNOOZED ? "snoozed" : "dismissed",
@@ -992,13 +1365,14 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
       })),
     };
   } catch (error) {
-    if (error instanceof Error && ["BINNIE_DATABASE_NOT_CONFIGURED", "BINNIE_ACTOR_NOT_FOUND"].includes(error.message)) return null;
+    if (error instanceof Error && ["BINNIE_DATABASE_NOT_CONFIGURED", "BINNIE_AUTHENTICATION_REQUIRED", "BINNIE_FORBIDDEN"].includes(error.message)) return null;
     throw error;
   }
 }
 
 export async function getWorkspaceRevision(workspaceId = DEFAULT_WORKSPACE_ID) {
   if (!hasDatabaseConfiguration()) return null;
+  await requireCurrentUser(workspaceId);
   const workspace = await getDb().workspace.findUnique({ where: { id: workspaceId }, select: { revision: true } });
   return workspace?.revision ?? null;
 }
@@ -1662,7 +2036,7 @@ export async function deleteCanonicalOrganizationResource(organizationId: string
  * data as organizations and departments. */
 export async function updateCanonicalOrganizationVocabulary(
   organizationId: string,
-  input: { aliases?: string[]; departments?: Array<{ departmentId: string; aliases: string[] }> },
+  input: { aliases?: string[]; departments?: Array<{ departmentId: string; aliases: string[] }>; colorKey?: OrganizationColorKey },
 ): Promise<ActionResult<{ id: string }>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const organization = await getDb().organization.findUnique({ where: { id: organizationId }, include: { departments: { select: { id: true } } } });
@@ -1670,19 +2044,25 @@ export async function updateCanonicalOrganizationVocabulary(
   const actor = await resolveActor(organization.workspaceId);
   if (!actorIsOwner(actor) && !actorManagesOrganization(actor, organizationId)) return forbidden("You do not have permission to update this organization's vocabulary.");
   const normalize = (aliases: string[]) => Array.from(new Set(aliases.map(alias => alias.trim().toLocaleLowerCase()).filter(Boolean))).slice(0, 40).map(alias => alias.slice(0, 120));
+  if (input.colorKey !== undefined && !isOrganizationColorKey(input.colorKey)) return { ok: false, code: "VALIDATION", message: "Choose a Binnie organization color." };
   const departments = input.departments || [];
   if (new Set(departments.map(department => department.departmentId)).size !== departments.length || departments.some(department => !organization.departments.some(candidate => candidate.id === department.departmentId))) return { ok: false, code: "VALIDATION", message: "Choose departments in this organization." };
   const revision = await getDb().$transaction(async tx => {
-    if (input.aliases !== undefined) await tx.organization.update({ where: { id: organizationId }, data: { aliases: normalize(input.aliases) } });
+    if (input.aliases !== undefined || input.colorKey !== undefined) await tx.organization.update({
+      where: { id: organizationId },
+      data: {
+        ...(input.aliases !== undefined ? { aliases: normalize(input.aliases) } : {}),
+        ...(input.colorKey !== undefined ? { colorKey: input.colorKey } : {}),
+      },
+    });
     for (const department of departments) await tx.department.update({ where: { id: department.departmentId }, data: { aliases: normalize(department.aliases) } });
     return (await incrementRevision(tx, organization.workspaceId)).revision;
   });
   return { ok: true, data: { id: organizationId }, revision };
 }
 
-/** Persist the active person's identity, role, and preferences as one confirmed
- * transaction. This intentionally updates only their selected role membership,
- * preserving every organization and department membership already on record. */
+/** Persist personal preferences only. Access levels are never accepted from a
+ * profile form; Owners manage them through the access workflow. */
 export async function updateCanonicalProfile(input: UpdateCanonicalProfileInput): Promise<ActionResult<UserProfileDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
@@ -1693,26 +2073,16 @@ export async function updateCanonicalProfile(input: UpdateCanonicalProfileInput)
     const db = getDb();
     const actor = await resolveActor(workspaceId);
     const result = await db.$transaction(async tx => {
-      const principal = await tx.principal.update({
+      await tx.principal.update({
         where: { id: actor.id },
-        data: { name: displayName, email: input.email?.trim() || null },
-        include: { memberships: { include: { organization: true, department: true } } },
+        // The auth identity's email is deliberately not mutated here. Email
+        // changes require a separate verified-account flow.
+        data: { name: displayName },
       });
-      const roleMembership = principal.memberships.find(membership => membership.role === WorkspaceRole.OWNER)
-        || principal.memberships.find(membership => membership.organizationId)
-        || principal.memberships[0];
-      if (roleMembership) {
-        await tx.principalMembership.update({
-          where: { id: roleMembership.id },
-          data: { role: input.role.toUpperCase() as WorkspaceRole },
-        });
-      } else {
-        await tx.principalMembership.create({ data: { principalId: principal.id, role: input.role.toUpperCase() as WorkspaceRole } });
-      }
       const preference = await tx.principalPreference.upsert({
-        where: { principalId: principal.id },
+        where: { principalId: actor.id },
         create: {
-          principalId: principal.id,
+          principalId: actor.id,
           workspaceId,
           timezone: input.timezone.trim().slice(0, 120),
           dateFormat: input.dateFormat.trim().slice(0, 80),
@@ -1726,12 +2096,8 @@ export async function updateCanonicalProfile(input: UpdateCanonicalProfileInput)
           storageVersion: 1,
         },
       });
-      const updated = await tx.principal.findUniqueOrThrow({
-        where: { id: principal.id },
-        include: { memberships: { include: { organization: true, department: true } } },
-      });
       const revision = await incrementRevision(tx, workspaceId);
-      return { profile: toProfileDTO(updated, preference), revision: revision.revision };
+      return { profile: toProfileDTO({ ...actor, name: displayName }, preference), revision: revision.revision };
     });
     return { ok: true, data: result.profile, revision: result.revision };
   } catch (error) {
@@ -1740,19 +2106,45 @@ export async function updateCanonicalProfile(input: UpdateCanonicalProfileInput)
   }
 }
 
+/** Persist only the authenticated person's Tasks List column choices. */
+export async function saveCanonicalTaskListColumns(columns: string[], workspaceId = DEFAULT_WORKSPACE_ID): Promise<ActionResult<{ taskListColumns: string[] }>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const normalized = [...new Set(columns.filter((column) => taskListColumnIds.has(column)))];
+  if (!normalized.includes("task")) normalized.unshift("task");
+  try {
+    const db = getDb();
+    const actor = await resolveActor(workspaceId);
+    await db.principalPreference.upsert({
+      where: { principalId: actor.id },
+      create: {
+        principalId: actor.id,
+        workspaceId,
+        taskListColumns: normalized,
+      },
+      update: { taskListColumns: normalized },
+    });
+    return { ok: true, data: { taskListColumns: normalized } };
+  } catch (error) {
+    if (error instanceof AuthenticationRequiredError) return { ok: false, code: "UNAUTHORIZED", message: "Sign in to save task view preferences." };
+    if (error instanceof AuthorizationError) return forbidden("You do not have permission to save task view preferences.");
+    return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Could not save task view preferences." };
+  }
+}
+
 export async function createCanonicalOrganization(input: CreateOrganizationInput): Promise<ActionResult<OrganizationDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
   const name = input.name.trim();
   if (!name) return { ok: false, code: "VALIDATION", message: "Organization name is required." };
+  if (input.colorKey !== undefined && !isOrganizationColorKey(input.colorKey)) return { ok: false, code: "VALIDATION", message: "Choose a Binnie organization color." };
   try {
     const db = getDb();
     const actor = await resolveActor(workspaceId);
     if (!actorIsOwner(actor)) return forbidden("Only a workspace owner can add organizations.");
     const result = await db.$transaction(async tx => {
       const organization = await tx.organization.create({
-        data: { workspaceId, name, description: input.description?.trim().slice(0, 2_000) || null },
-        include: { departments: { include: { memberships: { include: { principal: true } } } }, resources: true },
+        data: { workspaceId, name, description: input.description?.trim().slice(0, 2_000) || null, colorKey: input.colorKey || defaultOrganizationColorKey(name) },
+        include: { departments: { include: { teamScopes: { include: { team: true } } } }, resources: true },
       });
       const revision = await incrementRevision(tx, workspaceId);
       return { organization, revision: revision.revision };
@@ -1793,23 +2185,35 @@ export async function createCanonicalPrincipal(input: CreatePrincipalInput): Pro
   const db = getDb();
   const actor = await resolveActor(workspaceId);
   const memberships = input.memberships || [];
-  const organizationIds = memberships.flatMap(item => item.organizationId ? [item.organizationId] : []);
-  const departmentIds = memberships.flatMap(item => item.departmentId ? [item.departmentId] : []);
+  const organizationIds = [...new Set(memberships.flatMap(item => item.organizationId ? [item.organizationId] : []))];
+  const departmentIds = [...new Set(memberships.flatMap(item => item.departmentId ? [item.departmentId] : []))];
   const [organizations, departments] = await Promise.all([
     organizationIds.length ? db.organization.findMany({ where: { id: { in: organizationIds }, workspaceId }, select: { id: true } }) : Promise.resolve([]),
     departmentIds.length ? db.department.findMany({ where: { id: { in: departmentIds }, organization: { workspaceId } }, select: { id: true, organizationId: true } }) : Promise.resolve([]),
   ]);
-  if (organizations.length !== new Set(organizationIds).size || departments.length !== new Set(departmentIds).size || memberships.some(item => item.departmentId && item.organizationId && departments.find(department => department.id === item.departmentId)?.organizationId !== item.organizationId)) return { ok: false, code: "VALIDATION", message: "Choose organizations and departments in this workspace." };
+  if (organizations.length !== organizationIds.length || departments.length !== departmentIds.length || memberships.some(item => item.departmentId && item.organizationId && departments.find(department => department.id === item.departmentId)?.organizationId !== item.organizationId)) return { ok: false, code: "VALIDATION", message: "Choose organizations and departments in this workspace." };
   if (!actorIsOwner(actor) && memberships.some(item => item.organizationId && !actorManagesOrganization(actor, item.organizationId))) return forbidden("You do not have permission to add someone to that organization.");
+  if (!actorIsOwner(actor) && !organizationIds.length) return forbidden("Choose an organization you manage before adding a person.");
   try {
     const result = await db.$transaction(async tx => {
-      const principal = await tx.principal.create({ data: {
-        workspaceId,
-        name,
-        type: input.type === "team" ? PrincipalType.TEAM : PrincipalType.PERSON,
-        email: input.email?.trim() || null,
-        memberships: memberships.length ? { create: memberships.map(item => ({ organizationId: item.organizationId || null, departmentId: item.departmentId || null, role: (item.role || "employee").toUpperCase() as WorkspaceRole })) } : undefined,
-      }, include: { memberships: { include: { organization: true, department: true } } } });
+      const isTeam = input.type === "team";
+      const principal = await tx.principal.create({
+        data: {
+          workspaceId,
+          name,
+          type: isTeam ? PrincipalType.TEAM : PrincipalType.PERSON,
+          email: input.email?.trim() || null,
+          organizationMemberships: !isTeam && organizationIds.length ? { create: organizationIds.map(organizationId => ({ organizationId, accessLevel: null })) } : undefined,
+          departmentMemberships: !isTeam && departmentIds.length ? { create: departmentIds.map(departmentId => ({ departmentId })) } : undefined,
+          teamScopes: isTeam && memberships.length ? { create: memberships.filter(item => item.organizationId).map(item => ({ organizationId: item.organizationId!, departmentId: item.departmentId || null })) } : undefined,
+        },
+        include: {
+          organizationMemberships: { include: { organization: true } },
+          departmentMemberships: { include: { department: true } },
+          teamScopes: { include: { organization: true, department: true } },
+          userAccount: true,
+        },
+      });
       const revision = await incrementRevision(tx, workspaceId);
       return { principal, revision: revision.revision };
     });
@@ -1826,24 +2230,64 @@ export async function updateCanonicalPrincipal(principalId: string, input: Creat
   const db = getDb();
   const actor = await resolveActor(workspaceId);
   if (!actorIsOwner(actor)) return forbidden("Only a workspace owner can edit people and teams.");
-  const existing = await db.principal.findFirst({ where: { id: principalId, workspaceId }, include: { memberships: { include: { organization: true, department: true } } } });
+  const existing = await db.principal.findFirst({ where: { id: principalId, workspaceId } });
   if (!existing) return { ok: false, code: "NOT_FOUND", message: "Person or team not found." };
   const name = input.name.trim();
   if (!name) return { ok: false, code: "VALIDATION", message: "A person or team needs a name." };
   const memberships = input.memberships || [];
-  const organizationIds = memberships.flatMap(item => item.organizationId ? [item.organizationId] : []);
-  const departmentIds = memberships.flatMap(item => item.departmentId ? [item.departmentId] : []);
+  const organizationIds = [...new Set(memberships.flatMap(item => item.organizationId ? [item.organizationId] : []))];
+  const departmentIds = [...new Set(memberships.flatMap(item => item.departmentId ? [item.departmentId] : []))];
   const [organizations, departments] = await Promise.all([
     organizationIds.length ? db.organization.findMany({ where: { id: { in: organizationIds }, workspaceId }, select: { id: true } }) : Promise.resolve([]),
     departmentIds.length ? db.department.findMany({ where: { id: { in: departmentIds }, organization: { workspaceId } }, select: { id: true, organizationId: true } }) : Promise.resolve([]),
   ]);
-  if (organizations.length !== new Set(organizationIds).size || departments.length !== new Set(departmentIds).size || memberships.some(item => item.departmentId && item.organizationId && departments.find(department => department.id === item.departmentId)?.organizationId !== item.organizationId)) return { ok: false, code: "VALIDATION", message: "Choose organizations and departments in this workspace." };
+  if (organizations.length !== organizationIds.length || departments.length !== departmentIds.length || memberships.some(item => item.departmentId && item.organizationId && departments.find(department => department.id === item.departmentId)?.organizationId !== item.organizationId)) return { ok: false, code: "VALIDATION", message: "Choose organizations and departments in this workspace." };
   try {
     const result = await db.$transaction(async tx => {
-      const principal = await tx.principal.update({ where: { id: principalId }, data: {
-        name, type: input.type === "team" ? PrincipalType.TEAM : PrincipalType.PERSON, email: input.email?.trim() || null,
-        memberships: { deleteMany: {}, create: memberships.map(item => ({ organizationId: item.organizationId || null, departmentId: item.departmentId || null, role: (item.role || "employee").toUpperCase() as WorkspaceRole })) },
-      }, include: { memberships: { include: { organization: true, department: true } } } });
+      const isTeam = input.type === "team";
+      await tx.principal.update({ where: { id: principalId }, data: { name, type: isTeam ? PrincipalType.TEAM : PrincipalType.PERSON, email: input.email?.trim() || null } });
+      if (isTeam) {
+        await tx.teamScope.updateMany({ where: { teamId: principalId, status: MembershipStatus.ACTIVE }, data: { status: MembershipStatus.REMOVED, removedAt: new Date() } });
+        for (const membership of memberships.filter(item => item.organizationId)) {
+          if (membership.departmentId) {
+            await tx.teamScope.upsert({
+              where: { teamId_organizationId_departmentId: { teamId: principalId, organizationId: membership.organizationId!, departmentId: membership.departmentId } },
+              create: { teamId: principalId, organizationId: membership.organizationId!, departmentId: membership.departmentId },
+              update: { status: MembershipStatus.ACTIVE, removedAt: null },
+            });
+          } else {
+            const existingScope = await tx.teamScope.findFirst({ where: { teamId: principalId, organizationId: membership.organizationId!, departmentId: null } });
+            if (existingScope) await tx.teamScope.update({ where: { id: existingScope.id }, data: { status: MembershipStatus.ACTIVE, removedAt: null } });
+            else await tx.teamScope.create({ data: { teamId: principalId, organizationId: membership.organizationId!, departmentId: null } });
+          }
+        }
+      } else {
+        await tx.organizationMembership.updateMany({ where: { personId: principalId, status: MembershipStatus.ACTIVE, organizationId: { notIn: organizationIds } }, data: { status: MembershipStatus.REMOVED, removedAt: new Date(), accessLevel: null } });
+        for (const organizationId of organizationIds) {
+          await tx.organizationMembership.upsert({
+            where: { personId_organizationId: { personId: principalId, organizationId } },
+            create: { personId: principalId, organizationId, accessLevel: null },
+            update: { status: MembershipStatus.ACTIVE, removedAt: null },
+          });
+        }
+        await tx.departmentMembership.updateMany({ where: { personId: principalId, status: MembershipStatus.ACTIVE, departmentId: { notIn: departmentIds } }, data: { status: MembershipStatus.REMOVED, removedAt: new Date() } });
+        for (const departmentId of departmentIds) {
+          await tx.departmentMembership.upsert({
+            where: { personId_departmentId: { personId: principalId, departmentId } },
+            create: { personId: principalId, departmentId },
+            update: { status: MembershipStatus.ACTIVE, removedAt: null },
+          });
+        }
+      }
+      const principal = await tx.principal.findUniqueOrThrow({
+        where: { id: principalId },
+        include: {
+          organizationMemberships: { include: { organization: true } },
+          departmentMemberships: { include: { department: true } },
+          teamScopes: { include: { organization: true, department: true } },
+          userAccount: true,
+        },
+      });
       const revision = await incrementRevision(tx, workspaceId);
       return { principal, revision: revision.revision };
     });
@@ -2063,12 +2507,40 @@ export async function setCanonicalAssignments(taskId: string, expectedVersion: n
   if (new Set(principalIds).size !== principalIds.length) return { ok: false, code: "VALIDATION", message: "Add each person or team only once." };
   const validPrincipals = await db.principal.count({ where: { workspaceId: task.workspaceId, active: true, id: { in: principalIds } } });
   if (validPrincipals !== principalIds.length) return { ok: false, code: "VALIDATION", message: "One or more assignees are not active in this workspace." };
+  const existingAssignments = new Map(task.assignments.map((assignment) => [assignment.principalId, assignment]));
+  const removedPrincipalIds = task.assignments.map((assignment) => assignment.principalId).filter((principalId) => !principalIds.includes(principalId));
+  const addedAssignments = assignments.filter((assignment) => !existingAssignments.has(assignment.principalId));
+  const retainedAssignments = assignments.filter((assignment) => existingAssignments.has(assignment.principalId));
   const revision = await db.$transaction(async (tx) => {
-    await tx.taskAssignment.deleteMany({ where: { taskId } });
-    if (assignments.length) await tx.taskAssignment.createMany({ data: assignments.map((assignment) => ({ taskId, principalId: assignment.principalId, role: assignment.role === "primary_owner" ? AssignmentRole.PRIMARY_OWNER : AssignmentRole.COLLABORATOR, source: AssignmentSource.MANUAL, assignedByPrincipalId: actor.id })) });
+    if (removedPrincipalIds.length) await tx.taskAssignment.deleteMany({ where: { taskId, principalId: { in: removedPrincipalIds } } });
+    for (const assignment of addedAssignments) {
+      await tx.taskAssignment.create({
+        data: {
+          taskId,
+          principalId: assignment.principalId,
+          role: assignment.role === "primary_owner" ? AssignmentRole.PRIMARY_OWNER : AssignmentRole.COLLABORATOR,
+          source: AssignmentSource.MANUAL,
+          assignedByPrincipalId: actor.id,
+        },
+      });
+    }
+    for (const assignment of retainedAssignments) {
+      await tx.taskAssignment.update({
+        where: { taskId_principalId: { taskId, principalId: assignment.principalId } },
+        data: { role: assignment.role === "primary_owner" ? AssignmentRole.PRIMARY_OWNER : AssignmentRole.COLLABORATOR },
+      });
+    }
     const primaryOwner = assignments.find((assignment) => assignment.role === "primary_owner");
     await tx.task.update({ where: { id: taskId }, data: { version: { increment: 1 }, ...(task.nextActionPrincipalId && !assignments.some((assignment) => assignment.principalId === task.nextActionPrincipalId) ? nextActionData(primaryOwner ? { kind: "principal", principalId: primaryOwner.principalId } : { kind: "ready" }) : {}) } });
-    await addEvent(tx, taskId, actor.id, TaskEventType.ASSIGNED, assignments.length ? "Updated task assignees" : "Cleared task assignees");
+    await addEvent(
+      tx,
+      taskId,
+      actor.id,
+      TaskEventType.ASSIGNED,
+      assignments.length ? "Updated task assignees" : "Cleared task assignees",
+      { assignments: task.assignments.map((assignment) => ({ principalId: assignment.principalId, role: assignmentRole(assignment.role) })) },
+      { assignments: assignments.map((assignment) => ({ principalId: assignment.principalId, role: assignment.role })) },
+    );
     return (await incrementRevision(tx, task.workspaceId)).revision;
   });
   const dto = await taskDtoById(taskId, actor.id);
@@ -2084,10 +2556,8 @@ export async function claimCanonicalTask(taskId: string, expectedVersion: number
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
   const queueAssignment = task.assignments.find((assignment) => assignment.principal.type === PrincipalType.TEAM && (!teamId || assignment.principalId === teamId));
   if (!queueAssignment) return { ok: false, code: "VALIDATION", message: "Choose an assigned team queue to claim." };
-  const teamMemberships = await db.principalMembership.findMany({ where: { principalId: queueAssignment.principalId }, select: { departmentId: true } });
-  const actorDepartmentIds = new Set(actor.memberships.map((membership) => membership.departmentId).filter((departmentId): departmentId is string => Boolean(departmentId)));
-  const belongsToTeamDepartment = teamMemberships.some((membership) => membership.departmentId && actorDepartmentIds.has(membership.departmentId));
-  if (!canManageTask(actor, task) && !belongsToTeamDepartment) return forbidden("You can only claim work from a team relevant to your department.");
+  const belongsToTeam = actor.teamIds.includes(queueAssignment.principalId);
+  if (!canManageTask(actor, task) && !belongsToTeam) return forbidden("You can only claim work from a team you belong to.");
   const revision = await db.$transaction(async (tx) => {
     await tx.taskAssignment.updateMany({ where: { taskId, role: AssignmentRole.PRIMARY_OWNER }, data: { role: AssignmentRole.COLLABORATOR } });
     await tx.taskAssignment.upsert({

@@ -37,7 +37,9 @@ import {
   resolveTaskDependencyAction,
   resolveInboxCaptureAction,
   saveInboxCaptureAction,
+  getTaskScopeAction,
   saveViewAction,
+  saveTaskListColumnsAction,
   deleteViewAction,
   setTaskAssignmentsAction,
   setProjectMembersAction,
@@ -49,12 +51,16 @@ import {
   toggleChecklistItemAction,
   undoCaptureAction,
   updateTaskAction,
+  updateOrganizationVocabularyAction,
   uploadTaskFileAction,
   uploadTaskUpdateFileAction,
   uploadProjectFileAction,
 } from "./actions";
-import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
-import { deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getTaskEffectiveDate as getCanonicalTaskEffectiveDate, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, TaskScopeResultDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
+import { getOrganizationColorStyles, ORGANIZATION_COLOR_KEYS, ORGANIZATION_COLOR_STYLES, type OrganizationColorKey } from "@/lib/organization-colors";
+import { DEFAULT_TASK_LIST_COLUMNS, TASK_LIST_COLUMNS, type TaskListColumnId } from "@/lib/task-list";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getPersonalPlannerTasksForDate, getPersonalPlannerTasksForWeek, getTaskEffectiveDate as getCanonicalTaskEffectiveDate, isPersonalPlannerTask, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import { authClient } from "@/lib/auth-client";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
   Building2, FolderKanban, Search, Sparkles, Paperclip,
@@ -72,6 +78,24 @@ const cn = (...classes: Array<string | false | null | undefined>) =>
 
 const WORKSPACE_TIME_ZONE = "Asia/Jakarta";
 const WEEK_LANE_TOKENS = ["--week-mon", "--week-tue", "--week-wed", "--week-thu", "--week-fri", "--week-sat", "--week-sun"];
+// The Board deliberately shares This Week's calm lane palette: status owns the
+// column colour, while an organization remains a small secondary card cue.
+const BOARD_STATUS_LANE_TOKENS = {
+  ready: "--week-mon",
+  in_progress: "--week-wed",
+  waiting: "--week-tue",
+  blocked: "--week-thu",
+  review: "--week-fri",
+  done: "--week-sun",
+} as const;
+const BOARD_STATUS_DOT_CLASSES = {
+  ready: "bg-primary",
+  in_progress: "bg-info",
+  waiting: "bg-success",
+  blocked: "bg-overdue",
+  review: "bg-warning",
+  done: "bg-success",
+} as const;
 
 function getWorkspaceCalendarDate() {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -90,7 +114,7 @@ function formatWorkspaceDate(date: Date, options: Intl.DateTimeFormatOptions) {
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type OrgName = "Villa Khayangan" | "Apotik" | "Personal" | (string & {});
+type OrgName = string;
 type AreaName = "System Development" | "Operations" | "Marketing" | "Finance" | "HR" | "Purchasing" | "Design" | "Front Office" | "F&B" | "Maintenance" | "Warehouse" | "Housekeeping" | (string & {});
 type Priority = "urgent" | "high" | "medium" | "low";
 type TaskStatus = "ready" | "in_progress" | "waiting" | "blocked" | "review" | "done";
@@ -115,12 +139,14 @@ interface Task {
   // assignee remains the primary display fallback for older work. assigneeIds is
   // the source of truth: a task can be shared by any number of people or teams.
   assignee?: string; assigneeIds?: string[]; nextActionBy: string;
+  assignments?: Array<{ id: string; principalId: string; name: string; type: "person" | "team"; role: "primary_owner" | "collaborator"; assignedAt: string; assignedByPrincipalId?: string; assignedBy?: string }>;
+  createdByPrincipalId?: string; reviewerPrincipalId?: string;
   deadline?: string; deadlineDate?: string; startDate?: string; targetDate?: string; waitingSince?: string; responseDue?: string;
   lastUpdate?: string; isDelegated: boolean; isWaiting: boolean;
   isOverdue?: boolean; isToday?: boolean; estimatedHours?: number; estimatedMinutes?: number; actualMinutes?: number;
   carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; statusBeforeCompletion?: Exclude<TaskStatus, "done">; staleDays?: number;
   links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; description?: string; notes?: string; contributorIds?: string[]; activity?: Activity[];
-  createdAt?: string; createdBy?: string; updatedAt?: string;
+  createdAt?: string; createdBy?: string; updatedAt?: string; completedAt?: string;
   version?: number; organizationId?: string; leadDepartmentId?: string; projectId?: string; involvedDepartmentIds?: string[];
   followUpDate?: string; nextActionKind?: "principal" | "department" | "external" | "ready";
   nextActionPrincipalId?: string; nextActionDepartmentId?: string; nextActionExternalLabel?: string; completionBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
@@ -148,7 +174,7 @@ function isSharedTask(task: Task) {
 }
 
 type DirectoryEntityType = "person" | "team";
-type DirectoryAccountStatus = "no_account" | "invited" | "active_user" | "disabled";
+type DirectoryAccountStatus = "no_account" | "invited" | "active_user" | "disabled" | "suspended" | "access_removed";
 
 interface OrganizationMembership {
   organization: OrgName;
@@ -184,20 +210,32 @@ interface PersonAccountability {
 interface UserProfile {
   directoryId?: string;
   displayName: string;
+  username?: string;
   role: string;
   email: string;
   timezone: string;
   dateFormat: string;
+  teamIds: string[];
+  taskListColumns: string[];
+  accountStatus: "ACTIVE";
+  workspaces: Array<{ organizationId: string; organization: string; accessLevel: string }>;
+  pendingAccessRequestCount: number;
 }
 
 function canonicalProfileToUserProfile(profile: UserProfileDTO): UserProfile {
   return {
     directoryId: profile.principalId,
     displayName: profile.displayName,
+    username: profile.username,
     role: profile.role,
     email: profile.email || "",
     timezone: profile.timezone,
     dateFormat: profile.dateFormat,
+    teamIds: profile.teamIds,
+    taskListColumns: profile.taskListColumns,
+    accountStatus: profile.accountStatus,
+    workspaces: profile.workspaces,
+    pendingAccessRequestCount: profile.pendingAccessRequestCount,
   };
 }
 
@@ -233,207 +271,17 @@ interface Milestone {
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 
-const SEED_TASKS: Task[] = [
-  {
-    id: "t1", title: "Review website accommodation prices",
-    org: "Villa Khayangan", area: "Marketing", project: "Villa Website Revamp",
-    priority: "high", status: "waiting", assignee: "Bu Desti", nextActionBy: "Bu Desti",
-    deadline: "Wed, 14 Aug", waitingSince: "Mon, 11 Aug", responseDue: "Wed, 14 Aug",
-    lastUpdate: "3 days ago", isDelegated: true, isWaiting: true, estimatedHours: 2,
-    links: [{ label: "Website", url: "https://example.com", type: "website" }],
-    originalCapture: "ask Bu Desti to check website prices by Wednesday https://example.com",
-    activity: [
-      { type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "3 days ago" },
-      { type: "commented", actor: "Bu Desti", text: "Will check and update by Wednesday", time: "2 days ago" },
-    ]
-  },
-  {
-    id: "t2", title: "Fix purchasing settlement receipt flow",
-    org: "Villa Khayangan", area: "System Development", project: "Finance Automation",
-    priority: "high", status: "in_progress", nextActionBy: "me",
-    deadline: "Tomorrow", isDelegated: false, isWaiting: false, isToday: true, estimatedHours: 4,
-    links: [{ label: "Dev Branch", url: "#", type: "github" }, { label: "Finance Sheet", url: "#", type: "sheet" }],
-    originalCapture: "fix purchasing receipt flow because finance needs to calculate money return",
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "Yesterday" }]
-  },
-  {
-    id: "t3", title: "Check expired medicine inventory",
-    org: "Apotik", area: "Operations", priority: "urgent", status: "ready",
-    nextActionBy: "me", deadline: "Today", isDelegated: false, isWaiting: false, isToday: true, estimatedHours: 1,
-    originalCapture: "tomorrow check apotik expired medicine issue",
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "Yesterday" }]
-  },
-  {
-    id: "t4", title: "Update restaurant SOP documentation",
-    org: "Villa Khayangan", area: "Operations", project: "Ops Manual 2024",
-    priority: "medium", status: "waiting", assignee: "Bu Desti", nextActionBy: "Bu Desti",
-    deadline: "Fri, 16 Aug", waitingSince: "Sat, 9 Aug", lastUpdate: "5 days ago",
-    isDelegated: true, isWaiting: true, carriedOver: true, staleDays: 35,
-    files: [{ name: "SOP_Draft_v2.docx", type: "doc" }],
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "5 days ago" }]
-  },
-  {
-    id: "t5", title: "Reconcile August petty cash",
-    org: "Apotik", area: "Finance", priority: "urgent", status: "ready",
-    nextActionBy: "me", deadline: "Yesterday", isDelegated: false, isWaiting: false, isOverdue: true, estimatedHours: 2,
-    files: [{ name: "Cash_July.xlsx", type: "excel" }],
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "3 days ago" }]
-  },
-  {
-    id: "t6", title: "Prepare supplier quotation comparison",
-    org: "Villa Khayangan", area: "Finance", priority: "high", status: "waiting",
-    assignee: "Purchasing Manager", nextActionBy: "Purchasing Manager",
-    deadline: "Thu, 15 Aug", waitingSince: "Mon, 11 Aug", responseDue: "Thu, 15 Aug",
-    lastUpdate: "2 days ago", isDelegated: true, isWaiting: true,
-    files: [{ name: "Quotation_Template.xlsx", type: "excel" }],
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Purchasing Manager", time: "2 days ago" }]
-  },
-  {
-    id: "t7", title: "Review new hire onboarding checklist",
-    org: "Villa Khayangan", area: "HR", priority: "medium", status: "review",
-    assignee: "HR Manager", nextActionBy: "me", deadline: "Fri, 16 Aug", isDelegated: true, isWaiting: false,
-    files: [{ name: "Onboarding_Checklist.pdf", type: "pdf" }],
-    activity: [
-      { type: "assigned", actor: "You", text: "Assigned to HR Manager", time: "4 days ago" },
-      { type: "submitted", actor: "HR Manager", text: "Submitted for review", time: "1 day ago" },
-    ]
-  },
-  {
-    id: "t8", title: "Update Figma mockup for mobile booking flow",
-    org: "Villa Khayangan", area: "System Development", project: "Villa Website Revamp",
-    priority: "medium", status: "review", assignee: "Design Team", nextActionBy: "me",
-    deadline: "Wed, 14 Aug", isDelegated: true, isWaiting: false,
-    links: [{ label: "Figma File", url: "#", type: "figma" }],
-    activity: [
-      { type: "assigned", actor: "You", text: "Assigned to Design Team", time: "3 days ago" },
-      { type: "submitted", actor: "Design Team", text: "Mockups ready for review", time: "Today" },
-    ]
-  },
-  {
-    id: "t9", title: "Follow up with bank on credit facility renewal",
-    org: "Personal", area: "Finance", priority: "high", status: "waiting",
-    nextActionBy: "Bank Officer", deadline: "Fri, 16 Aug", waitingSince: "Wed, 7 Aug", lastUpdate: "4 days ago",
-    isDelegated: false, isWaiting: true, carriedOver: true, staleDays: 41,
-    activity: [{ type: "assigned", actor: "You", text: "Called bank, waiting for callback", time: "4 days ago" }]
-  },
-  {
-    id: "t10", title: "Review Q3 marketing budget proposal",
-    org: "Villa Khayangan", area: "Marketing", priority: "high", status: "ready",
-    nextActionBy: "me", deadline: "Today", isDelegated: false, isWaiting: false, isToday: true, estimatedHours: 1.5,
-    files: [{ name: "Marketing_Budget_Q3.xlsx", type: "excel" }],
-    activity: [{ type: "assigned", actor: "Marketing Team", text: "Sent for owner approval", time: "Yesterday" }]
-  },
-  {
-    id: "t11", title: "Update staff schedule for Lebaran holiday",
-    org: "Villa Khayangan", area: "HR", priority: "medium", status: "ready",
-    nextActionBy: "me", deadline: "Thu, 15 Aug", isDelegated: false, isWaiting: false, estimatedHours: 1,
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "Today" }]
-  },
-  {
-    id: "t12", title: "Negotiate new supplier contract terms",
-    org: "Apotik", area: "Operations", priority: "medium", status: "waiting",
-    assignee: "Purchasing Manager", nextActionBy: "Purchasing Manager",
-    deadline: "Mon, 18 Aug", waitingSince: "Fri, 8 Aug", lastUpdate: "2 days ago",
-    isDelegated: true, isWaiting: true,
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Purchasing Manager", time: "2 days ago" }]
-  },
-  {
-    id: "t13", title: "Finalize annual revenue report",
-    org: "Villa Khayangan", area: "Finance", project: "Finance Automation",
-    priority: "high", status: "done", nextActionBy: "me",
-    isDelegated: false, isWaiting: false, completedInCurrentMonth: true,
-    activity: [{ type: "approved", actor: "You", text: "Marked as complete", time: "Last week" }]
-  },
-  {
-    id: "t14", title: "Train front desk staff on new booking system",
-    org: "Villa Khayangan", area: "HR", priority: "medium", status: "ready",
-    assignee: "Bu Desti", nextActionBy: "Bu Desti",
-    deadline: "Mon, 19 Aug", isDelegated: true, isWaiting: false,
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "Today" }]
-  },
-  {
-    id: "t15", title: "Confirm accommodation pricing",
-    org: "Villa Khayangan", area: "Finance", project: "Villa Website Revamp",
-    priority: "urgent", status: "ready", assignee: "Finance Team", nextActionBy: "Finance",
-    startDate: "2026-08-12", targetDate: "2026-08-19", deadline: "Tue, 19 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 3,
-    activity: [{ type: "assigned", actor: "Marketing Team", text: "Requested final pricing confirmation", time: "Today" }],
-  },
-  {
-    id: "t16", title: "Prepare campaign concept",
-    org: "Villa Khayangan", area: "Marketing", project: "Villa Website Revamp",
-    priority: "high", status: "ready", assignee: "Marketing Team", nextActionBy: "Marketing",
-    startDate: "2026-08-12", targetDate: "2026-08-20", deadline: "Wed, 20 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 6,
-    activity: [{ type: "assigned", actor: "You", text: "Prepared for parallel campaign work", time: "Today" }],
-  },
-  {
-    id: "t17", title: "Draft website copy",
-    org: "Villa Khayangan", area: "Marketing", project: "Villa Website Revamp",
-    priority: "medium", status: "in_progress", assignee: "Marketing Team", nextActionBy: "Marketing",
-    startDate: "2026-08-13", targetDate: "2026-08-22", deadline: "Fri, 22 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 5,
-    activity: [{ type: "updated", actor: "Marketing Team", text: "First draft is in progress", time: "Today" }],
-  },
-  {
-    id: "t18", title: "Brief Front Office on updated offers",
-    org: "Villa Khayangan", area: "Operations", project: "Villa Website Revamp",
-    priority: "medium", status: "ready", assignee: "Operations Team", nextActionBy: "Operations",
-    startDate: "2026-08-18", targetDate: "2026-08-26", deadline: "Tue, 26 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 2, relatedTaskIds: ["t15"],
-    activity: [{ type: "assigned", actor: "You", text: "Can be prepared alongside the pricing review", time: "Today" }],
-  },
-  {
-    id: "t19", title: "Publish final accommodation prices",
-    org: "Villa Khayangan", area: "System Development", project: "Villa Website Revamp",
-    priority: "high", status: "blocked", assignee: "Development Team", nextActionBy: "Finance",
-    startDate: "2026-08-19", targetDate: "2026-08-23", deadline: "Sat, 23 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 3,
-    blockedBy: { kind: "task", type: "blocking", label: "Confirm accommodation pricing", taskId: "t15", owner: "Finance" },
-    activity: [{ type: "updated", actor: "Development Team", text: "Ready to publish once Finance confirms pricing", time: "Today" }],
-  },
-  {
-    id: "t20", title: "Finalize website banner",
-    org: "Villa Khayangan", area: "Marketing", project: "Villa Website Revamp",
-    priority: "medium", status: "blocked", assignee: "Design Team", nextActionBy: "Finance",
-    startDate: "2026-08-19", targetDate: "2026-08-25", deadline: "Mon, 25 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 4,
-    blockedBy: { kind: "task", type: "blocking", label: "Confirm accommodation pricing", taskId: "t15", owner: "Finance" },
-    activity: [{ type: "assigned", actor: "Marketing Team", text: "Banner content waits for approved pricing", time: "Today" }],
-  },
-  {
-    id: "t21", title: "Finalize the August budget",
-    org: "Villa Khayangan", area: "Finance", involvedAreas: ["Marketing", "Finance", "Purchasing"],
-    priority: "medium", status: "ready", assignee: "Finance Team", assigneeIds: ["team-finance", "team-marketing", "team-purchasing"], nextActionBy: "Finance Team",
-    startDate: "2026-08-13", targetDate: "2026-08-16", deadline: "Sat, 16 Aug",
-    isDelegated: true, isWaiting: false, estimatedHours: 4,
-    description: "Coordinate the August budget with Marketing, Finance, and Purchasing.",
-    notes: "Shared work: Finance leads, with Marketing and Purchasing participating.",
-    originalCapture: "finalize budget bersama marketing, finance dan purchasing; deadline agustus 16",
-    activity: [{ type: "assigned", actor: "Binnie", text: "Created one shared task for Finance, Marketing, and Purchasing", time: "Today" }],
-  },
-];
-
-const SEED_ARCHIVED_TASKS: Task[] = [
-  {
-    id: "archive-1", title: "Compare accommodation supplier terms",
-    org: "Villa Khayangan", area: "Operations", project: "Ops Manual 2024", priority: "medium", status: "done", nextActionBy: "me",
-    deadline: "Jul 2026", isDelegated: false, isWaiting: false, archived: true,
-    activity: [{ type: "approved", actor: "You", text: "Completed in July", time: "Last month" }],
-  },
-  {
-    id: "archive-2", title: "Refresh pharmacy inventory labels",
-    org: "Apotik", area: "Operations", priority: "low", status: "done", nextActionBy: "me",
-    deadline: "Jun 2026", isDelegated: false, isWaiting: false, archived: true,
-    activity: [{ type: "approved", actor: "You", text: "Completed in June", time: "2 months ago" }],
-  },
-];
+const SEED_TASKS: Task[] = [];
+const SEED_ARCHIVED_TASKS: Task[] = [];
 
 // ─── CANONICAL TASK STORE ────────────────────────────────────────────────────
-// Every screen reads this collection. The local persistence is deliberately
-// isolated here so a future API/database can replace it without changing views.
+// Every shared screen reads this server-scoped PostgreSQL projection. Browser
+// local work is never merged here; it stays in the explicit import banner until
+// its idempotent migration creates the same canonical Task records.
 const BINNIE_TASK_STORE_STORAGE_KEY = "binnie-task-store-v1";
-const DEFAULT_CURRENT_USER_ID = "person-charlotte";
+// A current user exists only after the authenticated, server-scoped snapshot
+// has loaded. There is deliberately no Charlotte/demo authorization fallback.
+const DEFAULT_CURRENT_USER_ID = "";
 type TaskDraft = Omit<Task, "id"> & { id?: string };
 
 let TASKS: Task[] = SEED_TASKS.map(task => ({ ...task }));
@@ -442,6 +290,7 @@ let taskStoreVersion = 0;
 let taskStoreUsesServer = false;
 let taskStoreServerRevision = 0;
 let CANONICAL_ACTOR_ID = DEFAULT_CURRENT_USER_ID;
+let CANONICAL_ACTOR_TEAM_IDS: string[] = [];
 let CANONICAL_PROJECTS: ProjectDTO[] = [];
 let CANONICAL_SAVED_VIEWS: SavedViewDTO[] = [];
 let CANONICAL_INBOX_CAPTURES: InboxCaptureDTO[] = [];
@@ -496,6 +345,9 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
     status: task.status,
     assignee: task.assignee,
     assigneeIds: task.assigneeIds,
+    assignments: task.assignments,
+    createdByPrincipalId: task.createdByPrincipalId,
+    reviewerPrincipalId: task.review?.reviewerId,
     nextActionBy: task.nextActionBy,
     nextActionKind: task.nextActionKind,
     nextActionPrincipalId: task.nextActionPrincipalId,
@@ -510,7 +362,8 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
     actualMinutes: task.actualMinutes,
     responseDue: task.followUpDate ? taskDateLabel(task.followUpDate) : undefined,
     waitingSince: task.waitingSince,
-    isDelegated: task.assigneeIds.some(id => id !== DEFAULT_CURRENT_USER_ID),
+    completedAt: task.completedAt,
+    isDelegated: task.assigneeIds.some(id => id !== CANONICAL_ACTOR_ID),
     isWaiting: task.status === "waiting",
     isOverdue: task.isOverdue,
     completedInCurrentMonth: task.status === "done",
@@ -544,8 +397,10 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
 function canonicalOrganizationToMeta(organization: OrganizationDTO): OrganizationMeta {
   const previous = ORGS_META.find(candidate => candidate.name === organization.name);
   return {
+    id: organization.id,
     name: organization.name,
     desc: organization.description || previous?.desc || "No description yet.",
+    colorKey: organization.colorKey,
     aliases: organization.aliases,
     areas: organization.departments.map(department => department.name as AreaName),
     areaSettings: Object.fromEntries(organization.departments.map(department => [department.name, {
@@ -570,6 +425,7 @@ function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
   taskStoreUsesServer = true;
   taskStoreServerRevision = snapshot.revision;
   CANONICAL_ACTOR_ID = snapshot.actorId;
+  CANONICAL_ACTOR_TEAM_IDS = snapshot.profile.teamIds;
   remoteDepartmentIds.clear();
   remoteOrganizationIds.clear();
   snapshot.organizations.forEach(organization => {
@@ -584,7 +440,7 @@ function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
     name: person.name,
     type: person.type,
     active: person.active,
-    accountStatus: person.active ? "active_user" as const : "disabled" as const,
+    accountStatus: person.accountStatus === "ACTIVE" ? "active_user" as const : person.accountStatus === "SUSPENDED" ? "suspended" as const : person.accountStatus === "ACCESS_REMOVED" ? "access_removed" as const : "no_account" as const,
     email: person.email,
     memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", role: membership.role?.replace(/_/g, " "), area: membership.department as AreaName | undefined })),
   })));
@@ -774,28 +630,11 @@ function reopenTask(task: Task, lastUpdate = "Reopened just now") {
   });
 }
 
-const STRATEGIC_PROJECTS = [
-  { id: "p1", name: "Villa Website Revamp", org: "Villa Khayangan" as OrgName, progress: 65, tasks: 12, done: 8, deadline: "Sep 2024", status: "on_track" as const },
-  { id: "p2", name: "Apotik Management System", org: "Apotik" as OrgName, progress: 30, tasks: 18, done: 5, deadline: "Dec 2024", status: "at_risk" as const },
-  { id: "p3", name: "Finance Automation", org: "Villa Khayangan" as OrgName, progress: 80, tasks: 10, done: 8, deadline: "Aug 2024", status: "on_track" as const },
-];
+const STRATEGIC_PROJECTS: Array<{ id: string; name: string; org: OrgName; progress: number; tasks: number; done: number; deadline: string; status: "on_track" | "at_risk" }> = [];
 
 // A person or team is created once in Binnie. Membership stores the role and
 // area for each organization, allowing one person to contribute in more than one place.
-const PEOPLE_DIRECTORY: DirectoryPerson[] = [
-  { id: "person-charlotte", name: "Charlotte", type: "person", active: true, accountStatus: "active_user", memberships: [{ organization: "Villa Khayangan", role: "Owner", area: "Operations" }] },
-  { id: "person-bu-desti", name: "Bu Desti", type: "person", active: true, accountStatus: "no_account", email: "desti@villakhayangan.com", phone: "+62 812 5555 0182", notes: "Leads day-to-day operations and supports pricing reviews.", memberships: [{ organization: "Villa Khayangan", role: "Manager", area: "Operations" }, { organization: "Apotik", role: "Advisor", area: "Operations" }] },
-  { id: "person-purchasing-manager", name: "Purchasing Manager", type: "person", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Procurement Manager", area: "Purchasing" }, { organization: "Apotik", role: "Procurement", area: "Operations" }] },
-  { id: "person-hr-manager", name: "HR Manager", type: "person", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "HR Manager", area: "HR" }] },
-  { id: "team-marketing", name: "Marketing Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Marketing", area: "Marketing" }] },
-  { id: "team-design", name: "Design Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Design", area: "Design" }] },
-  { id: "team-finance", name: "Finance Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Finance", area: "Finance" }] },
-  { id: "team-purchasing", name: "Purchasing Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Purchasing", area: "Purchasing" }] },
-  { id: "team-hr", name: "HR Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "HR", area: "HR" }] },
-  { id: "team-operations", name: "Operations Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Operations", area: "Operations" }, { organization: "Apotik", role: "Operations", area: "Operations" }] },
-  { id: "team-development", name: "Development Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "System Development", area: "System Development" }] },
-  { id: "team-maintenance", name: "Maintenance Team", type: "team", active: true, accountStatus: "no_account", memberships: [{ organization: "Villa Khayangan", role: "Maintenance", area: "Maintenance" }] },
-];
+const PEOPLE_DIRECTORY: DirectoryPerson[] = [];
 
 function getDirectoryPerson(nameOrId: string) {
   return PEOPLE_DIRECTORY.find(person => person.name === nameOrId || person.id === nameOrId);
@@ -804,7 +643,7 @@ function getDirectoryPerson(nameOrId: string) {
 function applyCanonicalDirectoryPerson(person: DirectoryDTO) {
   const next: DirectoryPerson = {
     id: person.id, name: person.name, type: person.type, active: person.active,
-    accountStatus: person.active ? "active_user" : "disabled",
+    accountStatus: person.accountStatus === "ACTIVE" ? "active_user" : person.accountStatus === "SUSPENDED" ? "suspended" : person.accountStatus === "ACCESS_REMOVED" ? "access_removed" : "no_account",
     email: person.email,
     memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", area: membership.department as AreaName | undefined, role: membership.role.replace(/_/g, " ") })),
   };
@@ -866,7 +705,7 @@ function isActiveTask(task: Task) {
 }
 
 function isoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return calendarDateKey(date);
 }
 
 function getTaskEffectiveDate(task: Task) {
@@ -878,36 +717,34 @@ function isTaskOverdue(task: Task) {
   return Boolean(task.isOverdue || (relevant && relevant < isoDate(getWorkspaceCalendarDate()) && isActiveTask(task)));
 }
 
-function currentDirectoryName(currentUserId = DEFAULT_CURRENT_USER_ID) {
-  return PEOPLE_DIRECTORY.find(person => person.id === currentUserId)?.name || "";
-}
-
 function taskIsForCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
-  if (getTaskAssigneeIds(task).includes(currentUserId) || task.nextActionPrincipalId === currentUserId || task.nextActionBy === "me" || task.nextActionBy === currentDirectoryName(currentUserId)) return true;
-
-  const actor = PEOPLE_DIRECTORY.find(person => person.id === currentUserId);
-  if (!actor) return false;
-  const memberships = actor.memberships.filter(membership => membership.organization === task.org);
-
-  // An organization owner is accountable for making its work move. This keeps
-  // the owner view useful without changing ordinary employee/team scope.
-  if (memberships.some(membership => membership.role?.toLowerCase() === "owner")) return true;
-
-  const taskAreas = new Set(getTaskAreas(task));
-  const sharesResponsibleArea = memberships.some(membership => membership.area && taskAreas.has(membership.area));
-  if (sharesResponsibleArea) return true;
-
-  // Teams are represented by their department memberships. A task assigned to
-  // a team is therefore in a member's Today scope when they share that real
-  // organization + area membership; no hard-coded team mapping is needed.
-  return getTaskAssignees(task).some(assignee => assignee.type === "team" && assignee.memberships.some(teamMembership =>
-    memberships.some(membership => membership.area && membership.area === teamMembership.area),
-  ));
+  // Today and This Week use this one personal relationship rule. Workspace
+  // authority is deliberately excluded: management visibility belongs in the
+  // People/Team task scopes, not in a person's own planner.
+  return isPersonalPlannerTask({
+    id: task.id,
+    status: task.status,
+    archived: task.archived,
+    assigneeIds: getTaskAssigneeIds(task),
+    nextActionPrincipalId: task.nextActionPrincipalId,
+    createdByPrincipalId: task.createdByPrincipalId,
+    reviewerPrincipalId: task.reviewerPrincipalId,
+  }, currentUserId, currentUserId === CANONICAL_ACTOR_ID ? CANONICAL_ACTOR_TEAM_IDS : []);
 }
 
 function getTasksForToday(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
   const today = isoDate(getWorkspaceCalendarDate());
-  return tasks.filter(task => isActiveTask(task) && getTaskEffectiveDate(task) === today && taskIsForCurrentUser(task, currentUserId));
+  return getPersonalPlannerTasksForDate(tasks, currentUserId, today, currentUserId === CANONICAL_ACTOR_ID ? CANONICAL_ACTOR_TEAM_IDS : []);
+}
+
+/** The exact same personal planning universe as Today, expanded to a week. */
+function getPersonalTasksForWeek(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID, weekStart?: Date) {
+  const today = getWorkspaceCalendarDate();
+  const monday = weekStart ? new Date(weekStart) : new Date(today);
+  if (!weekStart) monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+  const end = new Date(monday);
+  end.setUTCDate(end.getUTCDate() + 6);
+  return getPersonalPlannerTasksForWeek(tasks, currentUserId, isoDate(monday), isoDate(end), currentUserId === CANONICAL_ACTOR_ID ? CANONICAL_ACTOR_TEAM_IDS : []);
 }
 
 function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
@@ -940,9 +777,7 @@ function getTasksForMonth(tasks = TASKS, date = getWorkspaceCalendarDate()) {
 
 function taskIsPersonallyOwnedByCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
   return getTaskAssigneeIds(task).includes(currentUserId)
-    || task.nextActionPrincipalId === currentUserId
-    || task.nextActionBy === "me"
-    || task.nextActionBy === currentDirectoryName(currentUserId);
+    || task.nextActionPrincipalId === currentUserId;
 }
 
 function formatEstimatedMinutes(minutes: number) {
@@ -953,7 +788,7 @@ function formatEstimatedMinutes(minutes: number) {
 
 function getTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
   const personalTasks = tasks.filter(task => taskIsPersonallyOwnedByCurrentUser(task, currentUserId));
-  const teamTasks = tasks.filter(task => !personalTasks.includes(task) && getTaskAssignees(task).some(assignee => assignee.type === "team"));
+  const teamTasks = tasks.filter(task => !personalTasks.includes(task) && currentUserId === CANONICAL_ACTOR_ID && getTaskAssigneeIds(task).some(id => CANONICAL_ACTOR_TEAM_IDS.includes(id)));
   const summarize = (items: Task[]) => ({
     estimatedMinutes: items.reduce((total, task) => total + (task.estimatedMinutes || 0), 0),
     unestimatedCount: items.filter(task => !task.estimatedMinutes).length,
@@ -1002,9 +837,10 @@ function getPersonMembership(person: DirectoryPerson, organization?: OrgName) {
 
 function getPersonAccountability(name: string): PersonAccountability {
   const entity = getDirectoryPerson(name);
-  const involved = TASKS.filter(task => taskHasAssignee(task, entity || name) || task.nextActionBy === name || Boolean(entity && task.contributorIds?.includes(entity.id)));
-  const waitingOnThem = involved.filter(task => task.status !== "done" && task.nextActionBy === name && (task.status === "waiting" || task.isWaiting || task.status === "blocked")).length;
-  const waitingOnMe = involved.filter(task => task.status !== "done" && task.nextActionBy === "me").length;
+  const personId = entity?.id;
+  const involved = TASKS.filter(task => Boolean(entity && taskHasAssignee(task, entity)) || (personId && task.nextActionPrincipalId === personId) || Boolean(personId && task.contributorIds?.includes(personId)));
+  const waitingOnThem = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === personId && (task.status === "waiting" || task.isWaiting || task.status === "blocked")).length;
+  const waitingOnMe = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === CANONICAL_ACTOR_ID).length;
   const updates = involved.flatMap(task => task.activity || []);
   return {
     active: involved.filter(task => task.status !== "done").length,
@@ -1016,7 +852,7 @@ function getPersonAccountability(name: string): PersonAccountability {
     overdue: involved.filter(task => task.isOverdue).length,
     review: involved.filter(task => task.status === "review").length,
     lastUpdate: updates[0]?.time || "No updates yet",
-    oldestUnanswered: waitingOnThem ? `${Math.max(...involved.filter(task => task.nextActionBy === name).map(task => Number.parseInt(task.waitingSince || "0", 10) || 1))} days` : "—",
+    oldestUnanswered: waitingOnThem ? `${Math.max(...involved.filter(task => task.nextActionPrincipalId === personId).map(task => Number.parseInt(task.waitingSince || "0", 10) || 1))} days` : "—",
   };
 }
 
@@ -1041,115 +877,18 @@ function replaceDirectoryPerson(id: string, update: (person: DirectoryPerson) =>
   return next;
 }
 
-const FOLLOWUP_DATA: FollowUpPerson[] = [
-  {
-    person: "Bu Desti", section: "today",
-    items: [
-      { title: "Review website accommodation prices", taskId: "t1", daysWaiting: 4, status: "overdue", note: "No update for 4 days" },
-      { title: "Restaurant SOP documentation", taskId: "t4", daysWaiting: 2, status: "due_today", note: "Update expected today" },
-      { title: "August promotion pricing", taskId: "new1", daysWaiting: 1, status: "due_today", note: "Response due today" },
-    ],
-    suggestedMessage: "Bu Desti, mau follow up untuk beberapa hal ya Bu:\n\n1. Review website accommodation prices — sudah 4 hari belum ada update\n2. Restaurant SOP update — targetnya hari ini\n3. August promotion pricing — response seharusnya hari ini\n\nMohon dibantu update perkembangannya ya Bu. Terima kasih 🙏",
-  },
-  {
-    person: "Purchasing Manager", section: "today",
-    items: [
-      { title: "Supplier quotation comparison", taskId: "t6", daysWaiting: 2, status: "due_soon", note: "Due Thursday" },
-      { title: "Negotiate supplier contract terms", taskId: "t12", daysWaiting: 3, status: "no_update", note: "No update since Monday" },
-    ],
-    suggestedMessage: "Pak, mau follow up untuk 2 hal ya Pak:\n\n1. Quotation comparison supplier — due hari Kamis\n2. Negosiasi kontrak supplier — belum ada update sejak Senin\n\nMohon dibantu ya Pak. Terima kasih 🙏",
-  },
-  {
-    person: "Marketing Team", section: "later",
-    items: [
-      { title: "Q3 campaign calendar", taskId: "new2", daysWaiting: 6, status: "no_update", note: "6 days without update" },
-    ],
-    suggestedMessage: "Tim Marketing, mau tanya update untuk Q3 campaign calendar ya. Sudah 6 hari belum ada kabar. Terima kasih 🙏",
-  },
-];
+const FOLLOWUP_DATA: FollowUpPerson[] = [];
 
-const ORG_RESOURCES: Record<string, OrganizationResource[]> = {
-  "Villa Khayangan": [
-    { label: "Google Drive", url: "https://drive.google.com/", type: "drive" },
-    { label: "Main Website", url: "https://example.com/", type: "website", area: "Marketing" },
-    { label: "Finance Dashboard", url: "", type: "dashboard", area: "Finance" },
-    { label: "Design System", url: "", type: "figma", project: "Villa Website Revamp" },
-  ],
-  "Apotik": [
-    { label: "Inventory Sheet", url: "https://docs.google.com/spreadsheets/", type: "sheet" },
-    { label: "Operations Drive", url: "https://drive.google.com/", type: "drive" },
-  ],
-  "Personal": [
-    { label: "Personal Drive", url: "https://drive.google.com/", type: "drive" },
-    { label: "Budget Tracker", url: "https://docs.google.com/spreadsheets/", type: "sheet" },
-  ],
-};
+const ORG_RESOURCES: Record<string, OrganizationResource[]> = {};
 
-const PROJECT_DETAILS: Record<string, ProjectDetail> = {
-  "p1": {
-    id: "p1", name: "Villa Website Revamp", org: "Villa Khayangan", area: "System Development",
-    progress: 65, deadline: "Sep 2024", status: "on_track", tasks: 12, done: 8,
-    currentFocus: ["Mobile booking flow redesign", "Payment gateway integration", "Accommodation pricing section"],
-    resources: [
-      { label: "Website Revamp Figma", url: "https://www.figma.com/", type: "figma" },
-      { label: "Accommodation Pricing Sheet", url: "https://docs.google.com/spreadsheets/", type: "sheet" },
-      { label: "Main Website", url: "https://villakhayangan.com/", type: "website" },
-    ],
-    files: [
-      { id: "p1-requirements", name: "Website Requirements.pdf", type: "pdf", size: "2.4 MB", url: "data:text/plain;charset=utf-8,Website%20Requirements" },
-      { id: "p1-pricing", name: "Pricing Draft.xlsx", type: "excel", size: "840 KB", url: "data:text/plain;charset=utf-8,Pricing%20Draft" },
-    ],
-    recentActivity: [
-      { type: "submitted", actor: "Design Team", text: "Submitted mobile booking mockups for review", time: "Today" },
-      { type: "commented", actor: "You", text: "Left comments on payment flow design", time: "Yesterday" },
-      { type: "updated", actor: "Bu Desti", text: "Checked accommodation pricing section", time: "3 days ago" },
-    ],
-  },
-  "p2": {
-    id: "p2", name: "Apotik Management System", org: "Apotik", area: "System Development",
-    progress: 30, deadline: "Dec 2024", status: "at_risk", tasks: 18, done: 5,
-    currentFocus: ["Inventory management module", "Prescription tracking", "Supplier data integration"],
-    resources: [
-      { label: "GitHub Repo", url: "#", type: "github" },
-      { label: "Requirements", url: "#", type: "drive" },
-      { label: "Design File", url: "#", type: "figma" },
-    ],
-    recentActivity: [
-      { type: "updated", actor: "You", text: "Reviewed system architecture document", time: "2 days ago" },
-      { type: "assigned", actor: "You", text: "Assigned inventory module to dev team", time: "4 days ago" },
-    ],
-  },
-  "p3": {
-    id: "p3", name: "Finance Automation", org: "Villa Khayangan", area: "Finance",
-    progress: 80, deadline: "Aug 2024", status: "on_track", tasks: 10, done: 8,
-    currentFocus: ["Purchasing receipt flow fix", "Monthly auto-reconciliation"],
-    resources: [
-      { label: "Finance Sheet", url: "#", type: "sheet" },
-      { label: "GitHub Repo", url: "#", type: "github" },
-      { label: "Documentation", url: "#", type: "drive" },
-    ],
-    recentActivity: [
-      { type: "updated", actor: "You", text: "Working on purchasing receipt flow fix", time: "Today" },
-      { type: "approved", actor: "You", text: "Approved automated reconciliation v1", time: "3 days ago" },
-    ],
-  },
-};
+const PROJECT_DETAILS: Record<string, ProjectDetail> = {};
 
-const MILESTONES: Milestone[] = [
-  { id: "m1", name: "Pricing Approved", date: "2026-08-19", project: "Villa Website Revamp", owner: "Finance", status: "planned" },
-  { id: "m2", name: "Website Ready", date: "2026-08-26", project: "Villa Website Revamp", owner: "System Development", status: "planned" },
-  { id: "m3", name: "Campaign Launch", date: "2026-09-02", project: "Villa Website Revamp", owner: "Marketing", status: "planned" },
-  { id: "m4", name: "Reconciliation Live", date: "2026-08-22", project: "Finance Automation", owner: "Finance", status: "planned" },
-  { id: "m5", name: "Inventory Pilot", date: "2026-09-09", project: "Apotik Management System", owner: "Operations", status: "at_risk" },
-];
+const MILESTONES: Milestone[] = [];
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 
-const ORG_COLORS: Record<string, { bg: string; text: string; dot: string; border: string; card: string }> = {
-  "Villa Khayangan": { bg: "bg-[var(--org-villa-bg)]", text: "text-[var(--org-villa-text)]", dot: "bg-[var(--org-villa-dot)]", border: "border-[var(--org-villa-border)]", card: "bg-[var(--org-villa-card)]" },
-  "Apotik": { bg: "bg-[var(--org-apotik-bg)]", text: "text-[var(--org-apotik-text)]", dot: "bg-[var(--org-apotik-dot)]", border: "border-[var(--org-apotik-border)]", card: "bg-[var(--org-apotik-card)]" },
-  "Personal": { bg: "bg-[var(--org-personal-bg)]", text: "text-[var(--org-personal-text)]", dot: "bg-[var(--org-personal-dot)]", border: "border-[var(--org-personal-border)]", card: "bg-[var(--org-personal-card)]" },
-};
+const DEFAULT_ORG_COLOR = { bg: "bg-primary/10", text: "text-primary", dot: "bg-primary", border: "border-primary/20", card: "bg-primary/[0.04]" };
+const ORG_COLORS: Record<string, typeof DEFAULT_ORG_COLOR> = {};
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; dot: string }> = {
   urgent: { label: "Needs attention", color: "text-overdue", bg: "bg-overdue/10", dot: "bg-overdue" },
@@ -1166,15 +905,7 @@ const AREA_COLORS: Record<string, string> = {
   "HR": "text-[var(--area-hr)]",
 };
 
-const PERSON_COLORS: Record<string, string> = {
-  "Bu Desti": "var(--person-slate)",
-  "Purchasing Manager": "var(--person-sage)",
-  "HR Manager": "var(--person-clay)",
-  "Design Team": "var(--person-rose)",
-  "Bank Officer": "var(--person-blue)",
-  "Marketing Team": "var(--person-violet)",
-  "You": "var(--person-stone)",
-};
+const PERSON_COLORS: Record<string, string> = {};
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
@@ -1195,11 +926,23 @@ function personColorStyle(color: string, borderWidth = 1) {
 // ─── SMALL COMPONENTS ─────────────────────────────────────────────────────────
 
 function OrgBadge({ org }: { org: OrgName }) {
-  const c = ORG_COLORS[org] || ORG_COLORS.Personal;
+  const c = ORG_COLORS[org] || DEFAULT_ORG_COLOR;
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium tracking-[0.01em]", c.bg, c.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", c.dot)} />
       {org}
+    </span>
+  );
+}
+
+/** A task inherits its quiet visual grouping cue from its organization. */
+function TaskOrganizationBadge({ org }: { org: OrgName }) {
+  const organization = ORGS_META.find((item) => item.name === org);
+  const color = getOrganizationColorStyles(organization?.colorKey);
+  return (
+    <span className={cn("inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium", color.chip)}>
+      <span className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", color.dot)} />
+      <span className="truncate">{org}</span>
     </span>
   );
 }
@@ -2940,7 +2683,7 @@ function HomeView({
     const done = projectTasks.filter(task => task.status === "done").length;
     return { id: project.id, name: project.name, org: project.organization as OrgName, progress: projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0, tasks: projectTasks.length, done };
   });
-  const weekOrgs: { org: OrgName; tasks: number; done: number }[] = (["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => {
+  const weekOrgs: { org: OrgName; tasks: number; done: number }[] = ORGS_META.map(({ name: org }) => {
     const orgTasks = weeklyTasks.filter(task => task.org === org);
     return { org, tasks: orgTasks.length, done: orgTasks.filter(task => task.status === "done").length };
   });
@@ -3075,21 +2818,7 @@ function HomeView({
               <button onClick={() => onNavigate("all-tasks")} className="text-[11px] font-medium text-primary hover:text-primary/80">View All</button>
             </div>
             <div className="p-2.5">
-              {[
-                { label: "Purchasing System", sub: "Project · Villa Khayangan", type: "project" as const, id: "p1" },
-                { label: "Supplier Comparison.xlsx", sub: "File · Purchasing System", type: "file" as const, taskId: "t2" },
-                { label: "Khayangan Website", sub: "Website · Villa Khayangan", type: "website" as const, taskId: "t1" },
-                { label: "Review accommodation prices", sub: "Task · Marketing", type: "task" as const, taskId: "t1" },
-                { label: "Villa Khayangan", sub: "Organization", type: "organization" as const, org: "Villa Khayangan" as OrgName },
-              ].map(item => {
-                const Icon = item.type === "project" ? FolderKanban : item.type === "file" ? FileText : item.type === "website" ? Globe : item.type === "organization" ? Building2 : ListTodo;
-                const onClick = () => {
-                  if (item.type === "project") onProjectClick(item.id);
-                  else if (item.type === "organization") onOrgClick(item.org);
-                  else onTaskClick(TASKS.find(task => task.id === item.taskId)!);
-                };
-                return <button key={item.label} onClick={onClick} className="group flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-muted/55"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary"><Icon className="h-3.5 w-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{item.label}</span><span className="block truncate text-[11px] text-muted-foreground">{item.sub}</span></span><ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></button>;
-              })}
+              {TASKS.slice(0, 5).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="group flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-muted/55"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary"><ListTodo className="h-3.5 w-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="block truncate text-[11px] text-muted-foreground">{task.org} · {task.area}</span></span><ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></button>)}
             </div>
           </div>
           <div className={cardClass("waiting-on-people", "binnie-card overflow-hidden")} style={cardStyle("waiting-on-people")}>
@@ -3123,7 +2852,7 @@ function HomeView({
             </div>
             <div className="p-4 space-y-3">
               {weekOrgs.map(({ org, tasks, done }) => {
-                const c = ORG_COLORS[org];
+                const c = ORG_COLORS[org] || DEFAULT_ORG_COLOR;
                 const pct = tasks ? Math.round((done / tasks) * 100) : 0;
                 return (
                   <button key={org} onClick={() => onOrgClick(org)} className="block w-full rounded-lg p-1 text-left transition-colors hover:bg-muted/55">
@@ -3146,7 +2875,7 @@ function HomeView({
             </div>
             <div className="p-3 space-y-2">
               {strategicProjects.map(proj => {
-                const c = ORG_COLORS[proj.org];
+                const c = ORG_COLORS[proj.org] || DEFAULT_ORG_COLOR;
                 return (
                   <button key={proj.id} onClick={() => onProjectClick(proj.id)} className="w-full rounded-lg bg-muted/30 p-3 text-left transition-colors hover:bg-muted/50">
                     <div className="flex items-start justify-between gap-2 mb-2">
@@ -3168,14 +2897,9 @@ function HomeView({
           <div className={cardClass("agenda", "binnie-card overflow-hidden")} style={cardStyle("agenda")}>
             <div className="flex items-center gap-2 border-b border-border px-5 py-4"><div className="h-1.5 w-1.5 rounded-full bg-info" /><div><h2 className="text-sm font-semibold text-foreground">Agenda</h2><p className="text-[10px] text-muted-foreground">Time-based commitments · Today</p></div></div>
             <div className="divide-y divide-border px-4 py-1">
-              {[
-                { time: "09:30", title: "Finance Meeting", context: "Villa Khayangan", taskId: "t2" },
-                { time: "11:00", title: "Review Purchasing Flow", context: "Purchasing System", taskId: "t2" },
-                { time: "14:00", title: "Marketing Check-In", context: "Villa Khayangan", taskId: "t1" },
-                { time: "All day", title: "Finish Apotik Stock Review", context: "Apotik", taskId: "t3" },
-              ].map(item => (
-                <button key={item.title} onClick={() => onTaskClick(TASKS.find(task => task.id === item.taskId)!)} className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/45">
-                  <span className="w-12 flex-shrink-0 text-[11px] font-medium text-info">{item.time}</span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{item.title}</span><span className="block truncate text-[11px] text-muted-foreground">{item.context}</span></span><ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              {getTasksForToday(TASKS, currentUserId).slice(0, 4).map(task => (
+                <button key={task.id} onClick={() => onTaskClick(task)} className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/45">
+                  <span className="w-12 flex-shrink-0 text-[11px] font-medium text-info">{task.startDate ? "Today" : "All day"}</span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="block truncate text-[11px] text-muted-foreground">{task.org} · {task.area}</span></span><ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                 </button>
               ))}
             </div>
@@ -3201,7 +2925,7 @@ function HomeView({
           <div className={cardClass("organization-workload", "binnie-card overflow-hidden")} style={cardStyle("organization-workload")}>
             <div className="flex items-center gap-2 border-b border-border px-5 py-4"><div className="h-1.5 w-1.5 rounded-full bg-primary" /><h2 className="text-sm font-semibold text-foreground">Organization Workload</h2></div>
             <div className="p-4 space-y-3">
-              {(["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => { const active = TASKS.filter(task => task.org === org && task.status !== "done").length; const total = TASKS.filter(task => task.org === org).length; const color = ORG_COLORS[org]; return <button key={org} onClick={() => onOrgClick(org)} className="block w-full rounded-xl p-1 text-left transition-colors hover:bg-muted/55"><div className="mb-1.5 flex items-center justify-between"><span className={cn("text-[12px] font-medium", color.text)}>{org}</span><span className="text-[11px] text-muted-foreground">{active} active</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((active / total) * 100)}%` }} /></div></button>; })}
+              {ORGS_META.map(meta => { const org = meta.name; const active = TASKS.filter(task => task.org === org && task.status !== "done").length; const total = TASKS.filter(task => task.org === org).length; const color = ORG_COLORS[org] || DEFAULT_ORG_COLOR; return <button key={org} onClick={() => onOrgClick(org)} className="block w-full rounded-xl p-1 text-left transition-colors hover:bg-muted/55"><div className="mb-1.5 flex items-center justify-between"><span className={cn("text-[12px] font-medium", color.text)}>{org}</span><span className="text-[11px] text-muted-foreground">{active} active</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${total ? Math.round((active / total) * 100) : 0}%` }} /></div></button>; })}
             </div>
           </div>
         </div>
@@ -3513,7 +3237,7 @@ function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick
 
 function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [, setRevision] = useState(0);
-  const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
+  const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionPrincipalId === CANONICAL_ACTOR_ID);
   async function approve(task: Task) {
     if (taskStoreUsesServer && task.version) {
       const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: true });
@@ -3705,6 +3429,7 @@ function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 // ─── THIS WEEK VIEW ───────────────────────────────────────────────────────────
 
 function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const workspaceDate = getWorkspaceCalendarDate();
   const weekdayIndex = (workspaceDate.getUTCDay() + 6) % 7;
   const currentMonday = new Date(workspaceDate);
@@ -3719,7 +3444,7 @@ function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   });
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-  const weekTasks = getTasksForWeek(TASKS, weekStart);
+  const weekTasks = getPersonalTasksForWeek(TASKS, currentUserId, weekStart);
   const dayColumns = weekDays.map(({ date, index, label }) => {
     const dateId = isoDate(date);
     const tasks = weekTasks
@@ -4064,7 +3789,386 @@ function TaskWorkspaceRow({ task, onClick, archived = false }: { task: Task; onC
   );
 }
 
-function AllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) => void; onNewTask: () => void }) {
+type OperationalTaskScope = "my" | "team" | "people";
+type TaskDisplayMode = "list" | "board";
+const BOARD_STATUSES: Array<{ id: TaskStatus; label: string }> = [
+  { id: "ready", label: "Ready" }, { id: "in_progress", label: "In Progress" }, { id: "waiting", label: "Waiting" },
+  { id: "blocked", label: "Blocked" }, { id: "review", label: "Review" }, { id: "done", label: "Done" },
+];
+
+function taskPriorityLabel(priority: Priority) {
+  return priority === "medium" ? "Normal" : priority.charAt(0).toUpperCase() + priority.slice(1);
+}
+
+function taskStatusLabel(status: TaskStatus) {
+  return BOARD_STATUSES.find((item) => item.id === status)?.label || status;
+}
+
+function operationalTaskQuery() {
+  if (typeof window === "undefined") return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+}
+
+function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task: Task) => void; onNewTask: () => void; profile: UserProfile }) {
+  const taskStoreRevision = useTaskStoreVersion();
+  const query = operationalTaskQuery();
+  const initialScope = query.get("scope");
+  const initialMode = query.get("view");
+  const [scope, setScope] = useState<OperationalTaskScope>(initialScope === "team" || initialScope === "people" ? initialScope : "my");
+  const [mode, setMode] = useState<TaskDisplayMode>(initialMode === "board" ? "board" : "list");
+  const [selectedPersonId, setSelectedPersonId] = useState(() => query.get("person") || "");
+  const [selectedTeamId, setSelectedTeamId] = useState(() => query.get("team") || "");
+  const [scopeData, setScopeData] = useState<TaskScopeResultDTO | null>(null);
+  const [scopeMessage, setScopeMessage] = useState("");
+  const [search, setSearch] = useState(() => query.get("q") || "");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
+  const [columns, setColumns] = useState<TaskListColumnId[]>(() => {
+    const saved = profile.taskListColumns.filter((column): column is TaskListColumnId => TASK_LIST_COLUMNS.some((candidate) => candidate.id === column));
+    return saved.length ? saved : DEFAULT_TASK_LIST_COLUMNS;
+  });
+  const [filterOrg, setFilterOrg] = useState(() => query.get("organization") || "");
+  const [filterArea, setFilterArea] = useState(() => query.get("area") || "");
+  const [filterProject, setFilterProject] = useState(() => query.get("project") || "");
+  const [filterAssignee, setFilterAssignee] = useState(() => query.get("assignedTo") || "");
+  const [filterTeam, setFilterTeam] = useState(() => query.get("assignedTeam") || "");
+  const [filterAssignedBy, setFilterAssignedBy] = useState(() => query.get("assignedBy") || "");
+  const [filterPriority, setFilterPriority] = useState<Priority | "">(() => {
+    const value = query.get("priority");
+    return value === "low" || value === "medium" || value === "high" || value === "urgent" ? value : "";
+  });
+  const [filterStatus, setFilterStatus] = useState<TaskStatus | "">(() => {
+    const value = query.get("status");
+    return BOARD_STATUSES.some((item) => item.id === value) ? value as TaskStatus : "";
+  });
+  const [dateFilter, setDateFilter] = useState<"" | "target" | "deadline" | "overdue">(() => {
+    const value = query.get("date");
+    return value === "target" || value === "deadline" || value === "overdue" ? value : "";
+  });
+  const [hasFilesOnly, setHasFilesOnly] = useState(() => query.get("hasFiles") === "true");
+  const [sortColumn, setSortColumn] = useState<TaskListColumnId>("deadline");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [showAllDone, setShowAllDone] = useState(false);
+
+  useEffect(() => {
+    const params = operationalTaskQuery();
+    params.set("view", mode);
+    params.set("scope", scope);
+    const setOrDelete = (key: string, value: string | boolean | undefined) => {
+      if (value === undefined || value === "" || value === false) params.delete(key);
+      else params.set(key, String(value));
+    };
+    setOrDelete("person", scope === "people" ? selectedPersonId : undefined);
+    setOrDelete("team", scope === "team" ? selectedTeamId : undefined);
+    setOrDelete("q", search || undefined);
+    setOrDelete("organization", filterOrg || undefined);
+    setOrDelete("area", filterArea || undefined);
+    setOrDelete("project", filterProject || undefined);
+    setOrDelete("assignedTo", filterAssignee || undefined);
+    setOrDelete("assignedTeam", filterTeam || undefined);
+    setOrDelete("assignedBy", filterAssignedBy || undefined);
+    setOrDelete("priority", filterPriority || undefined);
+    setOrDelete("status", filterStatus || undefined);
+    setOrDelete("date", dateFilter || undefined);
+    setOrDelete("hasFiles", hasFilesOnly || undefined);
+    const path = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`;
+    window.history.replaceState(null, "", path);
+  }, [mode, scope, selectedPersonId, selectedTeamId, search, filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, filterPriority, filterStatus, dateFilter, hasFilesOnly]);
+
+  useEffect(() => {
+    if (!taskStoreUsesServer) return;
+    let cancelled = false;
+    void getTaskScopeAction({ scope, personId: scope === "people" ? selectedPersonId || undefined : undefined, teamId: scope === "team" ? selectedTeamId || undefined : undefined }).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) { setScopeData(null); setScopeMessage(result.message); return; }
+      setScopeData(result.data);
+      setScopeMessage("");
+      if (!selectedPersonId && result.data.people.length) setSelectedPersonId(result.data.people[0]!.id);
+      if (!selectedTeamId && result.data.teams.length) setSelectedTeamId(result.data.teams[0]!.id);
+    });
+    return () => { cancelled = true; };
+  }, [scope, selectedPersonId, selectedTeamId, taskStoreRevision]);
+
+  useEffect(() => {
+    const applySavedView = (event: Event) => {
+      const filters = (event as CustomEvent<{ filters?: Record<string, unknown> }>).detail?.filters;
+      if (!filters) return;
+      if (filters.scope === "my" || filters.scope === "team" || filters.scope === "people") setScope(filters.scope);
+      if (filters.mode === "list" || filters.mode === "board") setMode(filters.mode);
+      setSelectedPersonId(typeof filters.personId === "string" ? filters.personId : "");
+      setSelectedTeamId(typeof filters.teamId === "string" ? filters.teamId : "");
+      setSearch(typeof filters.query === "string" ? filters.query : "");
+      setFilterOrg(typeof filters.organization === "string" ? filters.organization : "");
+      setFilterArea(typeof filters.area === "string" ? filters.area : "");
+      setFilterProject(typeof filters.project === "string" ? filters.project : "");
+      setFilterAssignee(typeof filters.assignedTo === "string" ? filters.assignedTo : "");
+      setFilterTeam(typeof filters.assignedTeam === "string" ? filters.assignedTeam : "");
+      setFilterAssignedBy(typeof filters.assignedBy === "string" ? filters.assignedBy : "");
+      setFilterPriority(filters.priority === "low" || filters.priority === "medium" || filters.priority === "high" || filters.priority === "urgent" ? filters.priority : "");
+      setFilterStatus(BOARD_STATUSES.some((item) => item.id === filters.status) ? filters.status as TaskStatus : "");
+      setDateFilter(filters.date === "target" || filters.date === "deadline" || filters.date === "overdue" ? filters.date : "");
+      setHasFilesOnly(filters.hasFiles === true);
+    };
+    const saveSavedView = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (!name || !taskStoreUsesServer) return;
+      const filters = {
+        scope,
+        mode,
+        personId: scope === "people" ? selectedPersonId || undefined : undefined,
+        teamId: scope === "team" ? selectedTeamId || undefined : undefined,
+        query: search || undefined,
+        organization: filterOrg || undefined,
+        area: filterArea || undefined,
+        project: filterProject || undefined,
+        assignedTo: filterAssignee || undefined,
+        assignedTeam: filterTeam || undefined,
+        assignedBy: filterAssignedBy || undefined,
+        priority: filterPriority || undefined,
+        status: filterStatus || undefined,
+        date: dateFilter || undefined,
+        hasFiles: hasFilesOnly || undefined,
+      };
+      void saveViewAction({ name, filters }).then((result) => {
+        if (result.ok) { CANONICAL_SAVED_VIEWS = [result.data, ...CANONICAL_SAVED_VIEWS.filter((view) => view.id !== result.data.id)]; publishTaskStore(); }
+      });
+    };
+    window.addEventListener("binnie:apply-saved-view", applySavedView);
+    window.addEventListener("binnie:save-saved-view", saveSavedView);
+    return () => { window.removeEventListener("binnie:apply-saved-view", applySavedView); window.removeEventListener("binnie:save-saved-view", saveSavedView); };
+  }, [scope, mode, selectedPersonId, selectedTeamId, search, filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, filterPriority, filterStatus, dateFilter, hasFilesOnly]);
+
+  const fallbackTasks = TASKS.filter((task) => {
+    if (scope === "my") return taskIsForCurrentUser(task, profile.directoryId || "");
+    if (scope === "people") return Boolean(selectedPersonId && getTaskAssigneeIds(task).includes(selectedPersonId));
+    if (scope === "team") return Boolean(selectedTeamId && getTaskAssigneeIds(task).includes(selectedTeamId));
+    return true;
+  });
+  const canonicalById = new Map([...TASKS, ...ARCHIVED_TASKS].map((task) => [task.id, task]));
+  const sourceTasks = taskStoreUsesServer
+    ? (scopeData?.scope === scope ? scopeData.tasks.map((task) => canonicalById.get(task.id) || canonicalTaskToLegacy(task)) : [])
+    : fallbackTasks;
+  const scopeLoading = taskStoreUsesServer && (!scopeData || scopeData.scope !== scope);
+  const organizations = Array.from(new Set(sourceTasks.map((task) => task.org).filter(Boolean))).sort();
+  const areas = Array.from(new Set(sourceTasks.flatMap((task) => getTaskAreas(task)).filter(Boolean))).sort();
+  const projects = Array.from(new Set(sourceTasks.map((task) => task.project).filter((item): item is string => Boolean(item)))).sort();
+  const assignees = Array.from(new Set(sourceTasks.flatMap((task) => task.assignments?.filter((assignment) => assignment.type === "person").map((assignment) => assignment.name) || task.assignee ? [task.assignee] : []))).sort();
+  const assignedBy = Array.from(new Set(sourceTasks.flatMap((task) => task.assignments?.map((assignment) => assignment.assignedBy).filter((name): name is string => Boolean(name)) || []))).sort();
+  const today = new Date().toISOString().slice(0, 10);
+  const filteredTasks = sourceTasks.filter((task) => {
+    const searchable = [task.title, task.description, task.notes, task.org, task.area, task.project, ...(task.assignments?.map((assignment) => assignment.name) || []), ...(task.assignments?.map((assignment) => assignment.assignedBy || "") || [])].filter(Boolean).join(" ").toLowerCase();
+    if (search.trim() && !searchable.includes(search.trim().toLowerCase())) return false;
+    if (filterOrg && task.org !== filterOrg) return false;
+    if (filterArea && !getTaskAreas(task).includes(filterArea as AreaName)) return false;
+    if (filterProject && task.project !== filterProject) return false;
+    if (filterAssignee && !(task.assignments || []).some((assignment) => assignment.type === "person" && assignment.name === filterAssignee)) return false;
+    if (filterTeam && !(task.assignments || []).some((assignment) => assignment.type === "team" && assignment.principalId === filterTeam)) return false;
+    if (filterAssignedBy && !(task.assignments || []).some((assignment) => assignment.assignedBy === filterAssignedBy)) return false;
+    if (filterPriority && task.priority !== filterPriority) return false;
+    if (filterStatus && task.status !== filterStatus) return false;
+    if (dateFilter === "target" && !task.targetDate) return false;
+    if (dateFilter === "deadline" && !task.deadlineDate) return false;
+    if (dateFilter === "overdue" && !(task.status !== "done" && task.deadlineDate && task.deadlineDate < today)) return false;
+    if (hasFilesOnly && !task.files?.length) return false;
+    return true;
+  }).sort((left, right) => {
+    const value = (task: Task) => {
+      if (sortColumn === "task") return task.title;
+      if (sortColumn === "priority") return String({ urgent: 0, high: 1, medium: 2, low: 3 }[task.priority]);
+      if (sortColumn === "assignedTo") return task.assignee || "";
+      if (sortColumn === "assignedBy") return task.assignments?.find((assignment) => assignment.assignedBy)?.assignedBy || "";
+      if (sortColumn === "organization") return task.org;
+      if (sortColumn === "area") return task.area;
+      if (sortColumn === "project") return task.project || "";
+      if (sortColumn === "status") return task.status;
+      if (sortColumn === "assignedDate") return task.assignments?.map((assignment) => assignment.assignedAt).sort()[0] || "";
+      if (sortColumn === "targetDate") return task.targetDate || "";
+      if (sortColumn === "deadline") return task.deadlineDate || "";
+      if (sortColumn === "completedDate") return task.completedAt || "";
+      return "";
+    };
+    return value(left).localeCompare(value(right)) * (sortDirection === "asc" ? 1 : -1);
+  });
+  const selectedPerson = scopeData?.people.find((person) => person.id === selectedPersonId);
+  const selectedTeam = scopeData?.teams.find((team) => team.id === selectedTeamId);
+  const activeFilters = [filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, filterPriority, filterStatus, dateFilter].filter(Boolean).length + Number(hasFilesOnly);
+  const activeFilterChips = [
+    filterOrg ? { id: "organization", label: filterOrg, clear: () => setFilterOrg("") } : null,
+    filterArea ? { id: "area", label: filterArea, clear: () => setFilterArea("") } : null,
+    filterProject ? { id: "project", label: filterProject, clear: () => setFilterProject("") } : null,
+    filterAssignee ? { id: "person", label: filterAssignee, clear: () => setFilterAssignee("") } : null,
+    filterTeam ? { id: "team", label: scopeData?.teams.find((team) => team.id === filterTeam)?.name || "Team", clear: () => setFilterTeam("") } : null,
+    filterAssignedBy ? { id: "assigned-by", label: `Assigned by ${filterAssignedBy}`, clear: () => setFilterAssignedBy("") } : null,
+    filterPriority ? { id: "priority", label: `${taskPriorityLabel(filterPriority)} priority`, clear: () => setFilterPriority("") } : null,
+    filterStatus ? { id: "status", label: taskStatusLabel(filterStatus), clear: () => setFilterStatus("") } : null,
+    dateFilter ? { id: "date", label: dateFilter === "target" ? "Has target date" : dateFilter === "deadline" ? "Has deadline" : "Overdue", clear: () => setDateFilter("") } : null,
+    hasFilesOnly ? { id: "files", label: "Has files", clear: () => setHasFilesOnly(false) } : null,
+  ].filter((chip): chip is { id: string; label: string; clear: () => void } => Boolean(chip));
+  const showTeamSelector = scope === "team" && (scopeData?.teams.length || 0) > 1;
+  const peopleSummary = scope === "people" ? {
+    active: filteredTasks.filter((task) => task.status !== "done").length,
+    waiting: filteredTasks.filter((task) => task.status === "waiting").length,
+    overdue: filteredTasks.filter((task) => task.status !== "done" && task.deadlineDate && task.deadlineDate < today).length,
+    review: filteredTasks.filter((task) => task.status === "review").length,
+  } : null;
+
+  const updateColumns = (next: TaskListColumnId[]) => {
+    const normalized: TaskListColumnId[] = next.includes("task") ? next : ["task", ...next];
+    setColumns(normalized);
+    if (taskStoreUsesServer) void saveTaskListColumnsAction({ columns: normalized }).then((result) => { if (!result.ok) setScopeMessage(result.message); });
+  };
+  const selectScope = (nextScope: OperationalTaskScope) => {
+    if (nextScope === "people" && !scopeData?.people.length) { setScopeMessage("You do not have permission to browse another person's tasks."); return; }
+    if (nextScope === "team" && !scopeData?.teams.length) { setScopeMessage("No team task list is available to you."); return; }
+    if (nextScope === "people" && !selectedPersonId) setSelectedPersonId(scopeData!.people[0]!.id);
+    if (nextScope === "team" && !selectedTeamId) setSelectedTeamId(scopeData!.teams[0]!.id);
+    setScope(nextScope);
+  };
+  const changeSort = (column: TaskListColumnId) => {
+    if (sortColumn === column) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+    else { setSortColumn(column); setSortDirection("asc"); }
+  };
+  const clearFilters = () => { setFilterOrg(""); setFilterArea(""); setFilterProject(""); setFilterAssignee(""); setFilterTeam(""); setFilterAssignedBy(""); setFilterPriority(""); setFilterStatus(""); setDateFilter(""); setHasFilesOnly(false); };
+  const moveCard = async (task: Task, status: TaskStatus) => {
+    if (task.status === status) return;
+    if (!taskStoreUsesServer || !task.version) { updateTask(task.id, { status, completedAt: status === "done" ? new Date().toISOString() : undefined, isWaiting: status === "waiting" }); return; }
+    const result = await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status });
+    if (!result.ok) { setScopeMessage(result.message); return; }
+    applyCanonicalTask(result.data, result.revision);
+    setScopeData((current) => current ? { ...current, tasks: current.tasks.map((item) => item.id === result.data.id ? result.data : item) } : current);
+  };
+  const renderCell = (task: Task, column: TaskListColumnId) => {
+    const assigneeNames = task.assignments?.map((assignment) => assignment.name).join(" · ") || task.assignee || "—";
+    const assignedAt = task.assignments?.map((assignment) => assignment.assignedAt).sort()[0];
+    const assignedByName = task.assignments?.map((assignment) => assignment.assignedBy).filter((name): name is string => Boolean(name)).filter((name, index, all) => all.indexOf(name) === index).join(" · ");
+    const text = "text-[11px] text-muted-foreground";
+    if (column === "task") return <span><span className="block max-w-[23rem] truncate text-[13px] font-semibold text-foreground">{task.title}</span>{task.description && <span className="mt-0.5 block max-w-[23rem] truncate text-[11px] text-muted-foreground">{task.description}</span>}</span>;
+    if (column === "priority") return <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", task.priority === "urgent" ? "bg-overdue/10 text-overdue" : task.priority === "high" ? "bg-warning/10 text-warning" : task.priority === "low" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")}>{taskPriorityLabel(task.priority)}</span>;
+    if (column === "assignedTo") return <span className={text}>{assigneeNames}</span>;
+    if (column === "assignedBy") return <span className={text}>{assignedByName || "—"}</span>;
+    if (column === "organization") return <TaskOrganizationBadge org={task.org} />;
+    if (column === "area") return <span className={text}>{getTaskAreas(task).join(" · ") || "—"}</span>;
+    if (column === "project") return <span className={text}>{task.project || "—"}</span>;
+    if (column === "status") return <span className={cn("inline-flex items-center gap-1.5", text)}><StatusDot status={task.status} />{taskStatusLabel(task.status)}</span>;
+    if (column === "assignedDate") return <span className={text}>{assignedAt ? taskDateLabel(assignedAt.slice(0, 10)) : "—"}</span>;
+    if (column === "targetDate") return <span className={text}>{taskDateLabel(task.targetDate) || "—"}</span>;
+    if (column === "deadline") return <span className={cn(text, (task.isOverdue || task.deadlineDate === today) && "font-medium", task.isOverdue && "text-overdue", task.deadlineDate === today && !task.isOverdue && "text-warning")}>{taskDateLabel(task.deadlineDate) || "—"}</span>;
+    if (column === "files") return task.files?.length ? <button onClick={(event) => { event.stopPropagation(); onTaskClick(task); }} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"><Paperclip className="h-3.5 w-3.5" />{task.files.length}</button> : <span className={text}>—</span>;
+    if (column === "notes") return <span className={cn(text, "block max-w-48 truncate")}>{task.description || "—"}</span>;
+    if (column === "blockedBy") return <span className={cn(text, "block max-w-44 truncate")}>{task.blockedBy?.label || "—"}</span>;
+    return <span className={text}>{task.completedAt ? taskDateLabel(task.completedAt.slice(0, 10)) : "—"}</span>;
+  };
+
+  return <div className="mx-auto w-full max-w-[96rem] p-5 sm:p-8 lg:p-10">
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="binnie-heading text-3xl font-bold text-foreground">Tasks</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Your work, in one calm place.</p>
+      </div>
+      <button onClick={onNewTask} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />New Task</button>
+    </div>
+    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-fit flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1" aria-label="Work scope">
+        <button onClick={() => selectScope("my")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "my" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>My Work</button>
+        {scopeData?.allowedScopes.includes("team") && <button onClick={() => selectScope("team")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "team" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>Team</button>}
+        {scopeData?.allowedScopes.includes("people") && <button onClick={() => selectScope("people")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "people" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>People</button>}
+        </div>
+        <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+        <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1" aria-label="Task view">
+          <button onClick={() => setMode("list")} aria-pressed={mode === "list"} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", mode === "list" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>List</button>
+          <button onClick={() => setMode("board")} aria-pressed={mode === "board"} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", mode === "board" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Board</button>
+        </div>
+      </div>
+    </div>
+    {(scope === "people" || scope === "team") && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2.5">
+      <span className="text-[11px] text-muted-foreground">Viewing:</span>
+      {scope === "people" || showTeamSelector ? <select value={scope === "people" ? selectedPersonId : selectedTeamId} onChange={(event) => scope === "people" ? setSelectedPersonId(event.target.value) : setSelectedTeamId(event.target.value)} aria-label={scope === "people" ? "Person whose tasks are shown" : "Team whose tasks are shown"} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground">{(scope === "people" ? scopeData?.people : scopeData?.teams)?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select> : <span className="text-[11px] font-medium text-foreground">{selectedTeam?.name}</span>}
+      <span className="min-w-0 truncate text-[11px] text-muted-foreground">{scope === "people" ? selectedPerson?.subtitle : selectedTeam?.subtitle}</span>
+      <button onClick={() => selectScope("my")} className="ml-auto rounded-lg px-2 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/8">Back to My Work</button>
+    </div>}
+    {peopleSummary && <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground"><span className="font-medium text-foreground">{selectedPerson?.name}&rsquo;s tasks</span><span>· {peopleSummary.active} active</span><span>· {peopleSummary.waiting} waiting</span><span className={cn(peopleSummary.overdue > 0 && "text-overdue")}>· {peopleSummary.overdue} overdue</span><span>· {peopleSummary.review} review</span></div>}
+    <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center">
+      <div className="flex min-w-[15rem] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+        <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks, notes, people…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />
+        {search && <button onClick={() => setSearch("")} aria-label="Clear task search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <select value={filterOrg} onChange={(event) => setFilterOrg(event.target.value)} aria-label="Filter by organization" className="max-w-[12.5rem] rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground">
+          <option value="">All organizations</option>
+          {organizations.map((item) => <option key={item}>{item}</option>)}
+        </select>
+        <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as TaskStatus | "")} aria-label="Filter by status" className="max-w-[10rem] rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground">
+          <option value="">All statuses</option>
+          {BOARD_STATUSES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+        <button onClick={() => setFiltersOpen((open) => !open)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilters ? `Filters · ${activeFilters}` : "Filters"}</button>
+        {(activeFilters > 0 || search) && <button onClick={() => { const name = window.prompt("Name this view"); if (name?.trim()) window.dispatchEvent(new CustomEvent("binnie:save-saved-view", { detail: { name } })); }} className="rounded-xl px-2.5 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Save view</button>}
+        {mode === "list" && <div className="relative"><button onClick={() => setViewOptionsOpen((open) => !open)} aria-label="View options" aria-expanded={viewOptionsOpen} className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{viewOptionsOpen && <div className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-border bg-popover p-2 shadow-lg"><p className="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">View options</p><label className="mb-2 block px-2 text-[10px] font-medium text-muted-foreground">Sort<select value={sortColumn} onChange={(event) => { setSortColumn(event.target.value as TaskListColumnId); setSortDirection("asc"); }} className="mt-1.5 w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground">{TASK_LIST_COLUMNS.filter((column) => column.id !== "files" && column.id !== "notes" && column.id !== "blockedBy").map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label><button onClick={() => setSortDirection((direction) => direction === "asc" ? "desc" : "asc")} className="mb-2 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">{sortDirection === "asc" ? "Ascending" : "Descending"}</button><div className="border-t border-border pt-2"><p className="px-2 pb-1 text-[10px] font-medium text-muted-foreground">Customize columns</p>{TASK_LIST_COLUMNS.map((column) => <label key={column.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-foreground hover:bg-muted"><input type="checkbox" checked={columns.includes(column.id)} disabled={column.id === "task"} onChange={(event) => updateColumns(event.target.checked ? [...columns, column.id] : columns.filter((item) => item !== column.id))} className="h-3.5 w-3.5 accent-primary" />{column.label}</label>)}</div><button onClick={() => { updateColumns(DEFAULT_TASK_LIST_COLUMNS); setSortColumn("deadline"); setSortDirection("asc"); }} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">Reset list view</button></div>}</div>}
+      </div>
+    </div>
+    {activeFilterChips.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-1.5"><span className="text-[10px] text-muted-foreground">Filtered by</span>{activeFilterChips.map((chip) => <button key={chip.id} onClick={chip.clear} className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.055] px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">{chip.label}<X className="h-3 w-3" /></button>)}</div>}
+    {filtersOpen && <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[10px] font-medium text-muted-foreground">Area / Department<select value={filterArea} onChange={(event) => setFilterArea(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All areas</option>{areas.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject} onChange={(event) => setFilterProject(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projects.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Person<select value={filterAssignee} onChange={(event) => setFilterAssignee(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any person</option>{assignees.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Team<select value={filterTeam} onChange={(event) => setFilterTeam(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any team</option>{scopeData?.teams.filter((item) => item.kind !== "department").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assigned by<select value={filterAssignedBy} onChange={(event) => setFilterAssignedBy(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{assignedBy.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={(event) => setFilterPriority(event.target.value as Priority | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Normal</option><option value="low">Low</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any date</option><option value="target">Has target date</option><option value="deadline">Has deadline</option><option value="overdue">Overdue</option></select></label><label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={(event) => setHasFilesOnly(event.target.checked)} className="h-4 w-4 accent-primary" />Has files</label><div className="flex items-end"><button onClick={clearFilters} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button></div></div>}
+    {scopeMessage && <p className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{scopeMessage}</p>}
+    {mode === "list" ? (
+      <div className="overflow-x-auto rounded-[1.2rem] border border-border bg-card">
+        <table className="min-w-full border-separate border-spacing-0 text-left">
+          <thead>
+            <tr>
+              {columns.map((column) => <th key={column} className={cn("whitespace-nowrap border-b border-border px-3 py-3 first:pl-4", column === "task" && "min-w-[19rem]")}>
+                <button onClick={() => changeSort(column)} className="inline-flex items-center gap-1 text-[10px] font-medium tracking-[0.045em] text-muted-foreground hover:text-foreground">
+                  {TASK_LIST_COLUMNS.find((item) => item.id === column)?.label}
+                  {sortColumn === column && <span className="text-primary">{sortDirection === "asc" ? "↑" : "↓"}</span>}
+                </button>
+              </th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {scopeLoading ? <tr><td colSpan={columns.length} className="px-5 py-12 text-center text-[12px] text-muted-foreground">Loading permitted work…</td></tr> : filteredTasks.length ? filteredTasks.map((task) => <tr key={task.id} role="button" tabIndex={0} onClick={() => onTaskClick(task)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onTaskClick(task); } }} className="cursor-pointer border-b border-border/70 transition-colors last:border-0 hover:bg-primary/[0.025]">{columns.map((column) => <td key={column} className={cn("max-w-[19rem] px-3 py-3.5 align-middle first:pl-4", column === "task" && "min-w-[19rem]")}>{renderCell(task, column)}</td>)}</tr>) : <tr><td colSpan={columns.length} className="px-5 py-14 text-center"><ListTodo className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-[12px] font-medium text-foreground">{scope === "people" ? `${selectedPerson?.name || "This person"} has no open work matching these filters.` : "Nothing here right now."}</p></td></tr>}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="overflow-x-auto pb-3">
+        <div className="flex min-w-max items-stretch gap-3">
+          {BOARD_STATUSES.map((column) => {
+            const columnTasks = filteredTasks
+              .filter((task) => task.status === column.id)
+              .filter((task) => column.id !== "done" || showAllDone || !task.completedAt || new Date(task.completedAt).getTime() >= Date.now() - 30 * 86400000);
+            return <section key={column.id} style={{ backgroundColor: `var(${BOARD_STATUS_LANE_TOKENS[column.id]})` }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const task = filteredTasks.find((item) => item.id === dragTaskId); if (task) void moveCard(task, column.id); setDragTaskId(null); }} className="flex min-h-[24rem] w-[19rem] shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-border/75">
+              <header className="mb-2.5 flex items-center justify-between border-b border-border/60 px-3.5 py-3">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground"><span className={cn("h-1.5 w-1.5 rounded-full", BOARD_STATUS_DOT_CLASSES[column.id])} />{column.label}</p>
+                <span className="text-[10px] font-medium text-muted-foreground">{columnTasks.length}</span>
+              </header>
+              <div className="flex flex-1 flex-col px-2.5 pb-2.5">
+                <div className="space-y-2">
+                  {columnTasks.map((task) => {
+                    const assignmentLabel = task.assignments?.map((assignment) => assignment.name).join(" · ") || task.assignee;
+                    const areas = getTaskAreas(task);
+                    return <article key={task.id} draggable onDragStart={(event: DragEvent<HTMLElement>) => { event.dataTransfer.effectAllowed = "move"; setDragTaskId(task.id); }} onDragEnd={() => setDragTaskId(null)} onClick={() => onTaskClick(task)} className="cursor-grab rounded-xl border border-border/80 bg-card p-3 shadow-[0_2px_7px_var(--theme-shadow)] transition hover:border-primary/30 hover:shadow-[0_5px_12px_var(--theme-shadow)] active:cursor-grabbing">
+                      <p className="text-[12px] font-semibold leading-5 text-foreground">{task.title}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5"><TaskOrganizationBadge org={task.org} />{areas.length > 0 && <span className="text-[10px] text-muted-foreground">{areas.join(" · ")}</span>}</div>
+                      {assignmentLabel && <p className="mt-2 truncate text-[10px] text-muted-foreground">{assignmentLabel}</p>}
+                      {(task.priority === "urgent" || task.priority === "high" || task.deadlineDate) && <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">{(task.priority === "urgent" || task.priority === "high") && <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-medium", task.priority === "urgent" ? "bg-overdue/10 text-overdue" : "bg-warning/10 text-warning")}>{taskPriorityLabel(task.priority)}</span>}{task.deadlineDate && <span className={cn("ml-auto text-[9px]", task.isOverdue ? "font-medium text-overdue" : task.deadlineDate === today ? "font-medium text-warning" : "text-muted-foreground")}>{taskDateLabel(task.deadlineDate)}</span>}</div>}
+                    </article>;
+                  })}
+                  {!columnTasks.length && <p className="px-1 py-7 text-center text-[10px] text-muted-foreground">No tasks</p>}
+                </div>
+              </div>
+              {column.id === "done" && filteredTasks.some((task) => task.status === "done" && task.completedAt && new Date(task.completedAt).getTime() < Date.now() - 30 * 86400000) && <button onClick={() => setShowAllDone((value) => !value)} className="mx-2.5 mb-2.5 rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/8">{showAllDone ? "Show recent" : "View all completed"}</button>}
+            </section>;
+          })}
+        </div>
+      </div>
+    )}
+    <p className="mt-3 text-[11px] text-muted-foreground">{filteredTasks.length} task{filteredTasks.length === 1 ? "" : "s"} in this view.{mode === "board" && " Moving a board card updates the same task everywhere."}</p>
+  </div>;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained only as a local compatibility fallback while existing task UI is verified.
+function LegacyTaskListView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) => void; onNewTask: () => void }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [scope, setScope] = useState<TaskScope>("month");
   const [search, setSearch] = useState("");
@@ -4325,7 +4429,7 @@ function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }
   </div>;
 }
 
-function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void; onFollowUp: () => void }) {
+function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp, onViewTasks }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void; onFollowUp: () => void; onViewTasks: (personId: string) => void }) {
   const [revision, setRevision] = useState(0);
   const [workFilter, setWorkFilter] = useState<PersonWorkFilter>("all");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -4338,8 +4442,8 @@ function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp }: { per
   if (!person) return <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card p-8 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">This person is not in the Binnie directory yet.</p></div></div>;
   const summary = getPersonAccountability(person.name);
   const directlyAssignedTasks = getTasksForAssignee(person.id);
-  const personTasks = TASKS.filter(task => directlyAssignedTasks.some(assigned => assigned.id === task.id) || task.nextActionBy === person.name || task.contributorIds?.includes(person.id));
-  const visibleTasks = personTasks.filter(task => workFilter === "all" || workFilter === "assigned" ? (workFilter === "all" || task.assignee === person.name) : workFilter === "waiting-on-them" ? task.nextActionBy === person.name && task.status !== "done" : workFilter === "waiting-on-me" ? task.nextActionBy === "me" : Boolean(task.isOverdue));
+  const personTasks = TASKS.filter(task => directlyAssignedTasks.some(assigned => assigned.id === task.id) || task.nextActionPrincipalId === person.id || task.contributorIds?.includes(person.id));
+  const visibleTasks = personTasks.filter(task => workFilter === "all" || workFilter === "assigned" ? (workFilter === "all" || getTaskAssigneeIds(task).includes(person.id)) : workFilter === "waiting-on-them" ? task.nextActionPrincipalId === person.id && task.status !== "done" : workFilter === "waiting-on-me" ? task.nextActionPrincipalId === CANONICAL_ACTOR_ID : Boolean(task.isOverdue));
   const defaultMembership = person.memberships[0];
   const removeActiveTasks = removeMembership ? TASKS.filter(task => task.org === removeMembership.organization && task.status !== "done" && (task.assignee === person.name || task.nextActionBy === person.name)) : [];
   const saveAssignedTask = () => {
@@ -4359,7 +4463,10 @@ function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp }: { per
   };
   const deactivate = () => { replaceDirectoryPerson(person.id, current => ({ ...current, active: false, accountStatus: "disabled" })); setMoreOpen(false); setRevision(current => current + 1); };
 
-  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar name={person.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="binnie-heading text-2xl font-bold text-foreground">{person.name}</h1><span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{person.type === "team" ? "Team" : "Person"}</span>{!person.active && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Inactive</span>}</div><p className="mt-1 text-sm text-muted-foreground">{personRole(person)}</p><div className="mt-3"><MembershipPills person={person} /></div>{person.email && <p className="mt-3 text-[11px] text-muted-foreground">{person.email}{person.phone ? ` · ${person.phone}` : ""}</p>}</div><div className="flex flex-wrap gap-2"><button onClick={() => setAssignOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Assign Task</button><button onClick={onFollowUp} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><Send className="h-3.5 w-3.5" />Follow Up</button><div className="relative"><button onClick={() => setMoreOpen(current => !current)} aria-label="Person actions" className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{moreOpen && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-20 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg"><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit Person</button><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Manage Organizations</button>{person.active && <button onClick={deactivate} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Deactivate Person</button>}</div>}</div></div></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">{[{ label: "Active", value: summary.active }, { label: "Ready", value: summary.ready }, { label: "In Progress", value: summary.inProgress }, { label: "Waiting on them", value: summary.waitingOnThem }, { label: "Waiting on me", value: summary.waitingOnMe }, { label: "Blocked", value: summary.blocked }, { label: "Overdue", value: summary.overdue }, { label: "Review", value: summary.review }].map(item => <div key={item.label} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-semibold", item.label === "Blocked" || item.label === "Overdue" ? "text-overdue" : item.label.startsWith("Waiting") ? "text-warning" : "text-foreground")}>{item.value}</p><p className="mt-0.5 text-[9px] leading-3 text-muted-foreground">{item.label}</p></div>)}</div></div>
+  // Compatibility JSX below is intentionally kept in place while the People
+  // view is migrated in focused slices.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar name={person.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="binnie-heading text-2xl font-bold text-foreground">{person.name}</h1><span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{person.type === "team" ? "Team" : "Person"}</span>{person.type === "person" && <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{person.accountStatus.replace(/_/g, " ")}</span>}{!person.active && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Inactive</span>}</div><p className="mt-1 text-sm text-muted-foreground">{personRole(person)}</p><div className="mt-3"><MembershipPills person={person} /></div>{person.email && <p className="mt-3 text-[11px] text-muted-foreground">{person.email}{person.phone ? ` · ${person.phone}` : ""}</p>}</div><div className="flex flex-wrap gap-2"><button onClick={() => onViewTasks(person.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><ListTodo className="h-3.5 w-3.5" />View Tasks</button><button onClick={() => setAssignOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Assign Task</button><button onClick={onFollowUp} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><Send className="h-3.5 w-3.5" />Follow Up</button><div className="relative"><button onClick={() => setMoreOpen(current => !moreOpen)} aria-label="Person actions" className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{moreOpen && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-20 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg"><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit Person</button><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Manage Organizations</button>{person.active && <button onClick={deactivate} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Deactivate Person</button>}</div>}</div></div></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">{[{ label: "Active", value: summary.active }, { label: "Ready", value: summary.ready }, { label: "In Progress", value: summary.inProgress }, { label: "Waiting on them", value: summary.waitingOnThem }, { label: "Waiting on me", value: summary.waitingOnMe }, { label: "Blocked", value: summary.blocked }, { label: "Overdue", value: summary.overdue }, { label: "Review", value: summary.review }].map(item => <div key={item.label} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-semibold", item.label === "Blocked" || item.label === "Overdue" ? "text-overdue" : item.label.startsWith("Waiting") ? "text-warning" : "text-foreground")}>{item.value}</p><p className="mt-0.5 text-[9px] leading-3 text-muted-foreground">{item.label}</p></div>)}</div></div>
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(15rem,.8fr)]"><section><div className="mb-3 flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Open Work</p><p className="mt-0.5 text-[11px] text-muted-foreground">Work involving {person.name}.</p></div>{([{ id: "all", label: "All" }, { id: "assigned", label: "Assigned to them" }, { id: "waiting-on-them", label: "Waiting on them" }, { id: "waiting-on-me", label: "Waiting on me" }, { id: "overdue", label: "Overdue" }] as { id: PersonWorkFilter; label: string }[]).map(filter => <button key={filter.id} onClick={() => setWorkFilter(filter.id)} className={cn("rounded-full border px-2 py-1 text-[10px]", workFilter === filter.id ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{filter.label}</button>)}</div><div className="space-y-2">{visibleTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}{!visibleTasks.length && <div className="rounded-2xl border border-border bg-card px-4 py-10 text-center text-[12px] text-muted-foreground">No work matches this view.</div>}</div></section><aside className="space-y-6"><section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Organizations</p><button onClick={() => setEditOpen(true)} className="text-[11px] font-medium text-primary">+ Add Organization</button></div><div className="space-y-2">{person.memberships.map(membership => <div key={membership.organization} className="rounded-xl border border-border bg-card p-3"><p className="text-[12px] font-medium text-foreground">{membership.organization}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{[membership.role, membership.area].filter(Boolean).join(" · ") || "No role or department set"}</p><button onClick={() => setRemoveMembership(membership)} className="mt-2 text-[10px] font-medium text-muted-foreground hover:text-overdue">Remove from organization</button></div>)}{!person.memberships.length && <div className="rounded-xl border border-dashed border-border px-3 py-5 text-center text-[11px] text-muted-foreground">No organization memberships yet.</div>}</div></section><section><p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><div className="space-y-2">{personTasks.flatMap(task => (task.activity || []).map(activity => ({ activity, task }))).slice(0, 4).map(({ activity, task }, index) => <button key={`${task.id}-${index}`} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-border bg-card p-3 text-left hover:border-primary/25"><p className="truncate text-[11px] text-foreground">{activity.text}</p><p className="mt-1 text-[10px] text-muted-foreground">{activity.time} · {task.title}</p></button>)}{!personTasks.length && <p className="rounded-xl border border-border bg-card px-3 py-5 text-center text-[11px] text-muted-foreground">Activity will appear as work moves.</p>}</div></section></aside></div>
     {assignOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label={`Assign a task to ${person.name}`} className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="mb-4 flex items-start justify-between"><div><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Assign task</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{person.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">No Binnie account is needed to own work.</p></div><button onClick={() => setAssignOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="block text-[11px] font-medium text-muted-foreground">Task name<input autoFocus value={taskTitle} onChange={event => setTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveAssignedTask()} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><p className="mt-3 rounded-xl bg-muted/45 px-3 py-2 text-[11px] text-muted-foreground">{defaultMembership?.organization} · {defaultMembership?.area || "No department"}</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setAssignOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={saveAssignedTask} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Assign Task</button></div></div></div>}
     {removeMembership && <div className="fixed inset-0 z-[85] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label={`Remove ${person.name} from ${removeMembership.organization}`} className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><h2 className="binnie-heading text-xl font-bold text-foreground">Remove from {removeMembership.organization}?</h2><p className="mt-2 text-[12px] leading-5 text-muted-foreground">This only removes the organization membership. {person.name} and their work history stay in Binnie.</p>{removeActiveTasks.length > 0 && <div className="mt-4 rounded-xl border border-warning/20 bg-warning/[0.06] p-3"><p className="text-[12px] font-medium text-foreground">{person.name} still owns {removeActiveTasks.length} active {removeActiveTasks.length === 1 ? "task" : "tasks"} here.</p><p className="mt-1 text-[10px] text-muted-foreground">Choose whether to reassign that work or keep its historical ownership.</p></div>}<div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setRemoveMembership(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button>{removeActiveTasks.length > 0 && <button onClick={() => completeMembershipRemoval(true)} className="rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground">Reassign Tasks</button>}<button onClick={() => completeMembershipRemoval(false)} className="rounded-xl bg-overdue px-3.5 py-2 text-[12px] font-medium text-white">Keep Tasks Assigned</button></div></div></div>}
@@ -4370,28 +4477,9 @@ function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp }: { per
 // ─── ORGANIZATION DETAIL VIEW (NEW) ───────────────────────────────────────────
 
 interface OrganizationAreaSettings { aliases?: string[]; defaultAssignee?: string; defaultTeamId?: string }
-interface OrganizationMeta { name: OrgName; desc: string; areas: AreaName[]; aliases?: string[]; areaSettings?: Record<string, OrganizationAreaSettings> }
+interface OrganizationMeta { id: string; name: OrgName; desc: string; colorKey: OrganizationColorKey; areas: AreaName[]; aliases?: string[]; areaSettings?: Record<string, OrganizationAreaSettings> }
 
-const ORGS_META: OrganizationMeta[] = [
-  {
-    name: "Villa Khayangan", desc: "Hospitality & property management", aliases: ["khayangan", "villa", "penginapan", "vk"],
-    areas: ["System Development", "Operations", "Marketing", "Finance", "HR", "Purchasing", "Maintenance"],
-    areaSettings: {
-      "System Development": { aliases: ["system", "dev", "it"], defaultAssignee: "Development Team", defaultTeamId: "team-development" },
-      Operations: { aliases: ["ops", "operational", "operasional"], defaultAssignee: "Bu Desti", defaultTeamId: "team-operations" },
-      Marketing: { aliases: ["marketing", "promo", "content"], defaultAssignee: "Marketing Team", defaultTeamId: "team-marketing" },
-      Finance: { aliases: ["finance", "accounting", "cash"], defaultAssignee: "Finance Team", defaultTeamId: "team-finance" },
-      HR: { aliases: ["human resources", "people"], defaultAssignee: "HR Manager", defaultTeamId: "team-hr" },
-      Purchasing: { aliases: ["purchase", "supplier", "procurement", "quotation"], defaultAssignee: "Purchasing Manager", defaultTeamId: "team-purchasing" },
-      Maintenance: { aliases: ["maintenance", "repair", "teknisi"], defaultAssignee: "Maintenance Team", defaultTeamId: "team-maintenance" },
-    },
-  },
-  {
-    name: "Apotik", desc: "Pharmacy operations", aliases: ["apotik", "pharmacy", "obat"], areas: ["Operations", "Finance", "HR"],
-    areaSettings: { Operations: { aliases: ["ops", "operational", "operasional"], defaultAssignee: "Operations Team", defaultTeamId: "team-operations" }, Finance: { aliases: ["finance", "cash"], defaultAssignee: "Finance Team", defaultTeamId: "team-finance" }, HR: { aliases: ["hr", "people"], defaultAssignee: "HR Manager", defaultTeamId: "team-hr" } },
-  },
-  { name: "Personal", desc: "Personal projects & finances", aliases: ["personal", "myself"], areas: ["Finance"] },
-];
+const ORGS_META: OrganizationMeta[] = [];
 
 type OrgTaskFilter = "all" | "today" | "mine" | "delegated" | "waiting" | "review" | "overdue";
 type OrgTaskSort = "deadline" | "priority" | "title" | "updated";
@@ -4404,7 +4492,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
 }) {
   useTaskStoreVersion();
   const orgMeta = ORGS_META.find(o => o.name === orgName);
-  const c = ORG_COLORS[orgName] || ORG_COLORS.Personal;
+  const c = ORG_COLORS[orgName] || DEFAULT_ORG_COLOR;
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
   const [areas, setAreas] = useState<AreaName[]>(() => orgMeta?.areas || []);
   const [legacyProjects, setProjects] = useState(() => STRATEGIC_PROJECTS.filter(project => project.org === orgName));
@@ -4417,12 +4505,9 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [archived, setArchived] = useState(false);
-  const [orgTitle, setOrgTitle] = useState(orgName);
-  const [orgDescription, setOrgDescription] = useState(orgMeta?.desc || "");
-  const [orgAccent, setOrgAccent] = useState("Slate blue");
-  const [orgIcon, setOrgIcon] = useState("Rounded marker");
-  const [defaultTimezone, setDefaultTimezone] = useState("Asia/Jakarta");
-  const [defaultArea, setDefaultArea] = useState<AreaName>(orgMeta?.areas[0] || "Operations");
+  const orgTitle = orgName;
+  const orgDescription = orgMeta?.desc || "";
+  const [orgColorKey, setOrgColorKey] = useState<OrganizationColorKey>(() => orgMeta?.colorKey || "powderBlue");
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [peopleManagerOpen, setPeopleManagerOpen] = useState(false);
@@ -4449,7 +4534,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   const [resourceDraft, setResourceDraft] = useState<ResourceDraft>(EMPTY_RESOURCE_DRAFT);
   const [editingResourceIndex, setEditingResourceIndex] = useState<number | null>(null);
   const [resourceError, setResourceError] = useState("");
-  const [projectDraft, setProjectDraft] = useState({ name: "", area: orgMeta?.areas[0] || "Operations", description: "", target: "", owner: "Charlotte", focus: "" });
+  const [projectDraft, setProjectDraft] = useState({ name: "", area: orgMeta?.areas[0] || "Operations", description: "", target: "", owner: "", focus: "" });
   const [projectError, setProjectError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -4461,6 +4546,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   if (!orgMeta) {
     return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Organizations" onClick={onBack} /><div className="binnie-card p-8 text-center"><Building2 className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Organization not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p><button onClick={onBack} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Back to organizations</button></div></div>;
   }
+  const canonicalOrganization = orgMeta;
 
   const refreshWorkspace = (notice?: string) => {
     // Organization actions edit canonical records; publishing here keeps every
@@ -4510,7 +4596,16 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   ].slice(0, showActivity ? 10 : 4);
   const projectNames = projects.map(project => project.name);
   const activeFilterCount = Number(taskFilter !== "all") + Number(taskPriority !== "all") + Number(Boolean(taskProject)) + Number(dateFilter !== "all");
-  const accentColor = orgAccent === "Dusty sage" ? "var(--success)" : orgAccent === "Warm stone" ? "var(--warning)" : "var(--org-villa-dot)";
+  const organizationColor = getOrganizationColorStyles(orgColorKey);
+
+  async function saveOrganizationColor() {
+    const result = await updateOrganizationVocabularyAction({ organizationId: canonicalOrganization.id, colorKey: orgColorKey });
+    if (!result.ok) return setMessage(result.message || "Couldn’t update the organization color.");
+    const organizationIndex = ORGS_META.findIndex(candidate => candidate.id === canonicalOrganization.id);
+    if (organizationIndex >= 0) ORGS_META[organizationIndex] = { ...ORGS_META[organizationIndex], colorKey: orgColorKey };
+    setOrgSettingsOpen(false);
+    refreshWorkspace("Organization color updated");
+  }
 
   async function completeTask(task: Task) {
     if (taskStoreUsesServer && task.version) {
@@ -4538,7 +4633,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
 
   async function reassignTask(task: Task) {
     const people = scopedPeople.map(person => person.name);
-    const next = people[(Math.max(people.indexOf(task.assignee || ""), -1) + 1) % Math.max(people.length, 1)] || "Bu Desti";
+    const next = people[(Math.max(people.indexOf(task.assignee || ""), -1) + 1) % Math.max(people.length, 1)] || "Unassigned";
     const nextId = getDirectoryPerson(next)?.id;
     if (taskStoreUsesServer && task.version) {
       if (!nextId) return setMessage(`${next} is not available in Binnie.`);
@@ -4699,9 +4794,9 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
     const deadline = projectDraft.target.trim() || "No target yet";
     const project = { id, name, org: orgName, progress: 0, tasks: 0, done: 0, deadline, status: "on_track" as const };
     STRATEGIC_PROJECTS.push(project);
-    PROJECT_DETAILS[id] = { id, name, org: orgName, area: projectDraft.area as AreaName, progress: 0, deadline, status: "on_track", tasks: 0, done: 0, currentFocus: [projectDraft.focus.trim() || "Set a focused next step"], resources: [], recentActivity: [{ type: "assigned", actor: projectDraft.owner || "Charlotte", text: `Created ${name}`, time: "Just now" }] };
+    PROJECT_DETAILS[id] = { id, name, org: orgName, area: projectDraft.area as AreaName, progress: 0, deadline, status: "on_track", tasks: 0, done: 0, currentFocus: [projectDraft.focus.trim() || "Set a focused next step"], resources: [], recentActivity: [{ type: "assigned", actor: projectDraft.owner || "Current user", text: `Created ${name}`, time: "Just now" }] };
     setProjects(current => [...current, project]);
-    setProjectDraft({ name: "", area: areas[0] || "Operations", description: "", target: "", owner: "Charlotte", focus: "" });
+    setProjectDraft({ name: "", area: areas[0] || "Operations", description: "", target: "", owner: "", focus: "" });
     setProjectError("");
     setProjectOpen(false);
     refreshWorkspace("Project created");
@@ -4729,7 +4824,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="mb-1 flex items-center gap-3">{orgIcon === "Building" ? <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted" style={{ color: accentColor }}><Building2 className="h-3.5 w-3.5" /></span> : orgIcon === "Spark" ? <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted" style={{ color: accentColor }}><Sparkles className="h-3.5 w-3.5" /></span> : <div className={cn("h-3 w-3 rounded-sm", c.dot)} style={{ backgroundColor: accentColor }} />}<h1 className="binnie-heading text-3xl font-bold text-foreground">{orgTitle}</h1>{archived && <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Archived</span>}</div>
+          <div className="mb-1 flex items-center gap-3"><div className={cn("h-3 w-3 rounded-sm", organizationColor.dot)} /><h1 className="binnie-heading text-3xl font-bold text-foreground">{orgTitle}</h1>{archived && <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Archived</span>}</div>
           <p className="text-sm text-muted-foreground">{orgDescription}</p>
         </div>
         {!archived && <div className="flex flex-wrap items-center gap-2"><button onClick={() => setCaptureOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-[12px] font-medium text-primary transition-colors hover:bg-primary/20"><Plus className="h-3.5 w-3.5" />Quick Capture</button><button onClick={() => setProjectOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"><FolderKanban className="h-3.5 w-3.5" />Add Project</button><div className="relative"><button onClick={() => setOverflowOpen(current => !current)} aria-label="Organization options" aria-expanded={overflowOpen} className="rounded-xl border border-border bg-card p-2 text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{overflowOpen && <div className="absolute right-0 top-[calc(100%+0.4rem)] z-30 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_28px_rgb(35_41_61_/_0.12)]">{[{ label: "Edit Organization", action: () => setOrgSettingsOpen(true) }, { label: "Manage Areas", action: () => setAreasOpen(true) }, { label: "Manage Resources", action: () => setResourceManagerOpen(true) }, { label: "Organization Settings", action: () => setOrgSettingsOpen(true) }, { label: "Archive Organization", action: () => setArchiveConfirmOpen(true), destructive: true }].map(item => <button key={item.label} onClick={() => { setOverflowOpen(false); item.action(); }} className={cn("w-full rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-muted", item.destructive ? "text-overdue" : "text-foreground")}>{item.label}</button>)}</div>}</div></div>}
@@ -4776,7 +4871,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
 
       {areasOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Manage areas" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Manage Areas</h2><p className="mt-1 text-[11px] text-muted-foreground">Set an optional default owner so Binnie can route clear work automatically.</p></div><button onClick={() => setAreasOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="max-h-64 space-y-2 overflow-y-auto">{areas.map((area, index) => <div key={area} className="rounded-xl border border-border p-3"><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{area}</span><button onClick={() => moveArea(area, -1)} disabled={index === 0} aria-label={`Move ${area} up`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"><ChevronUp className="h-3.5 w-3.5" /></button><button onClick={() => moveArea(area, 1)} disabled={index === areas.length - 1} aria-label={`Move ${area} down`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"><ChevronDown className="h-3.5 w-3.5" /></button><button onClick={() => renameArea(area)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">Rename</button><button onClick={() => hideArea(area)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-overdue hover:bg-overdue/10">Hide</button></div><label className="mt-2 block text-[10px] font-medium text-muted-foreground">Default owner or team<select value={getAreaSettings(orgName, area)?.defaultAssignee || ""} onChange={event => { setAreaSettings(orgName, area, { defaultAssignee: event.target.value || undefined }); setWorkspaceRevision(current => current + 1); refreshWorkspace(`${area} responsibility updated`); }} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">No default owner</option>{getDirectoryAssignees(orgName).map(person => <option key={person.id} value={person.name}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div>)}</div><div className="mt-4 flex gap-2 border-t border-border pt-4"><input value={newArea} onChange={event => setNewArea(event.target.value)} onKeyDown={event => event.key === "Enter" && addArea()} placeholder="New area" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground" /><button onClick={addArea} className="rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground">Add Area</button></div></div></div>}
 
-      {orgSettingsOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Organization settings" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Organization Settings</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep the workspace details up to date.</p></div><button onClick={() => setOrgSettingsOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Organization name<input value={orgTitle} onChange={event => setOrgTitle(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description<input value={orgDescription} onChange={event => setOrgDescription(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization color<select value={orgAccent} onChange={event => setOrgAccent(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option>Slate blue</option><option>Dusty sage</option><option>Warm stone</option></select></label><label className="text-[11px] font-medium text-muted-foreground">Icon<select value={orgIcon} onChange={event => setOrgIcon(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option>Rounded marker</option><option>Building</option><option>Spark</option></select></label><label className="text-[11px] font-medium text-muted-foreground">Default timezone<select value={defaultTimezone} onChange={event => setDefaultTimezone(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option>Asia/Jakarta</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option></select></label><label className="text-[11px] font-medium text-muted-foreground">Default task area<select value={defaultArea} onChange={event => setDefaultArea(event.target.value as AreaName)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{areas.map(area => <option key={area}>{area}</option>)}</select></label></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => setOrgSettingsOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => { setOrgSettingsOpen(false); refreshWorkspace("Organization updated"); }} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save changes</button></div></div></div>}
+      {orgSettingsOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Edit organization color" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Edit Organization</h2><p className="mt-1 text-[11px] text-muted-foreground">Choose the soft Binnie color used to group this organization and its projects.</p></div><button onClick={() => setOrgSettingsOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><OrganizationColorPicker value={orgColorKey} onChange={setOrgColorKey} /><div className="mt-5 flex justify-end gap-2"><button onClick={() => setOrgSettingsOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void saveOrganizationColor()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save color</button></div></div></div>}
 
       {archiveConfirmOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Archive organization" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><h2 className="binnie-heading text-xl font-bold text-foreground">Archive {orgTitle}?</h2><p className="mt-2 text-[12px] leading-5 text-muted-foreground">The work will stay available for reference, but this organization will no longer appear as active.</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setArchiveConfirmOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => { setArchiveConfirmOpen(false); setArchived(true); refreshWorkspace("Organization archived"); }} className="rounded-xl bg-overdue px-4 py-2 text-[12px] font-medium text-white">Archive Organization</button></div></div></div>}
     </div>
@@ -5595,11 +5690,26 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
 
+function OrganizationColorPicker({ value, onChange, allowDefault = false }: { value?: OrganizationColorKey; onChange: (colorKey: OrganizationColorKey) => void; allowDefault?: boolean }) {
+  return <fieldset>
+    <legend className="text-[11px] font-medium text-muted-foreground">Organization color</legend>
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {ORGANIZATION_COLOR_KEYS.map(colorKey => {
+        const option = ORGANIZATION_COLOR_STYLES[colorKey];
+        const selected = value === colorKey;
+        return <button key={colorKey} type="button" onClick={() => onChange(colorKey)} aria-pressed={selected} title={option.label} className={cn("flex items-center gap-2 rounded-xl border p-2 text-left text-[10px] font-medium transition-colors", option.scope, selected ? "border-primary/35 ring-2 ring-primary/15" : "border-border hover:border-primary/25 hover:bg-muted/35")}><span aria-hidden="true" className={cn("h-4 w-4 shrink-0 rounded-full", option.swatch)} /><span className="min-w-0 flex-1 truncate text-foreground">{option.label}</span>{selected && <Check aria-label={`${option.label} selected`} className="h-3.5 w-3.5 shrink-0 text-primary" />}</button>;
+      })}
+    </div>
+    {allowDefault && !value && <p className="mt-2 text-[10px] text-muted-foreground">Optional — Binnie will choose a stable default if you leave this unset.</p>}
+  </fieldset>;
+}
+
 function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void }) {
   useTaskStoreVersion();
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [colorKey, setColorKey] = useState<OrganizationColorKey | "">("");
   const [formMessage, setFormMessage] = useState("");
   const [, setRevision] = useState(0);
 
@@ -5607,18 +5717,18 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
     const organizationName = name.trim();
     if (!organizationName) { setFormMessage("Add a workspace name to continue."); return; }
     if (ORGS_META.some(org => org.name.toLowerCase() === organizationName.toLowerCase())) { setFormMessage("That workspace already exists."); return; }
-    const result = await createOrganizationAction({ name: organizationName, description: description.trim() || undefined });
+    const result = await createOrganizationAction({ name: organizationName, description: description.trim() || undefined, colorKey: colorKey || undefined });
     if (!result.ok) {
       console.error("Could not create Binnie organization", result.message);
       setFormMessage(result.message || "Couldn't create organization. Please try again.");
       return;
     }
     applyCanonicalOrganization(result.data);
-    ORG_COLORS[organizationName] = { ...ORG_COLORS["Villa Khayangan"] };
     ORG_RESOURCES[organizationName] = [];
     setRevision(current => current + 1);
     setName("");
     setDescription("");
+    setColorKey("");
     setFormMessage("");
     setIsAdding(false);
   }
@@ -5632,10 +5742,10 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
         </div>
         <button onClick={() => { setIsAdding(current => !current); setFormMessage(""); }} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" /> Add Organization</button>
       </div>
-      {isAdding && <div className="binnie-card mb-5 grid gap-3 bg-[#fdfcff] p-4 sm:grid-cols-[1fr_1.4fr_auto]"><input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Workspace name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><input value={description} onChange={event => setDescription(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Short description (optional)" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><div className="flex gap-2"><button onClick={() => void addOrganization()} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div>{formMessage && <p className="sm:col-span-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
+      {isAdding && <div className="binnie-card mb-5 bg-[#fdfcff] p-4"><div className="grid gap-3 sm:grid-cols-[1fr_1.4fr_auto]"><input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Workspace name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><input value={description} onChange={event => setDescription(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Short description (optional)" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><div className="flex gap-2"><button onClick={() => void addOrganization()} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div></div><div className="mt-4 border-t border-border/65 pt-3"><OrganizationColorPicker value={colorKey || undefined} onChange={setColorKey} allowDefault /></div>{formMessage && <p className="mt-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {ORGS_META.map(org => {
-          const c = ORG_COLORS[org.name] || ORG_COLORS.Personal;
+          const color = getOrganizationColorStyles(org.colorKey);
           const orgTasks = TASKS.filter(t => t.org === org.name);
           const activeTasks = orgTasks.filter(task => task.status !== "done");
           const orgProjects = CANONICAL_PROJECTS.filter(project => project.organization === org.name && project.status !== "archived");
@@ -5645,30 +5755,32 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
           const currentFocus = orgProjects.slice(0, 2).map(project => project.name).join(" · ") || activeTasks[0]?.title || "A quieter personal workspace.";
           return (
             <button key={org.name} onClick={() => onOrgClick(org.name)}
-              className={cn("binnie-card binnie-card-hover group relative flex h-full min-h-[19.5rem] overflow-hidden p-5 text-left", c.card)}>
-              <div aria-hidden="true" className={cn("absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-50 blur-2xl", c.bg)} />
+              className={cn("binnie-card binnie-card-hover group relative flex h-full min-h-[15.5rem] overflow-hidden p-4 text-left sm:p-[1.125rem]", color.card)}>
+              <div aria-hidden="true" className={cn("absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-70 blur-2xl", color.accent)} />
               <div className="relative flex h-full w-full flex-col">
-                <div className="mb-4 grid min-h-[4.5rem] grid-cols-[2.5rem_minmax(0,1fr)_1rem] items-start gap-x-3">
-                  <span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl", c.bg, c.text)}><Building2 className="h-4 w-4" /></span>
+                <div className="grid min-h-[3.75rem] grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-start gap-x-2.5">
+                  <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color.icon)}><Building2 className="h-4 w-4" /></span>
                   <div className="min-w-0">
-                    <div className="flex h-5 items-center gap-2">
-                      <h2 className="binnie-heading min-w-0 flex-1 truncate text-[16px] font-bold leading-5 text-foreground">{org.name}</h2>
-                      {attention > 0 && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-2 py-0.5 text-[10px] font-medium text-overdue">{attention} to revisit</span>}
+                    <div className="flex h-5 items-center gap-1.5">
+                      <h2 className="binnie-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{org.name}</h2>
+                      {attention > 0 && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">{attention} to revisit</span>}
                     </div>
-                    <p className="mt-1 min-h-9 line-clamp-2 text-[12px] leading-[1.125rem] text-muted-foreground">{org.desc}</p>
+                    <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">{org.desc}</p>
                   </div>
                   <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                 </div>
-                <div className="mb-4 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-                  <span><strong className={cn("font-semibold", c.text)}>{activeTasks.length}</strong> Active</span><span className="text-border">·</span><span><strong className="font-semibold text-foreground">{orgProjects.length}</strong> Projects</span><span className="text-border">·</span><span><strong className="font-semibold text-info">{waiting}</strong> Waiting</span>
+                <div className="mt-3 flex items-center gap-3 border-y border-border/65 py-2 text-[10px] text-muted-foreground">
+                  <span><strong className="font-semibold text-foreground">{activeTasks.length}</strong> Active</span>
+                  <span><strong className="font-semibold text-foreground">{orgProjects.length}</strong> Projects</span>
+                  <span><strong className="font-semibold text-info">{waiting}</strong> Waiting</span>
                 </div>
-                <div className="mb-4 flex min-h-9 flex-wrap content-start gap-1.5">
-                  {visibleAreas.map(area => <span key={area} className={cn("rounded-full px-2.5 py-1 text-[10px] font-medium", c.bg, AREA_COLORS[area])}>{area} <span className="opacity-65">· {orgTasks.filter(task => task.area === area).length}</span></span>)}
-                  {org.areas.length > visibleAreas.length && <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground">+{org.areas.length - visibleAreas.length}</span>}
+                <div className="mt-3 flex min-h-6 flex-wrap content-start gap-1.5">
+                  {visibleAreas.map(area => <span key={area} className={cn("rounded-full px-2 py-1 text-[9px] font-medium", color.chip)}>{area}</span>)}
+                  {org.areas.length > visibleAreas.length && <span className="rounded-full bg-muted px-2 py-1 text-[9px] font-medium text-muted-foreground">+{org.areas.length - visibleAreas.length}</span>}
                 </div>
-                <div className="mt-auto min-h-[3.75rem] rounded-xl border border-white/80 bg-white/70 px-3 py-2.5">
-                  <p className="mb-0.5 text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Current focus</p>
-                  <p className="truncate text-[12px] font-medium text-foreground">{currentFocus}</p>
+                <div className="mt-auto border-t border-border/65 pt-2.5">
+                  <p className="mb-0.5 text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Current focus</p>
+                  <p className="truncate text-[11px] font-medium text-foreground">{currentFocus}</p>
                 </div>
               </div>
             </button>
@@ -5875,8 +5987,20 @@ function CreateProjectDrawer({ onClose, onCreated, defaultOrganization, initialP
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void }) {
   useTaskStoreVersion();
-  const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const getInitialPreferences = (): { filter: "all" | "active" | "attention" | "completed"; organization: string; viewMode: "grid" | "list" } => {
+    if (typeof window === "undefined") return { filter: "all" as const, organization: "", viewMode: "grid" as const };
+    const params = new URLSearchParams(window.location.search);
+    const rawFilter = params.get("projectStatus");
+    const rawView = params.get("projectView");
+    return {
+      filter: rawFilter === "active" || rawFilter === "attention" || rawFilter === "completed" ? rawFilter : "all",
+      organization: params.get("projectOrg") || "",
+      viewMode: rawView === "list" ? "list" : "grid",
+    };
+  };
+  const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">(() => getInitialPreferences().filter);
+  const [organizationFilter, setOrganizationFilter] = useState(() => getInitialPreferences().organization);
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => getInitialPreferences().viewMode);
   const [creating, setCreating] = useState(false);
   const [duplicateSource, setDuplicateSource] = useState<ProjectDTO | null>(null);
   const [deleting, setDeleting] = useState<ProjectDTO | null>(null);
@@ -5887,31 +6011,57 @@ function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: stri
     const attention = tasks.some(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && done < tasks.length);
     return { tasks, done, progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, attention };
   };
-  const completedProjects = projects.filter(project => project.status === "completed" || (taskSummary(project).tasks.length > 0 && taskSummary(project).done === taskSummary(project).tasks.length));
-  const activeProjects = projects.filter(project => project.status === "active" && !taskSummary(project).attention && !completedProjects.some(candidate => candidate.id === project.id));
-  const attentionProjects = projects.filter(project => taskSummary(project).attention);
-  const visible = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : projects;
+  const summaries = new Map(projects.map(project => [project.id, taskSummary(project)]));
+  const permittedOrganizations = ORGS_META;
+  const selectedOrganization = permittedOrganizations.some(organization => organization.name === organizationFilter) ? organizationFilter : "";
+  const filteredByOrganization = selectedOrganization ? projects.filter(project => project.organization === selectedOrganization) : projects;
+  const completedProjects = filteredByOrganization.filter(project => {
+    const summary = summaries.get(project.id)!;
+    return project.status === "completed" || (summary.tasks.length > 0 && summary.done === summary.tasks.length);
+  });
+  const activeProjects = filteredByOrganization.filter(project => {
+    const summary = summaries.get(project.id)!;
+    return project.status === "active" && !summary.attention && !completedProjects.some(candidate => candidate.id === project.id);
+  });
+  const attentionProjects = filteredByOrganization.filter(project => summaries.get(project.id)!.attention);
+  const visible = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : filteredByOrganization;
   const gridClass = viewMode === "grid" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 gap-3";
+  const selectedOrganizationColor = selectedOrganization ? getOrganizationColorStyles(permittedOrganizations.find(organization => organization.name === selectedOrganization)?.colorKey) : undefined;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (filter === "all") url.searchParams.delete("projectStatus"); else url.searchParams.set("projectStatus", filter);
+    if (!selectedOrganization) url.searchParams.delete("projectOrg"); else url.searchParams.set("projectOrg", selectedOrganization);
+    if (viewMode === "grid") url.searchParams.delete("projectView"); else url.searchParams.set("projectView", viewMode);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [filter, selectedOrganization, viewMode]);
+
   return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div>
       <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button></div>
     </div>
-    <div className="mb-5 flex flex-wrap items-center gap-1.5">{[{ id: "all" as const, label: "All", count: projects.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}</div>
+    <div className="mb-5 flex flex-wrap items-center gap-2">{[{ id: "all" as const, label: "All", count: filteredByOrganization.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}<label className="ml-0 flex h-8 items-center gap-2 rounded-full border border-border bg-card px-2.5 text-[11px] text-muted-foreground sm:ml-1"><span className={cn("h-2 w-2 shrink-0 rounded-full", selectedOrganizationColor?.dot || "bg-muted-foreground/35")} /><span className="sr-only">Organization</span><select value={selectedOrganization} onChange={event => setOrganizationFilter(event.target.value)} className="min-w-0 max-w-44 bg-transparent pr-1 text-[11px] font-medium text-foreground outline-none"><option value="">All organizations</option>{permittedOrganizations.map(organization => <option key={organization.id} value={organization.name}>{organization.name}</option>)}</select></label></div>
     {visible.length ? <div className={gridClass}>{visible.map(project => {
-      const summary = taskSummary(project);
-      const color = ORG_COLORS[project.organization] || ORG_COLORS.Personal;
-      const next = summary.tasks.find(task => task.status !== "done");
-      return <article key={project.id} className={cn("binnie-card binnie-card-hover relative min-h-64 p-5", color.card)}>
-        <button onClick={() => onProjectClick(project.id)} className="block w-full text-left">
-          <div className="flex items-start gap-3 pr-8"><span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color.bg, color.text)}><FolderKanban className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-[15px] font-semibold text-foreground">{project.name}</h2>{summary.attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[9px] font-medium text-warning">Needs attention</span>}</div><p className="mt-1 text-[11px] text-muted-foreground">{project.organization}{project.leadArea ? ` · ${project.leadArea}` : ""}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground" /></div>
-          <div className="mt-6 flex items-end gap-3"><p className={cn("text-2xl font-bold", color.text)}>{summary.tasks.length ? `${summary.progress}%` : "Not started"}</p><div className="min-w-0 flex-1 pb-1"><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${summary.progress}%` }} /></div></div></div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground"><span>{summary.done} / {summary.tasks.length} tasks</span><span>{project.targetDate ? `Target: ${taskDateLabel(project.targetDate)}` : "No target date"}</span></div>
-          <div className="mt-4 border-t border-border/80 pt-3"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Current focus</p><p className="mt-1 truncate text-[12px] text-foreground">{project.focusItems[0]?.text || "No work added yet"}</p><p className="mt-3 truncate text-[10px] text-muted-foreground">{next ? `Next: ${next.title}` : "No active work yet"}</p></div>
-        </button>
+      const summary = summaries.get(project.id)!;
+      const organization = permittedOrganizations.find(candidate => candidate.name === project.organization);
+      const color = getOrganizationColorStyles(organization?.colorKey);
+      const next = summary.tasks.find(task => task.nextActionBy === "me" && task.status !== "done") || summary.tasks.find(task => task.status !== "done");
+      const completed = completedProjects.some(candidate => candidate.id === project.id);
+      const status = completed ? { label: "Completed", className: "bg-success/10 text-success" } : summary.attention ? { label: "Needs attention", className: "bg-warning/12 text-warning" } : { label: "Active", className: "bg-muted text-muted-foreground" };
+      return <article key={project.id} role="button" tabIndex={0} onClick={() => onProjectClick(project.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onProjectClick(project.id); } }} className={cn("binnie-card binnie-card-hover group relative flex h-full cursor-pointer overflow-hidden p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/45", viewMode === "grid" ? "min-h-[17.5rem]" : "min-h-0", viewMode === "grid" ? color.card : color.listCard)}>
+        <div aria-hidden="true" className={cn("absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-65 blur-2xl", color.accent)} />
+        <div className="relative flex h-full w-full flex-col pr-7">
+          <div className="flex min-h-[3.25rem] items-start gap-2.5">
+            <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", color.icon)}><FolderKanban className="h-4 w-4" /></span>
+            <div className="min-w-0 flex-1"><div className="flex items-start gap-2"><h2 className="binnie-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{project.name}</h2><span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium", status.className)}>{status.label}</span></div><div className="mt-1.5 flex min-h-5 flex-wrap items-center gap-1.5"><span className={cn("inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[9px] font-medium", color.chip)}><span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", color.dot)} />{project.organization}</span>{project.leadArea && <span className="truncate text-[10px] text-muted-foreground">{project.leadArea}</span>}</div></div>
+          </div>
+          {summary.tasks.length ? <><div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground"><span><strong className="font-semibold text-foreground">{summary.done} / {summary.tasks.length}</strong> tasks</span><span>{summary.progress}%</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/80"><div className={cn("h-full rounded-full", color.dot)} style={{ width: `${summary.progress}%` }} /></div><p className="mt-2 text-[10px] text-muted-foreground">{project.targetDate ? `Target ${taskDateLabel(project.targetDate)}` : "No target date"}</p><div className="mt-3 grid gap-2 border-t border-border/65 pt-2.5"><div><p className="text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Current focus</p><p className="mt-0.5 truncate text-[11px] font-medium text-foreground">{project.focusItems[0]?.text || "Set a focused next step"}</p></div><div><p className="text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Next</p><p className="mt-0.5 truncate text-[11px] text-foreground">{next?.title || "No next task scheduled"}</p></div></div></> : <div className="mt-auto border-t border-border/65 pt-3"><p className="text-[11px] font-medium text-foreground">No work added yet</p><button onClick={event => { event.stopPropagation(); onAddWork(project); }} className="mt-1.5 text-[10px] font-medium text-primary hover:underline">+ Add first task</button></div>}
+        </div>
         <div className="absolute right-3 top-3"><ProjectOverflowMenu project={project} onEdit={() => onProjectClick(project.id)} onDuplicate={() => { setDuplicateSource(project); setCreating(true); }} onDelete={() => setDeleting(project)} /></div>
       </article>;
-    })}</div> : <div className="binnie-card py-16 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No projects here yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Create a focused space for work that belongs together.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Project</button></div>}
+    })}</div> : <div className="binnie-card py-16 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No projects match these filters.</p><p className="mt-1 text-[12px] text-muted-foreground">Try another organization or status.</p><button onClick={() => { setFilter("all"); setOrganizationFilter(""); }} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Show all projects</button></div>}
     {creating && <CreateProjectDrawer initialProject={duplicateSource || undefined} onClose={() => { setCreating(false); setDuplicateSource(null); }} onCreated={(project, addWork) => { setCreating(false); setDuplicateSource(null); addWork ? onAddWork(project) : onProjectClick(project.id); }} />}
     {deleting && <DeleteProjectConfirmation project={deleting} onClose={() => setDeleting(null)} onDeleted={() => setDeleting(null)} />}
   </div>;
@@ -6100,7 +6250,7 @@ const NAV_GROUPS = [
   {
     label: "Plan",
     items: [
-      { id: "today" as NavView, label: "Today", icon: <CalendarDays className="w-4 h-4" />, badge: TASKS.filter(t => t.isToday && t.nextActionBy === "me").length },
+      { id: "today" as NavView, label: "Today", icon: <CalendarDays className="w-4 h-4" />, badge: TASKS.filter(t => t.isToday && t.nextActionPrincipalId === CANONICAL_ACTOR_ID).length },
       { id: "this-week" as NavView, label: "This Week", icon: <Calendar className="w-4 h-4" /> },
       { id: "all-tasks" as NavView, label: "Tasks", icon: <ListTodo className="w-4 h-4" /> },
     ]
@@ -6117,7 +6267,7 @@ const NAV_GROUPS = [
       { id: "delegated" as NavView, label: "Delegated", icon: <Users className="w-4 h-4" />, badge: TASKS.filter(t => t.isDelegated).length },
       { id: "waiting" as NavView, label: "Waiting", icon: <Hourglass className="w-4 h-4" />, badge: TASKS.filter(t => t.isWaiting).length },
       { id: "followup" as NavView, label: "Follow Up", icon: <MessageSquare className="w-4 h-4" />, badge: FOLLOWUP_DATA.filter(d => d.section === "today").length },
-      { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && t.nextActionBy === "me").length },
+      { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && t.nextActionPrincipalId === CANONICAL_ACTOR_ID).length },
       { id: "overdue" as NavView, label: "Overdue", icon: <AlertTriangle className="w-4 h-4" />, badge: TASKS.filter(t => t.isOverdue).length, urgent: true },
       { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" />, badge: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length },
       { id: "workload" as NavView, label: "Workload", icon: <BarChart2 className="w-4 h-4" /> },
@@ -6201,8 +6351,8 @@ function ProfilePanel({ profile, theme, onSave, onResetDemoData, onClose, onSign
         <div className="flex items-start justify-between border-b border-border px-5 py-5 sm:px-6"><div><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Your account</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Profile & preferences</h2></div><button onClick={onClose} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button></div>
         <div className="border-b border-border px-5 py-3 sm:px-6"><div className="flex gap-1 rounded-xl bg-muted/50 p-1">{[{ id: "profile" as const, label: "Profile" }, { id: "preferences" as const, label: "Preferences" }, { id: "settings" as const, label: "Settings" }].map(item => <button key={item.id} onClick={() => setSection(item.id)} className={cn("flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors", section === item.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div>
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-          <div className="mb-6 flex items-center gap-3"><Avatar name={draft.displayName || "Charlotte"} size="lg" /><div><p className="text-sm font-semibold text-foreground">{draft.displayName || "Charlotte"}</p><p className="text-[12px] text-muted-foreground">{profileRoleLabel(draft.role)}</p></div></div>
-          {section === "profile" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Display name<input value={draft.displayName} onChange={event => update({ displayName: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Role<select value={draft.role} onChange={event => update({ role: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option value="owner">Owner</option><option value="organization_manager">Organization manager</option><option value="department_manager">Department manager</option><option value="employee">Employee</option></select></label><label className="block text-[11px] font-medium text-muted-foreground">Email <span className="font-normal">(optional)</span><input value={draft.email} onChange={event => update({ email: event.target.value })} type="email" className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label></div>}
+          <div className="mb-6 flex items-center gap-3"><Avatar name={draft.displayName || "Account"} size="lg" /><div><p className="text-sm font-semibold text-foreground">{draft.displayName || "Account"}</p><p className="text-[12px] text-muted-foreground">{profileRoleLabel(draft.role)}</p></div></div>
+          {section === "profile" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Name<input value={draft.displayName} onChange={event => update({ displayName: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><div><p className="text-[11px] font-medium text-muted-foreground">Username</p><p className="mt-1.5 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-[13px] text-foreground">{draft.username || "No Binnie account"}</p><p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">An Owner can change account usernames from People &amp; access.</p></div><div><p className="text-[11px] font-medium text-muted-foreground">Contact email</p><p className="mt-1.5 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-[13px] text-foreground">{draft.email || "No contact email"}</p><p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Contact email is optional and is not used to sign in.</p></div><div><p className="text-[11px] font-medium text-muted-foreground">Account status</p><p className="mt-1.5 text-[13px] text-foreground">{profileRoleLabel(draft.accountStatus)}</p></div><div><p className="text-[11px] font-medium text-muted-foreground">Workspaces</p><div className="mt-1.5 space-y-1.5">{draft.workspaces.map(workspace => <p key={workspace.organizationId} className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-[12px] text-foreground">{workspace.organization} <span className="text-muted-foreground">· {profileRoleLabel(workspace.accessLevel)}</span></p>)}</div></div><a href="/people/access" className="inline-flex rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">People &amp; access</a></div>}
           {section === "preferences" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Timezone<select value={draft.timezone} onChange={event => update({ timezone: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>Asia/Jakarta</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option></select></label><label className="block text-[11px] font-medium text-muted-foreground">Preferred date format<select value={draft.dateFormat} onChange={event => update({ dateFormat: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>12 Aug 2026</option><option>Aug 12, 2026</option><option>2026-08-12</option></select></label></div>}
           {section === "settings" && <section><div className="mb-4"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Appearance</p><h3 className="binnie-heading mt-1 text-lg font-bold text-foreground">Workspace Theme</h3><p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">Choose the atmosphere that feels best to work in.</p></div><div className="space-y-2.5">{WORKSPACE_THEME_OPTIONS.map(option => { const isSelected = draftTheme === option.id; return <button key={option.id} onClick={() => setDraftTheme(option.id)} className={cn("w-full rounded-2xl border p-3 text-left transition-colors", isSelected ? "border-primary/35 bg-secondary/50 shadow-sm" : "border-border bg-card hover:border-primary/25 hover:bg-muted/35")} aria-pressed={isSelected}><div className={cn("mb-3 rounded-xl border border-white/70 p-2.5", option.preview)}><div className="rounded-lg bg-[var(--preview-background)] p-2"><div className="flex h-9 items-center gap-2 rounded-md bg-[var(--preview-surface)] px-2 shadow-sm"><span className="h-4 w-4 rounded bg-[var(--preview-primary)]" /><span className="h-2 flex-1 rounded-full bg-[var(--preview-secondary)]" /><span className="h-3 w-3 rounded-full bg-[var(--preview-accent)]" /></div></div></div><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-foreground">{option.label}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{option.description}</p></div>{isSelected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="h-3 w-3" /></span>}</div></button>; })}</div>{onResetDemoData && <div className="mt-8 rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-4"><p className="text-[10px] font-medium uppercase tracking-[0.1em] text-overdue">Development tools</p><p className="mt-2 text-[12px] font-medium text-foreground">Reset Demo Data</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">This is the only action that intentionally rebuilds the development workspace. It requires the exact confirmation phrase.</p><button onClick={() => void resetDemoData()} disabled={resettingDemo} className="mt-3 rounded-xl border border-overdue/25 bg-card px-3 py-2 text-[11px] font-medium text-overdue hover:bg-overdue/10 disabled:opacity-50">{resettingDemo ? "Resetting…" : "Reset Demo Data"}</button></div>}</section>}
         </div>
@@ -6219,7 +6369,7 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
     delegated: getDelegatedTasks(TASKS, currentUserId).length,
     waiting: getWaitingTasks(TASKS).length,
     followup: getWaitingTasks(TASKS).filter(task => !taskIsForCurrentUser(task, currentUserId)).length,
-    review: TASKS.filter(task => task.status === "review" && taskIsForCurrentUser(task, currentUserId)).length,
+    review: TASKS.filter(task => task.status === "review" && taskIsForCurrentUser(task, currentUserId)).length + profile.pendingAccessRequestCount,
     overdue: TASKS.filter(isTaskOverdue).length,
     people: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length,
   };
@@ -6275,7 +6425,7 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
             })}
           </div>
         ))}
-        {!collapsed && taskStoreUsesServer && (
+        {!collapsed && taskStoreUsesServer && CANONICAL_SAVED_VIEWS.length > 0 && (
           <div className="mt-5 border-t border-sidebar-border px-2 pt-4">
             <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Saved views</p>
             {CANONICAL_SAVED_VIEWS.slice(0, 5).map(savedView => (
@@ -6284,15 +6434,14 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
                 <button onClick={() => window.dispatchEvent(new CustomEvent("binnie:delete-saved-view", { detail: { viewId: savedView.id } }))} aria-label={`Delete ${savedView.name}`} className="mr-1 rounded-lg p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-overdue/10 hover:text-overdue group-hover:opacity-100"><X className="h-3 w-3" /></button>
               </div>
             ))}
-            <button onClick={() => { if (view !== "all-tasks") return choose("all-tasks"); const name = window.prompt("Name this view"); if (name?.trim()) window.dispatchEvent(new CustomEvent("binnie:save-saved-view", { detail: { name } })); }} className="mt-1 w-full rounded-xl px-3 py-2 text-left text-[11px] font-medium text-primary hover:bg-primary/8">+ Save current filters</button>
           </div>
         )}
       </nav>
       <div className={cn("border-t border-sidebar-border py-4", collapsed ? "px-2" : "px-4")}>
         <button onClick={onProfileClick} title={collapsed ? "Profile & settings" : undefined} className={cn("group relative flex rounded-xl text-left transition-colors hover:bg-sidebar-accent/60", collapsed ? "mx-auto h-10 w-10 items-center justify-center" : "w-full items-center gap-2.5 px-2 py-2")}>
-          <Avatar name={profile.displayName || "Charlotte"} size="sm" />
+          <Avatar name={profile.displayName || "Account"} size="sm" />
           {!collapsed && <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-foreground truncate">{profile.displayName || "Charlotte"}</p>
+            <p className="text-[12px] font-medium text-foreground truncate">{profile.displayName || "Account"}</p>
             <p className="text-[10px] text-muted-foreground">{profileRoleLabel(profile.role)}</p>
           </div>}
           {!collapsed && <Settings className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -6321,7 +6470,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() => initialSnapshot?.profile.theme || "soft");
-  const [profile, setProfile] = useState<UserProfile>(() => initialSnapshot ? canonicalProfileToUserProfile(initialSnapshot.profile) : { directoryId: "person-charlotte", displayName: "Charlotte", role: "employee", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026" });
+  const [profile, setProfile] = useState<UserProfile>(() => initialSnapshot ? canonicalProfileToUserProfile(initialSnapshot.profile) : { displayName: "", role: "employee", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026", teamIds: [], taskListColumns: [], accountStatus: "ACTIVE", workspaces: [], pendingAccessRequestCount: 0 });
   // Keep the server snapshot authoritative through Fast Refresh; no demo data
   // is rendered while this client projection is being synchronized.
   const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
@@ -6415,8 +6564,6 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
   async function saveProfile(nextProfile: UserProfile, nextTheme: WorkspaceTheme) {
     const result = await updateProfileAction({
       displayName: nextProfile.displayName,
-      role: nextProfile.role,
-      email: nextProfile.email,
       timezone: nextProfile.timezone,
       dateFormat: nextProfile.dateFormat,
       theme: nextTheme,
@@ -6430,7 +6577,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     setWorkspaceTheme(result.data.theme);
     document.documentElement.dataset.theme = result.data.theme;
     const directoryPerson = PEOPLE_DIRECTORY.find(person => person.id === savedProfile.directoryId);
-    if (directoryPerson) replaceDirectoryPerson(directoryPerson.id, person => ({ ...person, name: savedProfile.displayName, email: savedProfile.email || undefined }));
+    if (directoryPerson) replaceDirectoryPerson(directoryPerson.id, person => ({ ...person, name: savedProfile.displayName }));
     setAccountMessage("✓ Changes saved");
     window.setTimeout(() => setAccountMessage(""), 2400);
     router.refresh();
@@ -6440,6 +6587,13 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     const result = await resetDemoDataAction({ confirmation: "RESET DEMO DATA" });
     if (!result.ok) throw new Error(result.message || "Couldn't reset demo data. Please try again.");
     setProfileOpen(false);
+    router.refresh();
+  }
+
+  async function signOut() {
+    await authClient.signOut();
+    setProfileOpen(false);
+    router.replace("/login");
     router.refresh();
   }
 
@@ -6494,21 +6648,31 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     if (v !== "inbox") setProjectCaptureContext(null);
   }
 
+  function openPersonTaskList(personId: string) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "list");
+    params.set("scope", "people");
+    params.set("person", personId);
+    params.delete("team");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    navTo("all-tasks");
+  }
+
   function renderView() {
     switch (view) {
-      case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
+      case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "there"} />;
       case "today": return <TodayView onTaskClick={setSelectedTask} />;
       case "this-week": return <ThisWeekView onTaskClick={setSelectedTask} />;
       case "inbox": return <InboxView projectContext={projectCaptureContext || undefined} />;
       case "delegated": return <DelegatedView onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onPersonClick={person => navTo("person-detail", { person })} />;
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
-      case "review": return <ReviewView onTaskClick={setSelectedTask} />;
+      case "review": return <><>{profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 lg:px-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Needs My Review</span> · {profile.pendingAccessRequestCount} member access request{profile.pendingAccessRequestCount === 1 ? "" : "s"}</span><span className="font-medium text-primary">Review access →</span></a></div>}</><ReviewView onTaskClick={setSelectedTask} /></>;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
-      case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} />;
+      case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} profile={profile} />;
       case "people": return <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
       case "workload": return <WorkloadView onTaskClick={setSelectedTask} />;
       case "person-detail": return selectedPerson
-        ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} />
+        ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onViewTasks={openPersonTaskList} />
         : <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
       case "followup": return <FollowUpView onTaskClick={setSelectedTask} />;
       case "organizations": return <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
@@ -6521,7 +6685,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
         ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />
         : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />;
       case "search": return <SearchView onTaskClick={setSelectedTask} />;
-      default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "Charlotte"} />;
+      default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "there"} />;
     }
   }
 
@@ -6552,7 +6716,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
         </div>
       )}
       {selectedTask && <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />}
-      {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onSave={saveProfile} onResetDemoData={process.env.NODE_ENV === "development" ? resetDevelopmentDemoData : undefined} onClose={() => setProfileOpen(false)} onSignOut={() => { setProfileOpen(false); setAccountMessage("Signed out of this local preview"); window.setTimeout(() => setAccountMessage(""), 2400); }} />}
+      {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onSave={saveProfile} onResetDemoData={process.env.NODE_ENV === "development" ? resetDevelopmentDemoData : undefined} onClose={() => setProfileOpen(false)} onSignOut={() => void signOut()} />}
       {accountMessage && <div role="status" className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl border border-success/20 bg-card px-3.5 py-2 text-[12px] font-medium text-success shadow-[0_8px_22px_rgb(35_41_61_/_0.10)]">{accountMessage}</div>}
     </div>
     </CurrentUserContext.Provider>

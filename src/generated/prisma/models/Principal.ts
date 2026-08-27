@@ -29,8 +29,12 @@ export type PrincipalMinAggregateOutputType = {
   workspaceId: string | null
   type: $Enums.PrincipalType | null
   name: string | null
+  jobTitle: string | null
   email: string | null
+  phone: string | null
+  notes: string | null
   active: boolean | null
+  status: $Enums.PrincipalStatus | null
 }
 
 export type PrincipalMaxAggregateOutputType = {
@@ -38,8 +42,12 @@ export type PrincipalMaxAggregateOutputType = {
   workspaceId: string | null
   type: $Enums.PrincipalType | null
   name: string | null
+  jobTitle: string | null
   email: string | null
+  phone: string | null
+  notes: string | null
   active: boolean | null
+  status: $Enums.PrincipalStatus | null
 }
 
 export type PrincipalCountAggregateOutputType = {
@@ -47,8 +55,12 @@ export type PrincipalCountAggregateOutputType = {
   workspaceId: number
   type: number
   name: number
+  jobTitle: number
   email: number
+  phone: number
+  notes: number
   active: number
+  status: number
   _all: number
 }
 
@@ -58,8 +70,12 @@ export type PrincipalMinAggregateInputType = {
   workspaceId?: true
   type?: true
   name?: true
+  jobTitle?: true
   email?: true
+  phone?: true
+  notes?: true
   active?: true
+  status?: true
 }
 
 export type PrincipalMaxAggregateInputType = {
@@ -67,8 +83,12 @@ export type PrincipalMaxAggregateInputType = {
   workspaceId?: true
   type?: true
   name?: true
+  jobTitle?: true
   email?: true
+  phone?: true
+  notes?: true
   active?: true
+  status?: true
 }
 
 export type PrincipalCountAggregateInputType = {
@@ -76,8 +96,12 @@ export type PrincipalCountAggregateInputType = {
   workspaceId?: true
   type?: true
   name?: true
+  jobTitle?: true
   email?: true
+  phone?: true
+  notes?: true
   active?: true
+  status?: true
   _all?: true
 }
 
@@ -158,8 +182,12 @@ export type PrincipalGroupByOutputType = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle: string | null
   email: string | null
+  phone: string | null
+  notes: string | null
   active: boolean
+  status: $Enums.PrincipalStatus
   _count: PrincipalCountAggregateOutputType | null
   _min: PrincipalMinAggregateOutputType | null
   _max: PrincipalMaxAggregateOutputType | null
@@ -188,9 +216,25 @@ export type PrincipalWhereInput = {
   workspaceId?: Prisma.StringFilter<"Principal"> | string
   type?: Prisma.EnumPrincipalTypeFilter<"Principal"> | $Enums.PrincipalType
   name?: Prisma.StringFilter<"Principal"> | string
+  jobTitle?: Prisma.StringNullableFilter<"Principal"> | string | null
   email?: Prisma.StringNullableFilter<"Principal"> | string | null
+  phone?: Prisma.StringNullableFilter<"Principal"> | string | null
+  notes?: Prisma.StringNullableFilter<"Principal"> | string | null
   active?: Prisma.BoolFilter<"Principal"> | boolean
+  status?: Prisma.EnumPrincipalStatusFilter<"Principal"> | $Enums.PrincipalStatus
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
+  userAccount?: Prisma.XOR<Prisma.UserAccountNullableScalarRelationFilter, Prisma.UserAccountWhereInput> | null
+  organizationMemberships?: Prisma.OrganizationMembershipListRelationFilter
+  departmentMemberships?: Prisma.DepartmentMembershipListRelationFilter
+  teamMemberships?: Prisma.TeamMembershipListRelationFilter
+  teamMemberMemberships?: Prisma.TeamMembershipListRelationFilter
+  teamScopes?: Prisma.TeamScopeListRelationFilter
+  invitationPerson?: Prisma.InvitationListRelationFilter
+  requestedInvitations?: Prisma.InvitationListRelationFilter
+  approvedInvitations?: Prisma.InvitationListRelationFilter
+  rejectedInvitations?: Prisma.InvitationListRelationFilter
+  accessAuditActor?: Prisma.AccessAuditLogListRelationFilter
+  accessAuditTarget?: Prisma.AccessAuditLogListRelationFilter
   memberships?: Prisma.PrincipalMembershipListRelationFilter
   preferences?: Prisma.XOR<Prisma.PrincipalPreferenceNullableScalarRelationFilter, Prisma.PrincipalPreferenceWhereInput> | null
   assignments?: Prisma.TaskAssignmentListRelationFilter
@@ -220,9 +264,25 @@ export type PrincipalOrderByWithRelationInput = {
   workspaceId?: Prisma.SortOrder
   type?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  jobTitle?: Prisma.SortOrderInput | Prisma.SortOrder
   email?: Prisma.SortOrderInput | Prisma.SortOrder
+  phone?: Prisma.SortOrderInput | Prisma.SortOrder
+  notes?: Prisma.SortOrderInput | Prisma.SortOrder
   active?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
+  userAccount?: Prisma.UserAccountOrderByWithRelationInput
+  organizationMemberships?: Prisma.OrganizationMembershipOrderByRelationAggregateInput
+  departmentMemberships?: Prisma.DepartmentMembershipOrderByRelationAggregateInput
+  teamMemberships?: Prisma.TeamMembershipOrderByRelationAggregateInput
+  teamMemberMemberships?: Prisma.TeamMembershipOrderByRelationAggregateInput
+  teamScopes?: Prisma.TeamScopeOrderByRelationAggregateInput
+  invitationPerson?: Prisma.InvitationOrderByRelationAggregateInput
+  requestedInvitations?: Prisma.InvitationOrderByRelationAggregateInput
+  approvedInvitations?: Prisma.InvitationOrderByRelationAggregateInput
+  rejectedInvitations?: Prisma.InvitationOrderByRelationAggregateInput
+  accessAuditActor?: Prisma.AccessAuditLogOrderByRelationAggregateInput
+  accessAuditTarget?: Prisma.AccessAuditLogOrderByRelationAggregateInput
   memberships?: Prisma.PrincipalMembershipOrderByRelationAggregateInput
   preferences?: Prisma.PrincipalPreferenceOrderByWithRelationInput
   assignments?: Prisma.TaskAssignmentOrderByRelationAggregateInput
@@ -256,9 +316,25 @@ export type PrincipalWhereUniqueInput = Prisma.AtLeast<{
   workspaceId?: Prisma.StringFilter<"Principal"> | string
   type?: Prisma.EnumPrincipalTypeFilter<"Principal"> | $Enums.PrincipalType
   name?: Prisma.StringFilter<"Principal"> | string
+  jobTitle?: Prisma.StringNullableFilter<"Principal"> | string | null
   email?: Prisma.StringNullableFilter<"Principal"> | string | null
+  phone?: Prisma.StringNullableFilter<"Principal"> | string | null
+  notes?: Prisma.StringNullableFilter<"Principal"> | string | null
   active?: Prisma.BoolFilter<"Principal"> | boolean
+  status?: Prisma.EnumPrincipalStatusFilter<"Principal"> | $Enums.PrincipalStatus
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
+  userAccount?: Prisma.XOR<Prisma.UserAccountNullableScalarRelationFilter, Prisma.UserAccountWhereInput> | null
+  organizationMemberships?: Prisma.OrganizationMembershipListRelationFilter
+  departmentMemberships?: Prisma.DepartmentMembershipListRelationFilter
+  teamMemberships?: Prisma.TeamMembershipListRelationFilter
+  teamMemberMemberships?: Prisma.TeamMembershipListRelationFilter
+  teamScopes?: Prisma.TeamScopeListRelationFilter
+  invitationPerson?: Prisma.InvitationListRelationFilter
+  requestedInvitations?: Prisma.InvitationListRelationFilter
+  approvedInvitations?: Prisma.InvitationListRelationFilter
+  rejectedInvitations?: Prisma.InvitationListRelationFilter
+  accessAuditActor?: Prisma.AccessAuditLogListRelationFilter
+  accessAuditTarget?: Prisma.AccessAuditLogListRelationFilter
   memberships?: Prisma.PrincipalMembershipListRelationFilter
   preferences?: Prisma.XOR<Prisma.PrincipalPreferenceNullableScalarRelationFilter, Prisma.PrincipalPreferenceWhereInput> | null
   assignments?: Prisma.TaskAssignmentListRelationFilter
@@ -288,8 +364,12 @@ export type PrincipalOrderByWithAggregationInput = {
   workspaceId?: Prisma.SortOrder
   type?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  jobTitle?: Prisma.SortOrderInput | Prisma.SortOrder
   email?: Prisma.SortOrderInput | Prisma.SortOrder
+  phone?: Prisma.SortOrderInput | Prisma.SortOrder
+  notes?: Prisma.SortOrderInput | Prisma.SortOrder
   active?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   _count?: Prisma.PrincipalCountOrderByAggregateInput
   _max?: Prisma.PrincipalMaxOrderByAggregateInput
   _min?: Prisma.PrincipalMinOrderByAggregateInput
@@ -303,17 +383,37 @@ export type PrincipalScalarWhereWithAggregatesInput = {
   workspaceId?: Prisma.StringWithAggregatesFilter<"Principal"> | string
   type?: Prisma.EnumPrincipalTypeWithAggregatesFilter<"Principal"> | $Enums.PrincipalType
   name?: Prisma.StringWithAggregatesFilter<"Principal"> | string
+  jobTitle?: Prisma.StringNullableWithAggregatesFilter<"Principal"> | string | null
   email?: Prisma.StringNullableWithAggregatesFilter<"Principal"> | string | null
+  phone?: Prisma.StringNullableWithAggregatesFilter<"Principal"> | string | null
+  notes?: Prisma.StringNullableWithAggregatesFilter<"Principal"> | string | null
   active?: Prisma.BoolWithAggregatesFilter<"Principal"> | boolean
+  status?: Prisma.EnumPrincipalStatusWithAggregatesFilter<"Principal"> | $Enums.PrincipalStatus
 }
 
 export type PrincipalCreateInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -343,8 +443,24 @@ export type PrincipalUncheckedCreateInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -373,9 +489,25 @@ export type PrincipalUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -405,8 +537,24 @@ export type PrincipalUncheckedUpdateInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -436,16 +584,24 @@ export type PrincipalCreateManyInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
 }
 
 export type PrincipalUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
 }
 
 export type PrincipalUncheckedUpdateManyInput = {
@@ -453,8 +609,12 @@ export type PrincipalUncheckedUpdateManyInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
 }
 
 export type PrincipalListRelationFilter = {
@@ -487,8 +647,12 @@ export type PrincipalCountOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   type?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  jobTitle?: Prisma.SortOrder
   email?: Prisma.SortOrder
+  phone?: Prisma.SortOrder
+  notes?: Prisma.SortOrder
   active?: Prisma.SortOrder
+  status?: Prisma.SortOrder
 }
 
 export type PrincipalMaxOrderByAggregateInput = {
@@ -496,8 +660,12 @@ export type PrincipalMaxOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   type?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  jobTitle?: Prisma.SortOrder
   email?: Prisma.SortOrder
+  phone?: Prisma.SortOrder
+  notes?: Prisma.SortOrder
   active?: Prisma.SortOrder
+  status?: Prisma.SortOrder
 }
 
 export type PrincipalMinOrderByAggregateInput = {
@@ -505,8 +673,12 @@ export type PrincipalMinOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   type?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  jobTitle?: Prisma.SortOrder
   email?: Prisma.SortOrder
+  phone?: Prisma.SortOrder
+  notes?: Prisma.SortOrder
   active?: Prisma.SortOrder
+  status?: Prisma.SortOrder
 }
 
 export type PrincipalCreateNestedManyWithoutWorkspaceInput = {
@@ -605,6 +777,10 @@ export type BoolFieldUpdateOperationsInput = {
   set?: boolean
 }
 
+export type EnumPrincipalStatusFieldUpdateOperationsInput = {
+  set?: $Enums.PrincipalStatus
+}
+
 export type PrincipalCreateNestedOneWithoutPreferencesInput = {
   create?: Prisma.XOR<Prisma.PrincipalCreateWithoutPreferencesInput, Prisma.PrincipalUncheckedCreateWithoutPreferencesInput>
   connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutPreferencesInput
@@ -631,6 +807,182 @@ export type PrincipalUpdateOneRequiredWithoutMembershipsNestedInput = {
   upsert?: Prisma.PrincipalUpsertWithoutMembershipsInput
   connect?: Prisma.PrincipalWhereUniqueInput
   update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutMembershipsInput, Prisma.PrincipalUpdateWithoutMembershipsInput>, Prisma.PrincipalUncheckedUpdateWithoutMembershipsInput>
+}
+
+export type PrincipalCreateNestedOneWithoutOrganizationMembershipsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutOrganizationMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutOrganizationMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutOrganizationMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutOrganizationMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutOrganizationMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutOrganizationMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutOrganizationMembershipsInput
+  upsert?: Prisma.PrincipalUpsertWithoutOrganizationMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutOrganizationMembershipsInput, Prisma.PrincipalUpdateWithoutOrganizationMembershipsInput>, Prisma.PrincipalUncheckedUpdateWithoutOrganizationMembershipsInput>
+}
+
+export type PrincipalCreateNestedOneWithoutDepartmentMembershipsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutDepartmentMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutDepartmentMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutDepartmentMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutDepartmentMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutDepartmentMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutDepartmentMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutDepartmentMembershipsInput
+  upsert?: Prisma.PrincipalUpsertWithoutDepartmentMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutDepartmentMembershipsInput, Prisma.PrincipalUpdateWithoutDepartmentMembershipsInput>, Prisma.PrincipalUncheckedUpdateWithoutDepartmentMembershipsInput>
+}
+
+export type PrincipalCreateNestedOneWithoutTeamMembershipsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutTeamMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalCreateNestedOneWithoutTeamMemberMembershipsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMemberMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMemberMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutTeamMemberMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutTeamMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutTeamMembershipsInput
+  upsert?: Prisma.PrincipalUpsertWithoutTeamMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutTeamMembershipsInput, Prisma.PrincipalUpdateWithoutTeamMembershipsInput>, Prisma.PrincipalUncheckedUpdateWithoutTeamMembershipsInput>
+}
+
+export type PrincipalUpdateOneRequiredWithoutTeamMemberMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMemberMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMemberMembershipsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutTeamMemberMembershipsInput
+  upsert?: Prisma.PrincipalUpsertWithoutTeamMemberMembershipsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutTeamMemberMembershipsInput, Prisma.PrincipalUpdateWithoutTeamMemberMembershipsInput>, Prisma.PrincipalUncheckedUpdateWithoutTeamMemberMembershipsInput>
+}
+
+export type PrincipalCreateNestedOneWithoutTeamScopesInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamScopesInput, Prisma.PrincipalUncheckedCreateWithoutTeamScopesInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutTeamScopesInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutTeamScopesNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamScopesInput, Prisma.PrincipalUncheckedCreateWithoutTeamScopesInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutTeamScopesInput
+  upsert?: Prisma.PrincipalUpsertWithoutTeamScopesInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutTeamScopesInput, Prisma.PrincipalUpdateWithoutTeamScopesInput>, Prisma.PrincipalUncheckedUpdateWithoutTeamScopesInput>
+}
+
+export type PrincipalCreateNestedOneWithoutUserAccountInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutUserAccountInput, Prisma.PrincipalUncheckedCreateWithoutUserAccountInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutUserAccountInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutUserAccountNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutUserAccountInput, Prisma.PrincipalUncheckedCreateWithoutUserAccountInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutUserAccountInput
+  upsert?: Prisma.PrincipalUpsertWithoutUserAccountInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutUserAccountInput, Prisma.PrincipalUpdateWithoutUserAccountInput>, Prisma.PrincipalUncheckedUpdateWithoutUserAccountInput>
+}
+
+export type PrincipalCreateNestedOneWithoutInvitationPersonInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutInvitationPersonInput, Prisma.PrincipalUncheckedCreateWithoutInvitationPersonInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutInvitationPersonInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalCreateNestedOneWithoutRequestedInvitationsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutRequestedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRequestedInvitationsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutRequestedInvitationsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalCreateNestedOneWithoutApprovedInvitationsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutApprovedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutApprovedInvitationsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutApprovedInvitationsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalCreateNestedOneWithoutRejectedInvitationsInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutRejectedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRejectedInvitationsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutRejectedInvitationsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneRequiredWithoutInvitationPersonNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutInvitationPersonInput, Prisma.PrincipalUncheckedCreateWithoutInvitationPersonInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutInvitationPersonInput
+  upsert?: Prisma.PrincipalUpsertWithoutInvitationPersonInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutInvitationPersonInput, Prisma.PrincipalUpdateWithoutInvitationPersonInput>, Prisma.PrincipalUncheckedUpdateWithoutInvitationPersonInput>
+}
+
+export type PrincipalUpdateOneRequiredWithoutRequestedInvitationsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutRequestedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRequestedInvitationsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutRequestedInvitationsInput
+  upsert?: Prisma.PrincipalUpsertWithoutRequestedInvitationsInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutRequestedInvitationsInput, Prisma.PrincipalUpdateWithoutRequestedInvitationsInput>, Prisma.PrincipalUncheckedUpdateWithoutRequestedInvitationsInput>
+}
+
+export type PrincipalUpdateOneWithoutApprovedInvitationsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutApprovedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutApprovedInvitationsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutApprovedInvitationsInput
+  upsert?: Prisma.PrincipalUpsertWithoutApprovedInvitationsInput
+  disconnect?: Prisma.PrincipalWhereInput | boolean
+  delete?: Prisma.PrincipalWhereInput | boolean
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutApprovedInvitationsInput, Prisma.PrincipalUpdateWithoutApprovedInvitationsInput>, Prisma.PrincipalUncheckedUpdateWithoutApprovedInvitationsInput>
+}
+
+export type PrincipalUpdateOneWithoutRejectedInvitationsNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutRejectedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRejectedInvitationsInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutRejectedInvitationsInput
+  upsert?: Prisma.PrincipalUpsertWithoutRejectedInvitationsInput
+  disconnect?: Prisma.PrincipalWhereInput | boolean
+  delete?: Prisma.PrincipalWhereInput | boolean
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutRejectedInvitationsInput, Prisma.PrincipalUpdateWithoutRejectedInvitationsInput>, Prisma.PrincipalUncheckedUpdateWithoutRejectedInvitationsInput>
+}
+
+export type PrincipalCreateNestedOneWithoutAccessAuditActorInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditActorInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditActorInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutAccessAuditActorInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalCreateNestedOneWithoutAccessAuditTargetInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditTargetInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditTargetInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutAccessAuditTargetInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
+export type PrincipalUpdateOneWithoutAccessAuditActorNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditActorInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditActorInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutAccessAuditActorInput
+  upsert?: Prisma.PrincipalUpsertWithoutAccessAuditActorInput
+  disconnect?: Prisma.PrincipalWhereInput | boolean
+  delete?: Prisma.PrincipalWhereInput | boolean
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutAccessAuditActorInput, Prisma.PrincipalUpdateWithoutAccessAuditActorInput>, Prisma.PrincipalUncheckedUpdateWithoutAccessAuditActorInput>
+}
+
+export type PrincipalUpdateOneWithoutAccessAuditTargetNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditTargetInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditTargetInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutAccessAuditTargetInput
+  upsert?: Prisma.PrincipalUpsertWithoutAccessAuditTargetInput
+  disconnect?: Prisma.PrincipalWhereInput | boolean
+  delete?: Prisma.PrincipalWhereInput | boolean
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutAccessAuditTargetInput, Prisma.PrincipalUpdateWithoutAccessAuditTargetInput>, Prisma.PrincipalUncheckedUpdateWithoutAccessAuditTargetInput>
 }
 
 export type PrincipalCreateNestedOneWithoutCreatedTasksInput = {
@@ -901,8 +1253,24 @@ export type PrincipalCreateWithoutWorkspaceInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -931,8 +1299,24 @@ export type PrincipalUncheckedCreateWithoutWorkspaceInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -991,17 +1375,37 @@ export type PrincipalScalarWhereInput = {
   workspaceId?: Prisma.StringFilter<"Principal"> | string
   type?: Prisma.EnumPrincipalTypeFilter<"Principal"> | $Enums.PrincipalType
   name?: Prisma.StringFilter<"Principal"> | string
+  jobTitle?: Prisma.StringNullableFilter<"Principal"> | string | null
   email?: Prisma.StringNullableFilter<"Principal"> | string | null
+  phone?: Prisma.StringNullableFilter<"Principal"> | string | null
+  notes?: Prisma.StringNullableFilter<"Principal"> | string | null
   active?: Prisma.BoolFilter<"Principal"> | boolean
+  status?: Prisma.EnumPrincipalStatusFilter<"Principal"> | $Enums.PrincipalStatus
 }
 
 export type PrincipalCreateWithoutCreatedProjectsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -1030,8 +1434,24 @@ export type PrincipalUncheckedCreateWithoutCreatedProjectsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -1075,9 +1495,25 @@ export type PrincipalUpdateWithoutCreatedProjectsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -1106,8 +1542,24 @@ export type PrincipalUncheckedUpdateWithoutCreatedProjectsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -1135,9 +1587,25 @@ export type PrincipalCreateWithoutProjectMembershipsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -1166,8 +1634,24 @@ export type PrincipalUncheckedCreateWithoutProjectMembershipsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -1211,9 +1695,25 @@ export type PrincipalUpdateWithoutProjectMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -1242,8 +1742,24 @@ export type PrincipalUncheckedUpdateWithoutProjectMembershipsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -1271,9 +1787,25 @@ export type PrincipalCreateWithoutMilestoneOwnershipInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -1302,8 +1834,24 @@ export type PrincipalUncheckedCreateWithoutMilestoneOwnershipInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -1347,9 +1895,25 @@ export type PrincipalUpdateWithoutMilestoneOwnershipInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -1378,8 +1942,24 @@ export type PrincipalUncheckedUpdateWithoutMilestoneOwnershipInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -1407,9 +1987,25 @@ export type PrincipalCreateWithoutPreferencesInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
@@ -1438,8 +2034,24 @@ export type PrincipalUncheckedCreateWithoutPreferencesInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
@@ -1483,9 +2095,25 @@ export type PrincipalUpdateWithoutPreferencesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
@@ -1514,8 +2142,24 @@ export type PrincipalUncheckedUpdateWithoutPreferencesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
@@ -1543,9 +2187,25 @@ export type PrincipalCreateWithoutMembershipsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
@@ -1574,8 +2234,24 @@ export type PrincipalUncheckedCreateWithoutMembershipsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
@@ -1619,9 +2295,25 @@ export type PrincipalUpdateWithoutMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
@@ -1650,8 +2342,2424 @@ export type PrincipalUncheckedUpdateWithoutMembershipsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutOrganizationMembershipsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutOrganizationMembershipsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutOrganizationMembershipsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutOrganizationMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutOrganizationMembershipsInput>
+}
+
+export type PrincipalUpsertWithoutOrganizationMembershipsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutOrganizationMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutOrganizationMembershipsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutOrganizationMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutOrganizationMembershipsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutOrganizationMembershipsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutOrganizationMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutOrganizationMembershipsInput>
+}
+
+export type PrincipalUpdateWithoutOrganizationMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutOrganizationMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutDepartmentMembershipsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutDepartmentMembershipsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutDepartmentMembershipsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutDepartmentMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutDepartmentMembershipsInput>
+}
+
+export type PrincipalUpsertWithoutDepartmentMembershipsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutDepartmentMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutDepartmentMembershipsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutDepartmentMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutDepartmentMembershipsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutDepartmentMembershipsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutDepartmentMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutDepartmentMembershipsInput>
+}
+
+export type PrincipalUpdateWithoutDepartmentMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutDepartmentMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutTeamMembershipsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutTeamMembershipsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutTeamMembershipsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMembershipsInput>
+}
+
+export type PrincipalCreateWithoutTeamMemberMembershipsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutTeamMemberMembershipsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutTeamMemberMembershipsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMemberMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMemberMembershipsInput>
+}
+
+export type PrincipalUpsertWithoutTeamMembershipsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutTeamMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutTeamMembershipsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMembershipsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutTeamMembershipsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutTeamMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutTeamMembershipsInput>
+}
+
+export type PrincipalUpdateWithoutTeamMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutTeamMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUpsertWithoutTeamMemberMembershipsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutTeamMemberMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutTeamMemberMembershipsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamMemberMembershipsInput, Prisma.PrincipalUncheckedCreateWithoutTeamMemberMembershipsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutTeamMemberMembershipsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutTeamMemberMembershipsInput, Prisma.PrincipalUncheckedUpdateWithoutTeamMemberMembershipsInput>
+}
+
+export type PrincipalUpdateWithoutTeamMemberMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutTeamMemberMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutTeamScopesInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutTeamScopesInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutTeamScopesInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamScopesInput, Prisma.PrincipalUncheckedCreateWithoutTeamScopesInput>
+}
+
+export type PrincipalUpsertWithoutTeamScopesInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutTeamScopesInput, Prisma.PrincipalUncheckedUpdateWithoutTeamScopesInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutTeamScopesInput, Prisma.PrincipalUncheckedCreateWithoutTeamScopesInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutTeamScopesInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutTeamScopesInput, Prisma.PrincipalUncheckedUpdateWithoutTeamScopesInput>
+}
+
+export type PrincipalUpdateWithoutTeamScopesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutTeamScopesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutUserAccountInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutUserAccountInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutUserAccountInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutUserAccountInput, Prisma.PrincipalUncheckedCreateWithoutUserAccountInput>
+}
+
+export type PrincipalUpsertWithoutUserAccountInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutUserAccountInput, Prisma.PrincipalUncheckedUpdateWithoutUserAccountInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutUserAccountInput, Prisma.PrincipalUncheckedCreateWithoutUserAccountInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutUserAccountInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutUserAccountInput, Prisma.PrincipalUncheckedUpdateWithoutUserAccountInput>
+}
+
+export type PrincipalUpdateWithoutUserAccountInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutUserAccountInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutInvitationPersonInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutInvitationPersonInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutInvitationPersonInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutInvitationPersonInput, Prisma.PrincipalUncheckedCreateWithoutInvitationPersonInput>
+}
+
+export type PrincipalCreateWithoutRequestedInvitationsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutRequestedInvitationsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutRequestedInvitationsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutRequestedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRequestedInvitationsInput>
+}
+
+export type PrincipalCreateWithoutApprovedInvitationsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutApprovedInvitationsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutApprovedInvitationsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutApprovedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutApprovedInvitationsInput>
+}
+
+export type PrincipalCreateWithoutRejectedInvitationsInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutRejectedInvitationsInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutRejectedInvitationsInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutRejectedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRejectedInvitationsInput>
+}
+
+export type PrincipalUpsertWithoutInvitationPersonInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutInvitationPersonInput, Prisma.PrincipalUncheckedUpdateWithoutInvitationPersonInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutInvitationPersonInput, Prisma.PrincipalUncheckedCreateWithoutInvitationPersonInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutInvitationPersonInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutInvitationPersonInput, Prisma.PrincipalUncheckedUpdateWithoutInvitationPersonInput>
+}
+
+export type PrincipalUpdateWithoutInvitationPersonInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutInvitationPersonInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUpsertWithoutRequestedInvitationsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutRequestedInvitationsInput, Prisma.PrincipalUncheckedUpdateWithoutRequestedInvitationsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutRequestedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRequestedInvitationsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutRequestedInvitationsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutRequestedInvitationsInput, Prisma.PrincipalUncheckedUpdateWithoutRequestedInvitationsInput>
+}
+
+export type PrincipalUpdateWithoutRequestedInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutRequestedInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUpsertWithoutApprovedInvitationsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutApprovedInvitationsInput, Prisma.PrincipalUncheckedUpdateWithoutApprovedInvitationsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutApprovedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutApprovedInvitationsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutApprovedInvitationsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutApprovedInvitationsInput, Prisma.PrincipalUncheckedUpdateWithoutApprovedInvitationsInput>
+}
+
+export type PrincipalUpdateWithoutApprovedInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutApprovedInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUpsertWithoutRejectedInvitationsInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutRejectedInvitationsInput, Prisma.PrincipalUncheckedUpdateWithoutRejectedInvitationsInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutRejectedInvitationsInput, Prisma.PrincipalUncheckedCreateWithoutRejectedInvitationsInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutRejectedInvitationsInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutRejectedInvitationsInput, Prisma.PrincipalUncheckedUpdateWithoutRejectedInvitationsInput>
+}
+
+export type PrincipalUpdateWithoutRejectedInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutRejectedInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalCreateWithoutAccessAuditActorInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutAccessAuditActorInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutAccessAuditActorInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditActorInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditActorInput>
+}
+
+export type PrincipalCreateWithoutAccessAuditTargetInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutAccessAuditTargetInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutAccessAuditTargetInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditTargetInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditTargetInput>
+}
+
+export type PrincipalUpsertWithoutAccessAuditActorInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutAccessAuditActorInput, Prisma.PrincipalUncheckedUpdateWithoutAccessAuditActorInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditActorInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditActorInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutAccessAuditActorInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutAccessAuditActorInput, Prisma.PrincipalUncheckedUpdateWithoutAccessAuditActorInput>
+}
+
+export type PrincipalUpdateWithoutAccessAuditActorInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutAccessAuditActorInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUpsertWithoutAccessAuditTargetInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutAccessAuditTargetInput, Prisma.PrincipalUncheckedUpdateWithoutAccessAuditTargetInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutAccessAuditTargetInput, Prisma.PrincipalUncheckedCreateWithoutAccessAuditTargetInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutAccessAuditTargetInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutAccessAuditTargetInput, Prisma.PrincipalUncheckedUpdateWithoutAccessAuditTargetInput>
+}
+
+export type PrincipalUpdateWithoutAccessAuditTargetInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutAccessAuditTargetInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
@@ -1679,9 +4787,25 @@ export type PrincipalCreateWithoutCreatedTasksInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -1710,8 +4834,24 @@ export type PrincipalUncheckedCreateWithoutCreatedTasksInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -1744,9 +4884,25 @@ export type PrincipalCreateWithoutNextActionTasksInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -1775,8 +4931,24 @@ export type PrincipalUncheckedCreateWithoutNextActionTasksInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -1820,9 +4992,25 @@ export type PrincipalUpdateWithoutCreatedTasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -1851,8 +5039,24 @@ export type PrincipalUncheckedUpdateWithoutCreatedTasksInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -1891,9 +5095,25 @@ export type PrincipalUpdateWithoutNextActionTasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -1922,8 +5142,24 @@ export type PrincipalUncheckedUpdateWithoutNextActionTasksInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -1951,9 +5187,25 @@ export type PrincipalCreateWithoutCompletedChecklistItemsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -1982,8 +5234,24 @@ export type PrincipalUncheckedCreateWithoutCompletedChecklistItemsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2027,9 +5295,25 @@ export type PrincipalUpdateWithoutCompletedChecklistItemsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -2058,8 +5342,24 @@ export type PrincipalUncheckedUpdateWithoutCompletedChecklistItemsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -2087,9 +5387,25 @@ export type PrincipalCreateWithoutSavedViewsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -2118,8 +5434,24 @@ export type PrincipalUncheckedCreateWithoutSavedViewsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2163,9 +5495,25 @@ export type PrincipalUpdateWithoutSavedViewsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -2194,8 +5542,24 @@ export type PrincipalUncheckedUpdateWithoutSavedViewsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -2223,9 +5587,25 @@ export type PrincipalCreateWithoutAssignmentsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
@@ -2254,8 +5634,24 @@ export type PrincipalUncheckedCreateWithoutAssignmentsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
@@ -2288,9 +5684,25 @@ export type PrincipalCreateWithoutAssignedByInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -2319,8 +5731,24 @@ export type PrincipalUncheckedCreateWithoutAssignedByInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2364,9 +5792,25 @@ export type PrincipalUpdateWithoutAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
@@ -2395,8 +5839,24 @@ export type PrincipalUncheckedUpdateWithoutAssignmentsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
@@ -2435,9 +5895,25 @@ export type PrincipalUpdateWithoutAssignedByInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -2466,8 +5942,24 @@ export type PrincipalUncheckedUpdateWithoutAssignedByInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -2495,9 +5987,25 @@ export type PrincipalCreateWithoutDependencyOwnersInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -2526,8 +6034,24 @@ export type PrincipalUncheckedCreateWithoutDependencyOwnersInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2571,9 +6095,25 @@ export type PrincipalUpdateWithoutDependencyOwnersInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -2602,8 +6142,24 @@ export type PrincipalUncheckedUpdateWithoutDependencyOwnersInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -2631,9 +6187,25 @@ export type PrincipalCreateWithoutSubmittedReviewsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -2662,8 +6234,24 @@ export type PrincipalUncheckedCreateWithoutSubmittedReviewsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2696,9 +6284,25 @@ export type PrincipalCreateWithoutRequestedReviewsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -2727,8 +6331,24 @@ export type PrincipalUncheckedCreateWithoutRequestedReviewsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2761,9 +6381,25 @@ export type PrincipalCreateWithoutReviewedReviewsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -2792,8 +6428,24 @@ export type PrincipalUncheckedCreateWithoutReviewedReviewsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -2837,9 +6489,25 @@ export type PrincipalUpdateWithoutSubmittedReviewsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -2868,8 +6536,24 @@ export type PrincipalUncheckedUpdateWithoutSubmittedReviewsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -2908,9 +6592,25 @@ export type PrincipalUpdateWithoutRequestedReviewsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -2939,8 +6639,24 @@ export type PrincipalUncheckedUpdateWithoutRequestedReviewsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -2979,9 +6695,25 @@ export type PrincipalUpdateWithoutReviewedReviewsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3010,8 +6742,24 @@ export type PrincipalUncheckedUpdateWithoutReviewedReviewsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3039,9 +6787,25 @@ export type PrincipalCreateWithoutUpdatesInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3070,8 +6834,24 @@ export type PrincipalUncheckedCreateWithoutUpdatesInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3115,9 +6895,25 @@ export type PrincipalUpdateWithoutUpdatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3146,8 +6942,24 @@ export type PrincipalUncheckedUpdateWithoutUpdatesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3175,9 +6987,25 @@ export type PrincipalCreateWithoutEventsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3206,8 +7034,24 @@ export type PrincipalUncheckedCreateWithoutEventsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3251,9 +7095,25 @@ export type PrincipalUpdateWithoutEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3282,8 +7142,24 @@ export type PrincipalUncheckedUpdateWithoutEventsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3311,9 +7187,25 @@ export type PrincipalCreateWithoutCapturesInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3342,8 +7234,24 @@ export type PrincipalUncheckedCreateWithoutCapturesInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3387,9 +7295,25 @@ export type PrincipalUpdateWithoutCapturesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3418,8 +7342,24 @@ export type PrincipalUncheckedUpdateWithoutCapturesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3447,9 +7387,25 @@ export type PrincipalCreateWithoutCreatedTemplatesInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3478,8 +7434,24 @@ export type PrincipalUncheckedCreateWithoutCreatedTemplatesInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3523,9 +7495,25 @@ export type PrincipalUpdateWithoutCreatedTemplatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3554,8 +7542,24 @@ export type PrincipalUncheckedUpdateWithoutCreatedTemplatesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3583,9 +7587,25 @@ export type PrincipalCreateWithoutTemplateAssignmentsInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3614,8 +7634,24 @@ export type PrincipalUncheckedCreateWithoutTemplateAssignmentsInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3659,9 +7695,25 @@ export type PrincipalUpdateWithoutTemplateAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3690,8 +7742,24 @@ export type PrincipalUncheckedUpdateWithoutTemplateAssignmentsInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3719,9 +7787,25 @@ export type PrincipalCreateWithoutTemplateMilestoneOwnershipInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3750,8 +7834,24 @@ export type PrincipalUncheckedCreateWithoutTemplateMilestoneOwnershipInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3795,9 +7895,25 @@ export type PrincipalUpdateWithoutTemplateMilestoneOwnershipInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3826,8 +7942,24 @@ export type PrincipalUncheckedUpdateWithoutTemplateMilestoneOwnershipInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3855,9 +7987,25 @@ export type PrincipalCreateWithoutNudgeStatesInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
@@ -3886,8 +8034,24 @@ export type PrincipalUncheckedCreateWithoutNudgeStatesInput = {
   workspaceId: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
   memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
@@ -3931,9 +8095,25 @@ export type PrincipalUpdateWithoutNudgeStatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -3962,8 +8142,24 @@ export type PrincipalUncheckedUpdateWithoutNudgeStatesInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -3991,16 +8187,36 @@ export type PrincipalCreateManyWorkspaceInput = {
   id?: string
   type: $Enums.PrincipalType
   name: string
+  jobTitle?: string | null
   email?: string | null
+  phone?: string | null
+  notes?: string | null
   active?: boolean
+  status?: $Enums.PrincipalStatus
 }
 
 export type PrincipalUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
@@ -4029,8 +8245,24 @@ export type PrincipalUncheckedUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
   memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
@@ -4059,8 +8291,12 @@ export type PrincipalUncheckedUpdateManyWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
   name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
 }
 
 
@@ -4069,6 +8305,17 @@ export type PrincipalUncheckedUpdateManyWithoutWorkspaceInput = {
  */
 
 export type PrincipalCountOutputType = {
+  organizationMemberships: number
+  departmentMemberships: number
+  teamMemberships: number
+  teamMemberMemberships: number
+  teamScopes: number
+  invitationPerson: number
+  requestedInvitations: number
+  approvedInvitations: number
+  rejectedInvitations: number
+  accessAuditActor: number
+  accessAuditTarget: number
   memberships: number
   assignments: number
   assignedBy: number
@@ -4093,6 +8340,17 @@ export type PrincipalCountOutputType = {
 }
 
 export type PrincipalCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  organizationMemberships?: boolean | PrincipalCountOutputTypeCountOrganizationMembershipsArgs
+  departmentMemberships?: boolean | PrincipalCountOutputTypeCountDepartmentMembershipsArgs
+  teamMemberships?: boolean | PrincipalCountOutputTypeCountTeamMembershipsArgs
+  teamMemberMemberships?: boolean | PrincipalCountOutputTypeCountTeamMemberMembershipsArgs
+  teamScopes?: boolean | PrincipalCountOutputTypeCountTeamScopesArgs
+  invitationPerson?: boolean | PrincipalCountOutputTypeCountInvitationPersonArgs
+  requestedInvitations?: boolean | PrincipalCountOutputTypeCountRequestedInvitationsArgs
+  approvedInvitations?: boolean | PrincipalCountOutputTypeCountApprovedInvitationsArgs
+  rejectedInvitations?: boolean | PrincipalCountOutputTypeCountRejectedInvitationsArgs
+  accessAuditActor?: boolean | PrincipalCountOutputTypeCountAccessAuditActorArgs
+  accessAuditTarget?: boolean | PrincipalCountOutputTypeCountAccessAuditTargetArgs
   memberships?: boolean | PrincipalCountOutputTypeCountMembershipsArgs
   assignments?: boolean | PrincipalCountOutputTypeCountAssignmentsArgs
   assignedBy?: boolean | PrincipalCountOutputTypeCountAssignedByArgs
@@ -4124,6 +8382,83 @@ export type PrincipalCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Ex
    * Select specific fields to fetch from the PrincipalCountOutputType
    */
   select?: Prisma.PrincipalCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountOrganizationMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.OrganizationMembershipWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountDepartmentMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.DepartmentMembershipWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountTeamMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TeamMembershipWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountTeamMemberMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TeamMembershipWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountTeamScopesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TeamScopeWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountInvitationPersonArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.InvitationWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountRequestedInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.InvitationWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountApprovedInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.InvitationWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountRejectedInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.InvitationWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountAccessAuditActorArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AccessAuditLogWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountAccessAuditTargetArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AccessAuditLogWhereInput
 }
 
 /**
@@ -4279,9 +8614,25 @@ export type PrincipalSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   workspaceId?: boolean
   type?: boolean
   name?: boolean
+  jobTitle?: boolean
   email?: boolean
+  phone?: boolean
+  notes?: boolean
   active?: boolean
+  status?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
+  userAccount?: boolean | Prisma.Principal$userAccountArgs<ExtArgs>
+  organizationMemberships?: boolean | Prisma.Principal$organizationMembershipsArgs<ExtArgs>
+  departmentMemberships?: boolean | Prisma.Principal$departmentMembershipsArgs<ExtArgs>
+  teamMemberships?: boolean | Prisma.Principal$teamMembershipsArgs<ExtArgs>
+  teamMemberMemberships?: boolean | Prisma.Principal$teamMemberMembershipsArgs<ExtArgs>
+  teamScopes?: boolean | Prisma.Principal$teamScopesArgs<ExtArgs>
+  invitationPerson?: boolean | Prisma.Principal$invitationPersonArgs<ExtArgs>
+  requestedInvitations?: boolean | Prisma.Principal$requestedInvitationsArgs<ExtArgs>
+  approvedInvitations?: boolean | Prisma.Principal$approvedInvitationsArgs<ExtArgs>
+  rejectedInvitations?: boolean | Prisma.Principal$rejectedInvitationsArgs<ExtArgs>
+  accessAuditActor?: boolean | Prisma.Principal$accessAuditActorArgs<ExtArgs>
+  accessAuditTarget?: boolean | Prisma.Principal$accessAuditTargetArgs<ExtArgs>
   memberships?: boolean | Prisma.Principal$membershipsArgs<ExtArgs>
   preferences?: boolean | Prisma.Principal$preferencesArgs<ExtArgs>
   assignments?: boolean | Prisma.Principal$assignmentsArgs<ExtArgs>
@@ -4312,8 +8663,12 @@ export type PrincipalSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   workspaceId?: boolean
   type?: boolean
   name?: boolean
+  jobTitle?: boolean
   email?: boolean
+  phone?: boolean
+  notes?: boolean
   active?: boolean
+  status?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["principal"]>
 
@@ -4322,8 +8677,12 @@ export type PrincipalSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   workspaceId?: boolean
   type?: boolean
   name?: boolean
+  jobTitle?: boolean
   email?: boolean
+  phone?: boolean
+  notes?: boolean
   active?: boolean
+  status?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["principal"]>
 
@@ -4332,13 +8691,29 @@ export type PrincipalSelectScalar = {
   workspaceId?: boolean
   type?: boolean
   name?: boolean
+  jobTitle?: boolean
   email?: boolean
+  phone?: boolean
+  notes?: boolean
   active?: boolean
+  status?: boolean
 }
 
-export type PrincipalOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "type" | "name" | "email" | "active", ExtArgs["result"]["principal"]>
+export type PrincipalOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "type" | "name" | "jobTitle" | "email" | "phone" | "notes" | "active" | "status", ExtArgs["result"]["principal"]>
 export type PrincipalInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
+  userAccount?: boolean | Prisma.Principal$userAccountArgs<ExtArgs>
+  organizationMemberships?: boolean | Prisma.Principal$organizationMembershipsArgs<ExtArgs>
+  departmentMemberships?: boolean | Prisma.Principal$departmentMembershipsArgs<ExtArgs>
+  teamMemberships?: boolean | Prisma.Principal$teamMembershipsArgs<ExtArgs>
+  teamMemberMemberships?: boolean | Prisma.Principal$teamMemberMembershipsArgs<ExtArgs>
+  teamScopes?: boolean | Prisma.Principal$teamScopesArgs<ExtArgs>
+  invitationPerson?: boolean | Prisma.Principal$invitationPersonArgs<ExtArgs>
+  requestedInvitations?: boolean | Prisma.Principal$requestedInvitationsArgs<ExtArgs>
+  approvedInvitations?: boolean | Prisma.Principal$approvedInvitationsArgs<ExtArgs>
+  rejectedInvitations?: boolean | Prisma.Principal$rejectedInvitationsArgs<ExtArgs>
+  accessAuditActor?: boolean | Prisma.Principal$accessAuditActorArgs<ExtArgs>
+  accessAuditTarget?: boolean | Prisma.Principal$accessAuditTargetArgs<ExtArgs>
   memberships?: boolean | Prisma.Principal$membershipsArgs<ExtArgs>
   preferences?: boolean | Prisma.Principal$preferencesArgs<ExtArgs>
   assignments?: boolean | Prisma.Principal$assignmentsArgs<ExtArgs>
@@ -4374,6 +8749,18 @@ export type $PrincipalPayload<ExtArgs extends runtime.Types.Extensions.InternalA
   name: "Principal"
   objects: {
     workspace: Prisma.$WorkspacePayload<ExtArgs>
+    userAccount: Prisma.$UserAccountPayload<ExtArgs> | null
+    organizationMemberships: Prisma.$OrganizationMembershipPayload<ExtArgs>[]
+    departmentMemberships: Prisma.$DepartmentMembershipPayload<ExtArgs>[]
+    teamMemberships: Prisma.$TeamMembershipPayload<ExtArgs>[]
+    teamMemberMemberships: Prisma.$TeamMembershipPayload<ExtArgs>[]
+    teamScopes: Prisma.$TeamScopePayload<ExtArgs>[]
+    invitationPerson: Prisma.$InvitationPayload<ExtArgs>[]
+    requestedInvitations: Prisma.$InvitationPayload<ExtArgs>[]
+    approvedInvitations: Prisma.$InvitationPayload<ExtArgs>[]
+    rejectedInvitations: Prisma.$InvitationPayload<ExtArgs>[]
+    accessAuditActor: Prisma.$AccessAuditLogPayload<ExtArgs>[]
+    accessAuditTarget: Prisma.$AccessAuditLogPayload<ExtArgs>[]
     memberships: Prisma.$PrincipalMembershipPayload<ExtArgs>[]
     preferences: Prisma.$PrincipalPreferencePayload<ExtArgs> | null
     assignments: Prisma.$TaskAssignmentPayload<ExtArgs>[]
@@ -4402,8 +8789,12 @@ export type $PrincipalPayload<ExtArgs extends runtime.Types.Extensions.InternalA
     workspaceId: string
     type: $Enums.PrincipalType
     name: string
+    jobTitle: string | null
     email: string | null
+    phone: string | null
+    notes: string | null
     active: boolean
+    status: $Enums.PrincipalStatus
   }, ExtArgs["result"]["principal"]>
   composites: {}
 }
@@ -4799,6 +9190,18 @@ readonly fields: PrincipalFieldRefs;
 export interface Prisma__PrincipalClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  userAccount<T extends Prisma.Principal$userAccountArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$userAccountArgs<ExtArgs>>): Prisma.Prisma__UserAccountClient<runtime.Types.Result.GetResult<Prisma.$UserAccountPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  organizationMemberships<T extends Prisma.Principal$organizationMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$organizationMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrganizationMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  departmentMemberships<T extends Prisma.Principal$departmentMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$departmentMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DepartmentMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  teamMemberships<T extends Prisma.Principal$teamMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$teamMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TeamMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  teamMemberMemberships<T extends Prisma.Principal$teamMemberMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$teamMemberMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TeamMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  teamScopes<T extends Prisma.Principal$teamScopesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$teamScopesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TeamScopePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  invitationPerson<T extends Prisma.Principal$invitationPersonArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$invitationPersonArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  requestedInvitations<T extends Prisma.Principal$requestedInvitationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$requestedInvitationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  approvedInvitations<T extends Prisma.Principal$approvedInvitationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$approvedInvitationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  rejectedInvitations<T extends Prisma.Principal$rejectedInvitationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$rejectedInvitationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  accessAuditActor<T extends Prisma.Principal$accessAuditActorArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$accessAuditActorArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AccessAuditLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  accessAuditTarget<T extends Prisma.Principal$accessAuditTargetArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$accessAuditTargetArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AccessAuditLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   memberships<T extends Prisma.Principal$membershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$membershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PrincipalMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   preferences<T extends Prisma.Principal$preferencesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$preferencesArgs<ExtArgs>>): Prisma.Prisma__PrincipalPreferenceClient<runtime.Types.Result.GetResult<Prisma.$PrincipalPreferencePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   assignments<T extends Prisma.Principal$assignmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$assignmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -4854,8 +9257,12 @@ export interface PrincipalFieldRefs {
   readonly workspaceId: Prisma.FieldRef<"Principal", 'String'>
   readonly type: Prisma.FieldRef<"Principal", 'PrincipalType'>
   readonly name: Prisma.FieldRef<"Principal", 'String'>
+  readonly jobTitle: Prisma.FieldRef<"Principal", 'String'>
   readonly email: Prisma.FieldRef<"Principal", 'String'>
+  readonly phone: Prisma.FieldRef<"Principal", 'String'>
+  readonly notes: Prisma.FieldRef<"Principal", 'String'>
   readonly active: Prisma.FieldRef<"Principal", 'Boolean'>
+  readonly status: Prisma.FieldRef<"Principal", 'PrincipalStatus'>
 }
     
 
@@ -5254,6 +9661,289 @@ export type PrincipalDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.Int
    * Limit how many Principals to delete.
    */
   limit?: number
+}
+
+/**
+ * Principal.userAccount
+ */
+export type Principal$userAccountArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the UserAccount
+   */
+  select?: Prisma.UserAccountSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the UserAccount
+   */
+  omit?: Prisma.UserAccountOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UserAccountInclude<ExtArgs> | null
+  where?: Prisma.UserAccountWhereInput
+}
+
+/**
+ * Principal.organizationMemberships
+ */
+export type Principal$organizationMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the OrganizationMembership
+   */
+  select?: Prisma.OrganizationMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the OrganizationMembership
+   */
+  omit?: Prisma.OrganizationMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.OrganizationMembershipInclude<ExtArgs> | null
+  where?: Prisma.OrganizationMembershipWhereInput
+  orderBy?: Prisma.OrganizationMembershipOrderByWithRelationInput | Prisma.OrganizationMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.OrganizationMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.OrganizationMembershipScalarFieldEnum | Prisma.OrganizationMembershipScalarFieldEnum[]
+}
+
+/**
+ * Principal.departmentMemberships
+ */
+export type Principal$departmentMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the DepartmentMembership
+   */
+  select?: Prisma.DepartmentMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the DepartmentMembership
+   */
+  omit?: Prisma.DepartmentMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.DepartmentMembershipInclude<ExtArgs> | null
+  where?: Prisma.DepartmentMembershipWhereInput
+  orderBy?: Prisma.DepartmentMembershipOrderByWithRelationInput | Prisma.DepartmentMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.DepartmentMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.DepartmentMembershipScalarFieldEnum | Prisma.DepartmentMembershipScalarFieldEnum[]
+}
+
+/**
+ * Principal.teamMemberships
+ */
+export type Principal$teamMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the TeamMembership
+   */
+  select?: Prisma.TeamMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the TeamMembership
+   */
+  omit?: Prisma.TeamMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TeamMembershipInclude<ExtArgs> | null
+  where?: Prisma.TeamMembershipWhereInput
+  orderBy?: Prisma.TeamMembershipOrderByWithRelationInput | Prisma.TeamMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.TeamMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TeamMembershipScalarFieldEnum | Prisma.TeamMembershipScalarFieldEnum[]
+}
+
+/**
+ * Principal.teamMemberMemberships
+ */
+export type Principal$teamMemberMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the TeamMembership
+   */
+  select?: Prisma.TeamMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the TeamMembership
+   */
+  omit?: Prisma.TeamMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TeamMembershipInclude<ExtArgs> | null
+  where?: Prisma.TeamMembershipWhereInput
+  orderBy?: Prisma.TeamMembershipOrderByWithRelationInput | Prisma.TeamMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.TeamMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TeamMembershipScalarFieldEnum | Prisma.TeamMembershipScalarFieldEnum[]
+}
+
+/**
+ * Principal.teamScopes
+ */
+export type Principal$teamScopesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the TeamScope
+   */
+  select?: Prisma.TeamScopeSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the TeamScope
+   */
+  omit?: Prisma.TeamScopeOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TeamScopeInclude<ExtArgs> | null
+  where?: Prisma.TeamScopeWhereInput
+  orderBy?: Prisma.TeamScopeOrderByWithRelationInput | Prisma.TeamScopeOrderByWithRelationInput[]
+  cursor?: Prisma.TeamScopeWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TeamScopeScalarFieldEnum | Prisma.TeamScopeScalarFieldEnum[]
+}
+
+/**
+ * Principal.invitationPerson
+ */
+export type Principal$invitationPersonArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+  orderBy?: Prisma.InvitationOrderByWithRelationInput | Prisma.InvitationOrderByWithRelationInput[]
+  cursor?: Prisma.InvitationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.InvitationScalarFieldEnum | Prisma.InvitationScalarFieldEnum[]
+}
+
+/**
+ * Principal.requestedInvitations
+ */
+export type Principal$requestedInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+  orderBy?: Prisma.InvitationOrderByWithRelationInput | Prisma.InvitationOrderByWithRelationInput[]
+  cursor?: Prisma.InvitationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.InvitationScalarFieldEnum | Prisma.InvitationScalarFieldEnum[]
+}
+
+/**
+ * Principal.approvedInvitations
+ */
+export type Principal$approvedInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+  orderBy?: Prisma.InvitationOrderByWithRelationInput | Prisma.InvitationOrderByWithRelationInput[]
+  cursor?: Prisma.InvitationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.InvitationScalarFieldEnum | Prisma.InvitationScalarFieldEnum[]
+}
+
+/**
+ * Principal.rejectedInvitations
+ */
+export type Principal$rejectedInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+  orderBy?: Prisma.InvitationOrderByWithRelationInput | Prisma.InvitationOrderByWithRelationInput[]
+  cursor?: Prisma.InvitationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.InvitationScalarFieldEnum | Prisma.InvitationScalarFieldEnum[]
+}
+
+/**
+ * Principal.accessAuditActor
+ */
+export type Principal$accessAuditActorArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AccessAuditLog
+   */
+  select?: Prisma.AccessAuditLogSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AccessAuditLog
+   */
+  omit?: Prisma.AccessAuditLogOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AccessAuditLogInclude<ExtArgs> | null
+  where?: Prisma.AccessAuditLogWhereInput
+  orderBy?: Prisma.AccessAuditLogOrderByWithRelationInput | Prisma.AccessAuditLogOrderByWithRelationInput[]
+  cursor?: Prisma.AccessAuditLogWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AccessAuditLogScalarFieldEnum | Prisma.AccessAuditLogScalarFieldEnum[]
+}
+
+/**
+ * Principal.accessAuditTarget
+ */
+export type Principal$accessAuditTargetArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AccessAuditLog
+   */
+  select?: Prisma.AccessAuditLogSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AccessAuditLog
+   */
+  omit?: Prisma.AccessAuditLogOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AccessAuditLogInclude<ExtArgs> | null
+  where?: Prisma.AccessAuditLogWhereInput
+  orderBy?: Prisma.AccessAuditLogOrderByWithRelationInput | Prisma.AccessAuditLogOrderByWithRelationInput[]
+  cursor?: Prisma.AccessAuditLogWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AccessAuditLogScalarFieldEnum | Prisma.AccessAuditLogScalarFieldEnum[]
 }
 
 /**

@@ -62,6 +62,7 @@ export type PrincipalPreferenceCountAggregateOutputType = {
   timezone: number
   dateFormat: number
   theme: number
+  taskListColumns: number
   storageVersion: number
   createdAt: number
   updatedAt: number
@@ -105,6 +106,7 @@ export type PrincipalPreferenceCountAggregateInputType = {
   timezone?: true
   dateFormat?: true
   theme?: true
+  taskListColumns?: true
   storageVersion?: true
   createdAt?: true
   updatedAt?: true
@@ -203,6 +205,7 @@ export type PrincipalPreferenceGroupByOutputType = {
   timezone: string
   dateFormat: string
   theme: string
+  taskListColumns: runtime.JsonValue | null
   storageVersion: number
   createdAt: Date
   updatedAt: Date
@@ -237,6 +240,7 @@ export type PrincipalPreferenceWhereInput = {
   timezone?: Prisma.StringFilter<"PrincipalPreference"> | string
   dateFormat?: Prisma.StringFilter<"PrincipalPreference"> | string
   theme?: Prisma.StringFilter<"PrincipalPreference"> | string
+  taskListColumns?: Prisma.JsonNullableFilter<"PrincipalPreference">
   storageVersion?: Prisma.IntFilter<"PrincipalPreference"> | number
   createdAt?: Prisma.DateTimeFilter<"PrincipalPreference"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PrincipalPreference"> | Date | string
@@ -250,6 +254,7 @@ export type PrincipalPreferenceOrderByWithRelationInput = {
   timezone?: Prisma.SortOrder
   dateFormat?: Prisma.SortOrder
   theme?: Prisma.SortOrder
+  taskListColumns?: Prisma.SortOrderInput | Prisma.SortOrder
   storageVersion?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -266,6 +271,7 @@ export type PrincipalPreferenceWhereUniqueInput = Prisma.AtLeast<{
   timezone?: Prisma.StringFilter<"PrincipalPreference"> | string
   dateFormat?: Prisma.StringFilter<"PrincipalPreference"> | string
   theme?: Prisma.StringFilter<"PrincipalPreference"> | string
+  taskListColumns?: Prisma.JsonNullableFilter<"PrincipalPreference">
   storageVersion?: Prisma.IntFilter<"PrincipalPreference"> | number
   createdAt?: Prisma.DateTimeFilter<"PrincipalPreference"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PrincipalPreference"> | Date | string
@@ -279,6 +285,7 @@ export type PrincipalPreferenceOrderByWithAggregationInput = {
   timezone?: Prisma.SortOrder
   dateFormat?: Prisma.SortOrder
   theme?: Prisma.SortOrder
+  taskListColumns?: Prisma.SortOrderInput | Prisma.SortOrder
   storageVersion?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -298,6 +305,7 @@ export type PrincipalPreferenceScalarWhereWithAggregatesInput = {
   timezone?: Prisma.StringWithAggregatesFilter<"PrincipalPreference"> | string
   dateFormat?: Prisma.StringWithAggregatesFilter<"PrincipalPreference"> | string
   theme?: Prisma.StringWithAggregatesFilter<"PrincipalPreference"> | string
+  taskListColumns?: Prisma.JsonNullableWithAggregatesFilter<"PrincipalPreference">
   storageVersion?: Prisma.IntWithAggregatesFilter<"PrincipalPreference"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"PrincipalPreference"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"PrincipalPreference"> | Date | string
@@ -307,6 +315,7 @@ export type PrincipalPreferenceCreateInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -320,6 +329,7 @@ export type PrincipalPreferenceUncheckedCreateInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -329,6 +339,7 @@ export type PrincipalPreferenceUpdateInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -342,6 +353,7 @@ export type PrincipalPreferenceUncheckedUpdateInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -353,6 +365,7 @@ export type PrincipalPreferenceCreateManyInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -362,6 +375,7 @@ export type PrincipalPreferenceUpdateManyMutationInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -373,6 +387,7 @@ export type PrincipalPreferenceUncheckedUpdateManyInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -399,6 +414,7 @@ export type PrincipalPreferenceCountOrderByAggregateInput = {
   timezone?: Prisma.SortOrder
   dateFormat?: Prisma.SortOrder
   theme?: Prisma.SortOrder
+  taskListColumns?: Prisma.SortOrder
   storageVersion?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -512,6 +528,7 @@ export type PrincipalPreferenceCreateWithoutWorkspaceInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -523,6 +540,7 @@ export type PrincipalPreferenceUncheckedCreateWithoutWorkspaceInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -563,6 +581,7 @@ export type PrincipalPreferenceScalarWhereInput = {
   timezone?: Prisma.StringFilter<"PrincipalPreference"> | string
   dateFormat?: Prisma.StringFilter<"PrincipalPreference"> | string
   theme?: Prisma.StringFilter<"PrincipalPreference"> | string
+  taskListColumns?: Prisma.JsonNullableFilter<"PrincipalPreference">
   storageVersion?: Prisma.IntFilter<"PrincipalPreference"> | number
   createdAt?: Prisma.DateTimeFilter<"PrincipalPreference"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PrincipalPreference"> | Date | string
@@ -572,6 +591,7 @@ export type PrincipalPreferenceCreateWithoutPrincipalInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -583,6 +603,7 @@ export type PrincipalPreferenceUncheckedCreateWithoutPrincipalInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -608,6 +629,7 @@ export type PrincipalPreferenceUpdateWithoutPrincipalInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -619,6 +641,7 @@ export type PrincipalPreferenceUncheckedUpdateWithoutPrincipalInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -629,6 +652,7 @@ export type PrincipalPreferenceCreateManyWorkspaceInput = {
   timezone?: string
   dateFormat?: string
   theme?: string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: number
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -638,6 +662,7 @@ export type PrincipalPreferenceUpdateWithoutWorkspaceInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -649,6 +674,7 @@ export type PrincipalPreferenceUncheckedUpdateWithoutWorkspaceInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -659,6 +685,7 @@ export type PrincipalPreferenceUncheckedUpdateManyWithoutWorkspaceInput = {
   timezone?: Prisma.StringFieldUpdateOperationsInput | string
   dateFormat?: Prisma.StringFieldUpdateOperationsInput | string
   theme?: Prisma.StringFieldUpdateOperationsInput | string
+  taskListColumns?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   storageVersion?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -672,6 +699,7 @@ export type PrincipalPreferenceSelect<ExtArgs extends runtime.Types.Extensions.I
   timezone?: boolean
   dateFormat?: boolean
   theme?: boolean
+  taskListColumns?: boolean
   storageVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -685,6 +713,7 @@ export type PrincipalPreferenceSelectCreateManyAndReturn<ExtArgs extends runtime
   timezone?: boolean
   dateFormat?: boolean
   theme?: boolean
+  taskListColumns?: boolean
   storageVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -698,6 +727,7 @@ export type PrincipalPreferenceSelectUpdateManyAndReturn<ExtArgs extends runtime
   timezone?: boolean
   dateFormat?: boolean
   theme?: boolean
+  taskListColumns?: boolean
   storageVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -711,12 +741,13 @@ export type PrincipalPreferenceSelectScalar = {
   timezone?: boolean
   dateFormat?: boolean
   theme?: boolean
+  taskListColumns?: boolean
   storageVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type PrincipalPreferenceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"principalId" | "workspaceId" | "timezone" | "dateFormat" | "theme" | "storageVersion" | "createdAt" | "updatedAt", ExtArgs["result"]["principalPreference"]>
+export type PrincipalPreferenceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"principalId" | "workspaceId" | "timezone" | "dateFormat" | "theme" | "taskListColumns" | "storageVersion" | "createdAt" | "updatedAt", ExtArgs["result"]["principalPreference"]>
 export type PrincipalPreferenceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   principal?: boolean | Prisma.PrincipalDefaultArgs<ExtArgs>
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -742,6 +773,7 @@ export type $PrincipalPreferencePayload<ExtArgs extends runtime.Types.Extensions
     timezone: string
     dateFormat: string
     theme: string
+    taskListColumns: runtime.JsonValue | null
     storageVersion: number
     createdAt: Date
     updatedAt: Date
@@ -1175,6 +1207,7 @@ export interface PrincipalPreferenceFieldRefs {
   readonly timezone: Prisma.FieldRef<"PrincipalPreference", 'String'>
   readonly dateFormat: Prisma.FieldRef<"PrincipalPreference", 'String'>
   readonly theme: Prisma.FieldRef<"PrincipalPreference", 'String'>
+  readonly taskListColumns: Prisma.FieldRef<"PrincipalPreference", 'Json'>
   readonly storageVersion: Prisma.FieldRef<"PrincipalPreference", 'Int'>
   readonly createdAt: Prisma.FieldRef<"PrincipalPreference", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"PrincipalPreference", 'DateTime'>

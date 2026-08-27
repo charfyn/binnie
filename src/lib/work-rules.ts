@@ -105,7 +105,12 @@ export type SearchableTask = {
   assigneeIds?: string[];
 };
 
-function dateKey(date: Date) {
+/**
+ * Date-only task fields are calendar values, not instants. Callers first
+ * normalize "now" to their workspace day, then use this key everywhere a
+ * planner date is compared or serialized.
+ */
+export function calendarDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
@@ -117,6 +122,53 @@ export type EffectiveDateTask = {
   isToday?: boolean;
 };
 
+/** The smallest client-safe shape needed to derive a person's planner work. */
+export type PersonalPlannerTask = EffectiveDateTask & {
+  id: string;
+  status?: WorkStatus;
+  archived?: boolean;
+  assigneeIds?: string[];
+  nextActionPrincipalId?: string;
+  createdByPrincipalId?: string;
+  reviewerPrincipalId?: string;
+};
+
+/**
+ * Personal work is intentionally narrower than a person's authorized task
+ * visibility. Owners and managers can inspect more work elsewhere, but their
+ * Today and This Week planners contain only direct/team work, work they own,
+ * or work explicitly sent to them for review/next action.
+ */
+export function isPersonalPlannerTask(task: PersonalPlannerTask, actorId: string, actorTeamIds: string[] = []) {
+  if (!actorId) return false;
+  const assigneeIds = task.assigneeIds || [];
+  return assigneeIds.includes(actorId)
+    || assigneeIds.some((id) => actorTeamIds.includes(id))
+    || task.nextActionPrincipalId === actorId
+    // An unassigned capture remains with its creator. Once someone else is
+    // explicitly assigned, creating/delegating it does not make it personal
+    // work for the creator anymore.
+    || (assigneeIds.length === 0 && task.createdByPrincipalId === actorId)
+    || task.reviewerPrincipalId === actorId;
+}
+
+/** Today's open personal work for one canonical calendar date. */
+export function getPersonalPlannerTasksForDate<T extends PersonalPlannerTask>(tasks: T[], actorId: string, date: string, actorTeamIds: string[] = []) {
+  return tasks.filter((task) => !task.archived && task.status !== "done" && isPersonalPlannerTask(task, actorId, actorTeamIds) && getTaskEffectiveDate(task) === date);
+}
+
+/**
+ * This Week is the same personal universe as Today, expanded to a date range.
+ * Completed work stays in the weekly record; Today intentionally excludes it
+ * from remaining workload.
+ */
+export function getPersonalPlannerTasksForWeek<T extends PersonalPlannerTask>(tasks: T[], actorId: string, startDate: string, endDate: string, actorTeamIds: string[] = []) {
+  return tasks.filter((task) => {
+    const effectiveDate = getTaskEffectiveDate(task);
+    return Boolean(!task.archived && effectiveDate && effectiveDate >= startDate && effectiveDate <= endDate && isPersonalPlannerTask(task, actorId, actorTeamIds));
+  });
+}
+
 function legacyDeadlineDate(deadline: string | undefined, today: Date) {
   const match = deadline?.trim().match(/^(?:[a-z]+,?\s+)?(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{4}))?$/i);
   if (!match) return undefined;
@@ -125,7 +177,7 @@ function legacyDeadlineDate(deadline: string | undefined, today: Date) {
   const day = Number(match[1]);
   const year = Number(match[3] || today.getUTCFullYear());
   const date = new Date(Date.UTC(year, month, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day ? dateKey(date) : undefined;
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day ? calendarDateKey(date) : undefined;
 }
 
 /**
@@ -138,9 +190,9 @@ export function getTaskEffectiveDate(task: EffectiveDateTask, today = new Date()
   if (task.startDate) return task.startDate;
   if (task.targetDate) return task.targetDate;
   if (task.deadlineDate) return task.deadlineDate;
-  if (task.isToday || task.deadline === "Today") return dateKey(today);
-  if (task.deadline === "Tomorrow") { const tomorrow = new Date(today); tomorrow.setUTCDate(today.getUTCDate() + 1); return dateKey(tomorrow); }
-  if (task.deadline === "Yesterday") { const yesterday = new Date(today); yesterday.setUTCDate(today.getUTCDate() - 1); return dateKey(yesterday); }
+  if (task.isToday || task.deadline === "Today") return calendarDateKey(today);
+  if (task.deadline === "Tomorrow") { const tomorrow = new Date(today); tomorrow.setUTCDate(today.getUTCDate() + 1); return calendarDateKey(tomorrow); }
+  if (task.deadline === "Yesterday") { const yesterday = new Date(today); yesterday.setUTCDate(today.getUTCDate() - 1); return calendarDateKey(yesterday); }
   return legacyDeadlineDate(task.deadline, today);
 }
 
@@ -180,17 +232,17 @@ export function parseNaturalTaskSearch(query: string, context: NaturalSearchCont
 
   let dateRange: NaturalSearchQuery["dateRange"];
   if (/\btoday\b/.test(source)) {
-    const today = dateKey(now);
+    const today = calendarDateKey(now);
     dateRange = { start: today, end: today };
   } else if (/\bthis week\b/.test(source)) {
     const start = startOfWeek(now);
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 6);
-    dateRange = { start: dateKey(start), end: dateKey(end) };
+    dateRange = { start: calendarDateKey(start), end: calendarDateKey(end) };
   } else if (/\bthis month\b/.test(source)) {
     dateRange = {
-      start: dateKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))),
-      end: dateKey(endOfMonth(now)),
+      start: calendarDateKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))),
+      end: calendarDateKey(endOfMonth(now)),
     };
   }
 
@@ -336,7 +388,7 @@ export type WorkNudgeCandidate = {
  * the next move meaningful.
  */
 export function deriveWorkNudges(tasks: NudgeTask[], now = new Date()): WorkNudgeCandidate[] {
-  const today = dateKey(now);
+  const today = calendarDateKey(now);
   const candidates: WorkNudgeCandidate[] = [];
   tasks.filter(task => task.status !== "done").forEach(task => {
     if (task.isOverdue) candidates.push({ dedupKey: `overdue:${task.id}`, taskId: task.id, kind: "overdue", title: task.title, detail: "The deadline has passed. Decide the next move or reset it.", priority: 100 });
