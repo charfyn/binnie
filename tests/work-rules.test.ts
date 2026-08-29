@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getDelegatedTasks, getOrganizationActiveTasks, getOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks, getOrganizationTasks, getOrganizationTodayTasks, getOrganizationWaitingTasks, getOrganizationWeekTasks, getOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getProjectTasks, getReviewTasks, getTaskPlannerDate, getTodayTasks, getWaitingWork, getWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getAttentionWork, getDelegatedTasks, getOrganizationActiveTasks, getOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks, getOrganizationTasks, getOrganizationTodayTasks, getOrganizationWaitingTasks, getOrganizationWeekTasks, getOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getProjectTasks, getReviewTasks, getTaskPlannerDate, getTodayTasks, getWaitingWork, getWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
 
 test("a completion dependency permits parallel work but not final completion", () => {
   assert.equal(taskTransitionBlockReason({ targetStatus: "in_progress", unresolvedStartBlockers: 0, unresolvedCompletionBlockers: 1 }), undefined);
@@ -212,6 +212,24 @@ test("Waiting separates explicit next actions from a bare waiting status", () =>
   assert.deepEqual(waiting.external.map(task => task.id), ["external"]);
   assert.deepEqual(waiting.blocked.map(task => task.id), ["blocked"]);
   assert.equal(waiting.all.some(task => task.id === "unknown"), false, "a missing next action is never silently attributed to the Owner");
+});
+
+test("Attention uses one canonical task set and does not double-count overlapping work", () => {
+  const tasks = [
+    { id: "overlapping", status: "review" as const, reviewerPrincipalId: "person-charlotte", followUpDate: "2026-08-28", deadlineDate: "2026-08-27", assigneeIds: ["person-bu-desti"] },
+    { id: "waiting-on-me", status: "waiting" as const, nextActionKind: "principal" as const, nextActionPrincipalId: "person-charlotte", assigneeIds: ["team-finance"] },
+    { id: "blocked", status: "blocked" as const, assigneeIds: ["person-charlotte"] },
+    { id: "waiting-on-other", status: "waiting" as const, nextActionKind: "principal" as const, nextActionPrincipalId: "person-bu-desti", assigneeIds: ["person-charlotte"] },
+    { id: "delegated", status: "ready" as const, assigneeIds: ["person-bu-desti"], assignments: [{ principalId: "person-bu-desti", assignedByPrincipalId: "person-charlotte" }] },
+  ];
+  const attention = getAttentionWork(tasks, "person-charlotte", "2026-08-28");
+  assert.deepEqual(attention.allNow.map(task => task.id), ["overlapping", "waiting-on-me", "blocked"]);
+  assert.deepEqual(attention.reasonsByTaskId.get("overlapping"), ["follow_up", "review", "overdue"]);
+  assert.deepEqual(attention.followUp.map(task => task.id), ["overlapping"]);
+  assert.deepEqual(attention.review.map(task => task.id), ["overlapping"]);
+  assert.deepEqual(attention.overdue.map(task => task.id), ["overlapping"]);
+  assert.equal(attention.allNow.some(task => task.id === "waiting-on-other"), false, "passive waiting work remains visible in Waiting without inflating the current-user Attention badge");
+  assert.equal(attention.allNow.some(task => task.id === "delegated"), false, "delegated tracking remains available without treating delegation as the delegator's immediate action");
 });
 
 test("review, planner, and overdue slices retain the same canonical task ID", () => {

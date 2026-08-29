@@ -238,6 +238,53 @@ export function getFollowUpTasks<T extends WorkQueueTask>(tasks: T[], personId: 
   );
 }
 
+/**
+ * Attention is a navigation lens, never another work queue. The category
+ * lists retain their established meanings, while `allNow` is deliberately
+ * narrower: it contains the distinct task records that need this person's
+ * attention right now. Passive delegated and waiting-on-others work stays in
+ * its own tab until it has a real due signal.
+ */
+export type AttentionReason = "follow_up" | "waiting_on_me" | "blocked" | "review" | "overdue";
+
+export type AttentionWork<T> = {
+  allNow: T[];
+  reasonsByTaskId: Map<string, AttentionReason[]>;
+  followUp: T[];
+  waiting: {
+    waitingOnOthers: T[];
+    waitingOnMe: T[];
+    blocked: T[];
+    external: T[];
+    all: T[];
+  };
+  delegated: T[];
+  review: T[];
+  overdue: T[];
+};
+
+export function getAttentionWork<T extends WorkQueueTask>(tasks: T[], personId: string, date: string): AttentionWork<T> {
+  const followUp = getFollowUpTasks(tasks, personId, date);
+  const waiting = getWaitingWork(tasks, personId);
+  const delegated = getDelegatedTasks(tasks, personId);
+  const review = getReviewTasks(tasks, personId);
+  const overdue = getOverdueTasks(tasks, date).filter((task) => isTaskTrackedByPerson(task, personId));
+  const reasonsByTaskId = new Map<string, AttentionReason[]>();
+  const add = (task: T, reason: AttentionReason) => {
+    const reasons = reasonsByTaskId.get(task.id) || [];
+    if (!reasons.includes(reason)) reasons.push(reason);
+    reasonsByTaskId.set(task.id, reasons);
+  };
+  followUp.forEach((task) => add(task, "follow_up"));
+  waiting.waitingOnMe.forEach((task) => add(task, "waiting_on_me"));
+  waiting.blocked.forEach((task) => add(task, "blocked"));
+  review.forEach((task) => add(task, "review"));
+  overdue.forEach((task) => add(task, "overdue"));
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const allNow = Array.from(reasonsByTaskId.keys()).map((id) => byId.get(id)).filter((task): task is T => Boolean(task));
+  return { allNow, reasonsByTaskId, followUp, waiting, delegated, review, overdue };
+}
+
 /** Review work is only actionable for the named reviewer or explicit next actor. */
 export function getReviewTasks<T extends WorkQueueTask>(tasks: T[], personId: string) {
   return tasks.filter((task) =>

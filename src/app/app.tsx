@@ -59,7 +59,8 @@ import {
 import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, TaskScopeResultDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
 import { getOrganizationColorStyles, ORGANIZATION_COLOR_KEYS, ORGANIZATION_COLOR_STYLES, type OrganizationColorKey } from "@/lib/organization-colors";
 import { DEFAULT_TASK_LIST_COLUMNS, TASK_LIST_COLUMNS, type TaskListColumnId } from "@/lib/task-list";
-import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getDelegatedTasks as getCanonicalDelegatedTasks, getOrganizationActiveTasks as getCanonicalOrganizationActiveTasks, getOrganizationAreaTasks as getCanonicalOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks as getCanonicalOrganizationRevisitTasks, getOrganizationTasks as getCanonicalOrganizationTasks, getOrganizationTodayTasks as getCanonicalOrganizationTodayTasks, getOrganizationWaitingTasks as getCanonicalOrganizationWaitingTasks, getOrganizationWeekTasks as getCanonicalOrganizationWeekTasks, getOverdueTasks as getCanonicalOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getReviewTasks as getCanonicalReviewTasks, getTaskPlannerDate as getCanonicalTaskPlannerDate, getTodayTasks as getCanonicalTodayTasks, getWaitingWork as getCanonicalWaitingWork, getWeekTasks as getCanonicalWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import { getPrimarySidebarView } from "@/lib/primary-navigation";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getAttentionWork as getCanonicalAttentionWork, getDelegatedTasks as getCanonicalDelegatedTasks, getOrganizationActiveTasks as getCanonicalOrganizationActiveTasks, getOrganizationAreaTasks as getCanonicalOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks as getCanonicalOrganizationRevisitTasks, getOrganizationTasks as getCanonicalOrganizationTasks, getOrganizationTodayTasks as getCanonicalOrganizationTodayTasks, getOrganizationWaitingTasks as getCanonicalOrganizationWaitingTasks, getOrganizationWeekTasks as getCanonicalOrganizationWeekTasks, getOverdueTasks as getCanonicalOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getReviewTasks as getCanonicalReviewTasks, getTaskPlannerDate as getCanonicalTaskPlannerDate, getTodayTasks as getCanonicalTodayTasks, getWaitingWork as getCanonicalWaitingWork, getWeekTasks as getCanonicalWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
 import { authClient } from "@/lib/auth-client";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
@@ -124,7 +125,11 @@ type WorkspaceTheme = "soft" | "clear" | "dark";
 type NavView =
   | "home" | "today" | "this-week" | "inbox" | "delegated"
   | "waiting" | "review" | "overdue" | "organizations" | "projects" | "search"
-  | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup" | "workload" | "templates";
+  | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup" | "workload" | "templates" | "attention";
+type AttentionTab = "all" | "followup" | "waiting" | "delegated" | "review" | "overdue";
+type AttentionReason = "follow_up" | "waiting_on_me" | "blocked" | "review" | "overdue";
+type PeopleHubTab = "people" | "teams" | "workload";
+type ProjectsHubMode = "projects" | "templates";
 
 type ResourceType = "website" | "sheet" | "figma" | "github" | "drive" | "doc" | "dashboard" | "notion" | "other";
 interface TaskLink { label: string; url: string; type: ResourceType; description?: string }
@@ -841,6 +846,25 @@ function getOverdueTasks(tasks = TASKS) {
   return getCanonicalOverdueTasks(tasks, isoDate(getWorkspaceCalendarDate()));
 }
 
+function isFollowUpVisible(taskId: string, today: string) {
+  const state = CANONICAL_NUDGE_STATES.find(item => item.dedupKey === `follow-up:${taskId}`);
+  if (!state) return true;
+  if (state.disposition === "dismissed") return false;
+  return !state.snoozedUntil || state.snoozedUntil <= today;
+}
+
+function getAttentionWork(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const today = isoDate(getWorkspaceCalendarDate());
+  const source = getCanonicalAttentionWork(tasks, currentUserId, today);
+  const followUp = source.followUp.filter(task => isFollowUpVisible(task.id, today));
+  const reasonsByTaskId = new Map(Array.from(source.reasonsByTaskId.entries()).map(([taskId, reasons]) => [
+    taskId,
+    reasons.filter(reason => reason !== "follow_up" || isFollowUpVisible(taskId, today)),
+  ] as const));
+  const allNow = source.allNow.filter(task => (reasonsByTaskId.get(task.id) || []).length > 0);
+  return { ...source, today, followUp, reasonsByTaskId, allNow };
+}
+
 function getFollowUpNudgeCandidates(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
   const today = isoDate(getWorkspaceCalendarDate());
   const todayMs = Date.parse(`${today}T00:00:00.000Z`);
@@ -1126,10 +1150,11 @@ function BackButton({ label, onClick }: { label: string; onClick: () => void }) 
 
 // ─── TASK CARD ────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, onClick, compact = false }: { task: Task; onClick: () => void; compact?: boolean }) {
+function TaskCard({ task, onClick, compact = false, attentionReasons = [] }: { task: Task; onClick: () => void; compact?: boolean; attentionReasons?: AttentionReason[] }) {
   const isMyAction = task.nextActionBy === "me";
   const assignees = getTaskAssignees(task);
   const assigneeNames = taskAssigneeNames(task);
+  const hasAttentionReason = (reason: AttentionReason) => attentionReasons.includes(reason);
   return (
     <button onClick={onClick}
       className={cn(
@@ -1144,12 +1169,15 @@ function TaskCard({ task, onClick, compact = false }: { task: Task; onClick: () 
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex-shrink-0"><PriorityDot priority={task.priority} /></div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <p className={cn("text-sm font-medium leading-snug text-foreground", compact && "text-[13px]")}>{task.title}</p>
-            {task.isOverdue && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Past target</span>}
-            {task.status === "blocked" && <span className="flex shrink-0 items-center gap-1 rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue"><GitBranch className="h-3 w-3" />Blocked</span>}
-            {task.status === "review" && <span className="flex-shrink-0 rounded-full bg-review/10 px-2 py-1 text-[10px] font-medium text-review">Ready to review</span>}
+          <div className="flex flex-wrap items-start gap-1.5">
+            <p className={cn("min-w-[12rem] flex-1 text-sm font-medium leading-snug text-foreground", compact && "text-[13px]")}>{task.title}</p>
+            <div className="ml-auto flex flex-wrap justify-end gap-1.5">
+              {task.isOverdue && !hasAttentionReason("overdue") && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Overdue</span>}
+              {task.status === "blocked" && !hasAttentionReason("blocked") && <span className="flex shrink-0 items-center gap-1 rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue"><GitBranch className="h-3 w-3" />Blocked</span>}
+              {task.status === "review" && !hasAttentionReason("review") && <span className="flex-shrink-0 rounded-full bg-review/10 px-2 py-1 text-[10px] font-medium text-review">Ready to review</span>}
+            </div>
           </div>
+          {attentionReasons.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{attentionReasons.map(reason => <span key={reason} className={cn("rounded-full px-2 py-1 text-[10px] font-medium", ATTENTION_REASON_META[reason].className)}>{ATTENTION_REASON_META[reason].label}</span>)}</div>}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <OrgBadge org={task.org} />
             <span className="text-muted-foreground text-[11px]">·</span>
@@ -3301,7 +3329,7 @@ function InboxView({ projectContext }: { projectContext?: ProjectDTO }) {
 
 // ─── DELEGATED VIEW ───────────────────────────────────────────────────────────
 
-function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPrincipalClick: (principal: DirectoryPerson) => void }) {
+function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick, embedded = false }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPrincipalClick: (principal: DirectoryPerson) => void; embedded?: boolean }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const delegated = getDelegatedTasks(TASKS, currentUserId);
   const byPerson: Record<string, Task[]> = {};
@@ -3313,11 +3341,11 @@ function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick }: { onTaskCl
 
   return (
     <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-8">
+      {!embedded && <div className="mb-8">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Delegated</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Delegated Work</h1>
         <p className="text-sm text-muted-foreground mt-1">{delegated.length} tasks across {Object.keys(byPerson).length} recipients</p>
-      </div>
+      </div>}
       <div className="space-y-6">
         {Object.entries(byPerson).map(([person, tasks]) => {
           const color = getPersonColor(person);
@@ -3367,7 +3395,7 @@ function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick }: { onTaskCl
 
 // ─── NEEDS MY REVIEW VIEW ─────────────────────────────────────────────────────
 
-function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function ReviewView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
   const [, setRevision] = useState(0);
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const reviewTasks = getReviewTasks(TASKS, currentUserId);
@@ -3397,11 +3425,11 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   }
   return (
     <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-8">
+      {!embedded && <div className="mb-8">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Review Queue</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Needs My Review</h1>
         <p className="text-sm text-muted-foreground mt-1">{reviewTasks.length} submissions waiting for your response</p>
-      </div>
+      </div>}
       <div className="space-y-4">
         {reviewTasks.map(task => {
           const submitActivity = task.activity?.find(a => a.type === "submitted");
@@ -3457,7 +3485,7 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── WAITING VIEW ─────────────────────────────────────────────────────────────
 
-function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function WaitingView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [tab, setTab] = useState<"others" | "me" | "blocked" | "external">("others");
   const waiting = getWaitingWork(TASKS, currentUserId);
@@ -3470,10 +3498,10 @@ function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const current = tabs.find(t => t.id === tab)!;
   return (
     <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-6">
+      {!embedded && <div className="mb-6">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Status Board</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Waiting</h1>
-      </div>
+      </div>}
       <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/45 p-1">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -3538,15 +3566,15 @@ function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── OVERDUE VIEW ─────────────────────────────────────────────────────────────
 
-function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function OverdueView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
   const overdue = getOverdueTasks(TASKS);
   return (
     <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
-      <div className="mb-8">
+      {!embedded && <div className="mb-8">
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-overdue">A few dates to revisit</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Overdue</h1>
         <p className="text-sm text-muted-foreground mt-1">{overdue.length} tasks past their deadline</p>
-      </div>
+      </div>}
       <div className="space-y-2">
         {overdue.map(t => <TaskCard key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
         {overdue.length === 0 && (
@@ -3558,6 +3586,43 @@ function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       </div>
     </div>
   );
+}
+
+const ATTENTION_REASON_META: Record<AttentionReason, { label: string; className: string }> = {
+  follow_up: { label: "Follow up due", className: "bg-info/10 text-info" },
+  waiting_on_me: { label: "Waiting on you", className: "bg-primary/10 text-primary" },
+  blocked: { label: "Blocked", className: "bg-overdue/10 text-overdue" },
+  review: { label: "Review", className: "bg-review/10 text-review" },
+  overdue: { label: "Overdue", className: "bg-overdue/10 text-overdue" },
+};
+
+function AttentionAllView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const attention = getAttentionWork(TASKS, currentUserId);
+  const order = ["overdue", "blocked", "review", "waiting_on_me", "follow_up"] as const;
+  const items = [...attention.allNow].sort((left, right) => {
+    const leftReasons = attention.reasonsByTaskId.get(left.id) || [];
+    const rightReasons = attention.reasonsByTaskId.get(right.id) || [];
+    return Math.min(...leftReasons.map(reason => order.indexOf(reason))) - Math.min(...rightReasons.map(reason => order.indexOf(reason)));
+  });
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><div className="space-y-2.5">{items.map(task => {
+    const reasons = attention.reasonsByTaskId.get(task.id) || [];
+    return <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} attentionReasons={reasons} />;
+  })}</div>{!items.length && <div className="py-16 text-center text-muted-foreground"><CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-success/40" /><p className="text-sm font-medium text-foreground">Nothing needs your attention right now.</p><p className="mt-1 text-[12px]">Binnie will keep the broader context in its own tabs until it needs a move from you.</p></div>}</div>;
+}
+
+function AttentionView({ tab, onTabChange, onTaskClick, onPrincipalClick }: { tab: AttentionTab; onTabChange: (tab: AttentionTab) => void; onTaskClick: (task: Task) => void; onPrincipalClick: (principal: DirectoryPerson) => void }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const attention = getAttentionWork(TASKS, currentUserId);
+  const tabs: Array<{ id: AttentionTab; label: string; count: number }> = [
+    { id: "all", label: "All", count: attention.allNow.length },
+    { id: "followup", label: "Follow Up", count: attention.followUp.length },
+    { id: "waiting", label: "Waiting", count: attention.waiting.all.length },
+    { id: "delegated", label: "Delegated", count: attention.delegated.length },
+    { id: "review", label: "Review", count: attention.review.length },
+    { id: "overdue", label: "Overdue", count: attention.overdue.length },
+  ];
+  return <div><div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><div className="mb-5"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Attention</h1><p className="mt-1.5 text-sm text-muted-foreground">What needs a move from you now, with the rest of your management context close by.</p></div><div role="tablist" aria-label="Attention views" className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => onTabChange(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}{item.count > 0 && <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5 text-[9px]", tab === item.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.count}</span>}</button>)}</div></div>{tab === "all" && <AttentionAllView onTaskClick={onTaskClick} />}{tab === "followup" && <FollowUpView embedded onTaskClick={onTaskClick} />}{tab === "waiting" && <WaitingView embedded onTaskClick={onTaskClick} />}{tab === "delegated" && <DelegatedView embedded onTaskClick={onTaskClick} onFollowUp={() => onTabChange("followup")} onPrincipalClick={onPrincipalClick} />}{tab === "review" && <ReviewView embedded onTaskClick={onTaskClick} />}{tab === "overdue" && <OverdueView embedded onTaskClick={onTaskClick} />}</div>;
 }
 
 // ─── THIS WEEK VIEW ───────────────────────────────────────────────────────────
@@ -4527,7 +4592,7 @@ function PersonManagerDrawer({ open, onClose, onSaved, organizationContext, init
   </div>;
 }
 
-function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }) {
+function PeopleView({ onPersonClick, entityType = "person" }: { onPersonClick: (name: string) => void; entityType?: DirectoryEntityType }) {
   const [sort, setSort] = useState<PeopleSort>("followup");
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -4537,7 +4602,9 @@ function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }
   const [directoryRevision, setDirectoryRevision] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   void directoryRevision;
-  const accountability = PEOPLE_DIRECTORY.map(person => ({ person, summary: getPersonAccountability(person.name) }));
+  const accountability = PEOPLE_DIRECTORY.filter(person => person.type === entityType).map(person => ({ person, summary: getPersonAccountability(person.name) }));
+  const entityLabel = entityType === "team" ? "Teams" : "People";
+  const entitySingular = entityType === "team" ? "Team" : "Person";
   const owesUpdate = accountability.filter(item => item.summary.waitingOnThem > 0).length;
   const waitingForMe = accountability.filter(item => item.summary.waitingOnMe > 0).length;
   const overdueCount = accountability.reduce((count, item) => count + item.summary.overdue, 0);
@@ -4554,12 +4621,12 @@ function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }
   }).sort((left, right) => sort === "name" ? left.person.name.localeCompare(right.person.name) : sort === "overdue" ? right.summary.overdue - left.summary.overdue : sort === "active" ? right.summary.active - left.summary.active : right.summary.waitingOnThem - left.summary.waitingOnThem || right.summary.overdue - left.summary.overdue);
   const activeFilterCount = Number(organization !== "all") + Number(area !== "all") + Number(activityFilter !== "all");
 
-  return <div className="mx-auto max-w-5xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Accountability</p><h1 className="binnie-heading text-3xl font-bold text-foreground">People</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep track of who owns what and where work is waiting.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[13rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search people" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{query && <button onClick={() => setQuery("")} aria-label="Clear people search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setFiltersOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button><button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Add Person</button></div></div>
+  return <div className="mx-auto max-w-5xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Accountability</p><h1 className="binnie-heading text-3xl font-bold text-foreground">{entityLabel}</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep track of who owns what and where work is waiting.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[13rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${entityLabel.toLowerCase()}`} className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{query && <button onClick={() => setQuery("")} aria-label={`Clear ${entityLabel.toLowerCase()} search`}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setFiltersOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button>{entityType === "person" && <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Add Person</button>}</div></div>
     <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">{[{ value: owesUpdate, label: "updates you’re waiting for", color: "text-warning", bg: "bg-warning/10", border: "border-warning/20" }, { value: waitingForMe, label: "people waiting for you", color: "text-info", bg: "bg-info/10", border: "border-info/20" }, { value: overdueCount, label: "dates worth revisiting", color: "text-overdue", bg: "bg-overdue/10", border: "border-overdue/20" }].map(item => <div key={item.label} className={cn("flex items-center gap-3 rounded-xl border px-4 py-3", item.bg, item.border)}><span className={cn("binnie-heading text-2xl font-bold", item.color)}>{item.value}</span><span className={cn("text-[12px]", item.color)}>{item.label}</span></div>)}</div>
     {filtersOpen && <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[10px] font-medium text-muted-foreground">Organization<select value={organization} onChange={event => setOrganization(event.target.value as OrgName | "all")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="all">All organizations</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Department<select value={area} onChange={event => setArea(event.target.value as AreaName | "all")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="all">All departments</option>{personAreas.map(item => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Work context<select value={activityFilter} onChange={event => setActivityFilter(event.target.value as typeof activityFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="all">Any context</option><option value="open">Has open work</option><option value="waiting-them">Waiting on them</option><option value="waiting-me">Waiting on me</option><option value="overdue">Overdue work</option></select></label><div className="flex items-end"><button onClick={() => { setOrganization("all"); setArea("all"); setActivityFilter("all"); }} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button></div></div>}
     <div className="mb-3 flex flex-wrap items-center gap-2"><span className="text-[11px] text-muted-foreground">Sort by</span>{([{ id: "followup", label: "Needs Follow-Up" }, { id: "overdue", label: "Most Overdue" }, { id: "active", label: "Most Active" }, { id: "name", label: "Name" }] as { id: PeopleSort; label: string }[]).map(option => <button key={option.id} onClick={() => setSort(option.id)} className={cn("rounded-full border px-2.5 py-1 text-[11px]", sort === option.id ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div>
-    <div className="space-y-2.5">{filtered.map(({ person, summary }) => <button key={person.id} onClick={() => onPersonClick(person.name)} className="binnie-card binnie-card-hover group w-full p-4 text-left"><div className="flex items-center gap-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13px] font-semibold text-foreground">{person.name}</p><span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{person.type}</span>{!person.active && <span className="rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">Inactive</span>}</div><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{personRole(person)}</p><div className="mt-2"><MembershipPills person={person} compact /></div></div><div className="hidden grid-cols-4 gap-4 text-center sm:grid">{[{ value: summary.active, label: "Active" }, { value: summary.waitingOnThem, label: "On them" }, { value: summary.waitingOnMe, label: "On me" }, { value: summary.overdue, label: "Overdue" }].map(item => <span key={item.label}><span className={cn("block text-base font-semibold", item.label === "Overdue" && item.value ? "text-overdue" : item.label === "On them" && item.value ? "text-warning" : "text-foreground")}>{item.value}</span><span className="block text-[9px] text-muted-foreground">{item.label}</span></span>)}</div><ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" /></div></button>)}{!filtered.length && <div className="binnie-card py-14 text-center"><Users className="mx-auto mb-3 h-9 w-9 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No people added yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Add people so Binnie can help you delegate work and keep track of follow-ups.</p><button onClick={() => setAddOpen(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Person</button></div>}</div>
-    {addOpen && <PersonManagerDrawer open onClose={() => setAddOpen(false)} onSaved={() => setDirectoryRevision(current => current + 1)} />}
+    <div className="space-y-2.5">{filtered.map(({ person, summary }) => <button key={person.id} onClick={() => onPersonClick(person.name)} className="binnie-card binnie-card-hover group w-full p-4 text-left"><div className="flex items-center gap-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13px] font-semibold text-foreground">{person.name}</p><span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{person.type}</span>{!person.active && <span className="rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">Inactive</span>}</div><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{personRole(person)}</p><div className="mt-2"><MembershipPills person={person} compact /></div></div><div className="hidden grid-cols-4 gap-4 text-center sm:grid">{[{ value: summary.active, label: "Active" }, { value: summary.waitingOnThem, label: "On them" }, { value: summary.waitingOnMe, label: "On me" }, { value: summary.overdue, label: "Overdue" }].map(item => <span key={item.label}><span className={cn("block text-base font-semibold", item.label === "Overdue" && item.value ? "text-overdue" : item.label === "On them" && item.value ? "text-warning" : "text-foreground")}>{item.value}</span><span className="block text-[9px] text-muted-foreground">{item.label}</span></span>)}</div><ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" /></div></button>)}{!filtered.length && <div className="binnie-card py-14 text-center"><Users className="mx-auto mb-3 h-9 w-9 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No {entityLabel.toLowerCase()} added yet.</p><p className="mt-1 text-[12px] text-muted-foreground">{entityType === "person" ? "Add people so Binnie can help you delegate work and keep track of follow-ups." : "Teams stay in the shared directory and own their own task queues."}</p>{entityType === "person" && <button onClick={() => setAddOpen(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add {entitySingular}</button>}</div>}</div>
+    {entityType === "person" && addOpen && <PersonManagerDrawer open onClose={() => setAddOpen(false)} onSaved={() => setDirectoryRevision(current => current + 1)} />}
   </div>;
 }
 
@@ -5840,8 +5907,8 @@ function LegacyFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void
   );
 }
 
-function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  return taskStoreUsesServer ? <CanonicalFollowUpView onTaskClick={onTaskClick} /> : <LegacyFollowUpView onTaskClick={onTaskClick} />;
+function FollowUpView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
+  return taskStoreUsesServer ? <CanonicalFollowUpView onTaskClick={onTaskClick} embedded={embedded} /> : <LegacyFollowUpView onTaskClick={onTaskClick} />;
 }
 
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
@@ -6138,7 +6205,7 @@ function CreateProjectDrawer({ onClose, onCreated, defaultOrganization, initialP
 
 /* The compact JSX card renderer intentionally uses several inline expressions. */
 /* eslint-disable @typescript-eslint/no-unused-expressions */
-function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void }) {
+function ProjectsView({ onProjectClick, onAddWork, onManageTemplates }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void; onManageTemplates: () => void }) {
   useTaskStoreVersion();
   const getInitialPreferences = (): { filter: "all" | "active" | "attention" | "completed"; organization: string; viewMode: "grid" | "list" } => {
     if (typeof window === "undefined") return { filter: "all" as const, organization: "", viewMode: "grid" as const };
@@ -6155,6 +6222,7 @@ function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: stri
   const [organizationFilter, setOrganizationFilter] = useState(() => getInitialPreferences().organization);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => getInitialPreferences().viewMode);
   const [creating, setCreating] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [duplicateSource, setDuplicateSource] = useState<ProjectDTO | null>(null);
   const [deleting, setDeleting] = useState<ProjectDTO | null>(null);
   const projects = CANONICAL_PROJECTS.filter(project => project.status !== "archived");
@@ -6192,7 +6260,7 @@ function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: stri
   return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div>
-      <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button></div>
+      <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><div className="relative"><button onClick={() => setCreateMenuOpen(current => !current)} aria-expanded={createMenuOpen} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button>{createMenuOpen && <div className="absolute right-0 top-[calc(100%+0.4rem)] z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_28px_rgb(35_41_61_/_0.12)]"><button onClick={() => { setCreateMenuOpen(false); setCreating(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Start blank</button><button onClick={() => { setCreateMenuOpen(false); onManageTemplates(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Use template</button><div className="my-1 border-t border-border" /><button onClick={() => { setCreateMenuOpen(false); onManageTemplates(); }} className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"><Settings className="h-3 w-3" />Manage templates</button></div>}</div></div>
     </div>
     <div className="mb-5 flex flex-wrap items-center gap-2">{[{ id: "all" as const, label: "All", count: filteredByOrganization.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}<label className="ml-0 flex h-8 items-center gap-2 rounded-full border border-border bg-card px-2.5 text-[11px] text-muted-foreground sm:ml-1"><span className={cn("h-2 w-2 shrink-0 rounded-full", selectedOrganizationColor?.dot || "bg-muted-foreground/35")} /><span className="sr-only">Organization</span><select value={selectedOrganization} onChange={event => setOrganizationFilter(event.target.value)} className="min-w-0 max-w-44 bg-transparent pr-1 text-[11px] font-medium text-foreground outline-none"><option value="">All organizations</option>{permittedOrganizations.map(organization => <option key={organization.id} value={organization.name}>{organization.name}</option>)}</select></label></div>
     {visible.length ? <div className={gridClass}>{visible.map(project => {
@@ -6246,12 +6314,30 @@ function WorkloadView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workload</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">See where work is landing.</h1><p className="mt-1.5 text-sm text-muted-foreground">A directional view of active work, attention, reviews, and blockers—not capacity forecasting.</p></div><div className="flex rounded-xl border border-border bg-card p-1">{([{ id: "all", label: "Everyone" }, { id: "person", label: "People" }, { id: "team", label: "Teams" }] as const).map(option => <button key={option.id} onClick={() => setKind(option.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", kind === option.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div></div><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Active work</p><p className="mt-1 text-2xl font-bold text-primary">{activeTasks.length}</p><p className="mt-1 text-[10px] text-muted-foreground">shared task records, counted once</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-warning">{visible.reduce((sum, item) => sum + item.needsAttention, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">overdue, follow-up, blocked, or review work</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Blocking others</p><p className="mt-1 text-2xl font-bold text-overdue">{visible.reduce((sum, item) => sum + item.blockingOthers, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">downstream work waiting on a primary owner</p></div></div>{focus.length > 0 && <section className="mb-5 rounded-2xl border border-warning/20 bg-warning/[0.055] p-4"><p className="text-[12px] font-semibold text-foreground">Where a conversation could help</p><p className="mt-1 text-[10px] text-muted-foreground">These are signals to look at, not automatic judgments about people.</p><div className="mt-3 flex flex-wrap gap-2">{focus.slice(0, 6).map(item => <span key={item.principalId} className="rounded-full border border-warning/15 bg-card px-2.5 py-1.5 text-[10px] text-foreground">{item.name} · {item.needsAttention ? `${item.needsAttention} attention` : "full focus"}</span>)}</div></section>}<div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="hidden grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] border-b border-border bg-muted/35 px-4 py-3 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid"><span>Owner / team</span><span>Ready</span><span>Moving</span><span>Waiting</span><span>Blocked</span><span>Review</span><span>Overdue</span><span>Signal</span></div>{visible.length ? visible.map(item => { const assigned = activeTasks.filter(task => item.type === "team" ? task.assigneeIds?.includes(item.principalId) : taskIsForCurrentUser(task, item.principalId)); return <div key={item.principalId} className="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] lg:items-center"><div><p className="text-[12px] font-semibold text-foreground">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.type === "team" ? "Team queue" : "Individual"} · {item.primaryOwned} primary</p>{assigned.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{assigned.slice(0, 2).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="max-w-40 truncate rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-primary">{task.title}</button>)}</div>}</div>{[[item.ready, "Ready"], [item.inProgress, "Moving"], [item.waiting, "Waiting"], [item.blocked, "Blocked"], [item.review, "Review"], [item.overdue, "Overdue"]].map(([count, label]) => <div key={String(label)} className="flex items-center justify-between text-[11px] text-muted-foreground lg:block"><span className="lg:hidden">{label}</span><span className={cn("font-semibold", Number(count) > 0 && (label === "Blocked" || label === "Overdue") ? "text-overdue" : label === "Review" && Number(count) > 0 ? "text-review" : "text-foreground")}>{count}</span></div>)}<span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", item.load === "full" ? "bg-warning/10 text-warning" : item.load === "steady" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.load === "full" ? "Full focus" : item.load === "steady" ? "Steady" : "Light"}</span></div>; }) : <div className="px-5 py-12 text-center text-[12px] text-muted-foreground">No active work is assigned yet.</div>}</div></div>;
 }
 
-function CanonicalFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function canViewWorkload(profile: UserProfile) {
+  return profile.role === "owner" || profile.role === "organization_manager" || profile.role === "department_manager";
+}
+
+function PeopleHub({ tab, onTabChange, onPersonClick, onTaskClick, profile }: { tab: PeopleHubTab; onTabChange: (tab: PeopleHubTab) => void; onPersonClick: (name: string) => void; onTaskClick: (task: Task) => void; profile: UserProfile }) {
+  const workloadAvailable = canViewWorkload(profile);
+  const tabs: Array<{ id: PeopleHubTab; label: string }> = [
+    { id: "people", label: "People" },
+    { id: "teams", label: "Teams" },
+    ...(workloadAvailable ? [{ id: "workload" as const, label: "Workload" }] : []),
+  ];
+  const activeTab = tab === "workload" && !workloadAvailable ? "people" : tab;
+  return <div><div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><section aria-label="People workspace" className="border-b border-border/70 pb-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">People workspace</p><p className="mt-1 text-[11px] text-muted-foreground">Directory, team queues, and workload in one place.</p></div><div role="tablist" aria-label="People workspace views" className="flex w-fit rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={activeTab === item.id} onClick={() => onTabChange(item.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", activeTab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div></section></div>{activeTab === "people" && <PeopleView entityType="person" onPersonClick={onPersonClick} />}{activeTab === "teams" && <PeopleView entityType="team" onPersonClick={onPersonClick} />}{activeTab === "workload" && workloadAvailable && <WorkloadView onTaskClick={onTaskClick} />}</div>;
+}
+
+function CanonicalFollowUpView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
   const router = useRouter();
   useTaskStoreVersion();
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [draftFor, setDraftFor] = useState<string | null>(null);
-  const { allTasks, candidates, today } = getFollowUpNudgeCandidates(TASKS, currentUserId);
+  const { allTasks, candidates: nudgeCandidates, today } = getFollowUpNudgeCandidates(TASKS, currentUserId);
+  // Follow Up is intentional reminder work only. Overdue, blocked, and review
+  // records stay in their own Attention categories instead of being relabeled.
+  const candidates = nudgeCandidates.filter(candidate => candidate.kind === "follow_up");
   async function setState(candidate: typeof candidates[number], disposition: "dismissed" | "snoozed") {
     const snoozeDate = new Date(`${today}T00:00:00.000Z`);
     snoozeDate.setUTCDate(snoozeDate.getUTCDate() + 3);
@@ -6262,12 +6348,12 @@ function CanonicalFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => v
     applyCanonicalNudgeState(nextState, result.revision);
     router.refresh();
   }
-  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><div className="mb-6"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Follow up with purpose.</h1><p className="mt-1.5 text-sm text-muted-foreground">Only work with a meaningful next move appears here. Waiting by itself is never a nudge.</p></div><div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[{ label: "Needs attention", value: candidates.length, color: "text-warning" }, { label: "Overdue", value: candidates.filter(item => item.kind === "overdue").length, color: "text-overdue" }, { label: "Blocking others", value: candidates.filter(item => item.kind === "blocker").length, color: "text-primary" }, { label: "Follow-ups due", value: candidates.filter(item => item.kind === "follow_up").length, color: "text-info" }].map(item => <div key={item.label} className="binnie-card p-3.5"><p className={cn("text-2xl font-bold", item.color)}>{item.value}</p><p className="mt-1 text-[10px] text-muted-foreground">{item.label}</p></div>)}</div><div className="space-y-3">{candidates.map(candidate => { const task = allTasks.find(item => item.id === candidate.taskId); const draft = task ? `Hi ${task.nextActionBy || "there"}, just checking in on “${task.title}”. ${candidate.detail} Could you share the next update when you have a moment?` : ""; return <article key={candidate.dedupKey} className="binnie-card p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start"><span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", candidate.kind === "overdue" || candidate.kind === "blocker" ? "bg-overdue/10 text-overdue" : candidate.kind === "review" ? "bg-review/10 text-review" : "bg-primary/10 text-primary")}>{candidate.kind.replace(/_/g, " ")}</span><div className="min-w-0 flex-1"><button onClick={() => task && onTaskClick(task)} className="max-w-full truncate text-left text-[13px] font-semibold text-foreground hover:text-primary">{candidate.title}</button><p className="mt-1 text-[11px] text-muted-foreground">{candidate.detail}</p></div><div className="flex flex-wrap gap-1.5"><button onClick={() => setDraftFor(current => current === candidate.dedupKey ? null : candidate.dedupKey)} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">Draft</button><button onClick={() => void setState(candidate, "snoozed")} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Snooze 3d</button><button onClick={() => void setState(candidate, "dismissed")} className="rounded-lg px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-muted" aria-label={`Dismiss ${candidate.title}`}><X className="h-3.5 w-3.5" /></button></div></div>{draftFor === candidate.dedupKey && <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3"><p className="text-[11px] leading-5 text-foreground">{draft}</p><button onClick={() => navigator.clipboard?.writeText(draft).catch(() => {})} className="mt-2 rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm"><Copy className="mr-1 inline h-3 w-3" />Copy message</button></div>}</article>; })}{!candidates.length && <div className="binnie-card py-14 text-center"><CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-success/50" /><p className="text-sm font-medium text-foreground">Nothing needs a nudge right now.</p><p className="mt-1 text-[12px] text-muted-foreground">Binnie will surface real follow-up signals when they matter.</p></div>}</div></div>;
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">{!embedded && <div className="mb-6"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Follow up with purpose.</h1><p className="mt-1.5 text-sm text-muted-foreground">Only intentional check-ins appear here. Waiting by itself is never a follow-up.</p></div>}<div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">{[{ label: "Follow-ups due", value: candidates.length, color: "text-info" }, { label: "Tracked work", value: allTasks.length, color: "text-primary" }].map(item => <div key={item.label} className="binnie-card p-3.5"><p className={cn("text-2xl font-bold", item.color)}>{item.value}</p><p className="mt-1 text-[10px] text-muted-foreground">{item.label}</p></div>)}</div><div className="space-y-3">{candidates.map(candidate => { const task = allTasks.find(item => item.id === candidate.taskId); const draft = task ? `Hi ${task.nextActionBy || "there"}, just checking in on “${task.title}”. ${candidate.detail} Could you share the next update when you have a moment?` : ""; return <article key={candidate.dedupKey} className="binnie-card p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start"><span className="w-fit rounded-full bg-primary/10 px-2 py-1 text-[9px] font-medium text-primary">follow up</span><div className="min-w-0 flex-1"><button onClick={() => task && onTaskClick(task)} className="max-w-full truncate text-left text-[13px] font-semibold text-foreground hover:text-primary">{candidate.title}</button><p className="mt-1 text-[11px] text-muted-foreground">{candidate.detail}</p></div><div className="flex flex-wrap gap-1.5"><button onClick={() => setDraftFor(current => current === candidate.dedupKey ? null : candidate.dedupKey)} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">Draft</button><button onClick={() => void setState(candidate, "snoozed")} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Snooze 3d</button><button onClick={() => void setState(candidate, "dismissed")} className="rounded-lg px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-muted" aria-label={`Dismiss ${candidate.title}`}><X className="h-3.5 w-3.5" /></button></div></div>{draftFor === candidate.dedupKey && <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3"><p className="text-[11px] leading-5 text-foreground">{draft}</p><button onClick={() => navigator.clipboard?.writeText(draft).catch(() => {})} className="mt-2 rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm"><Copy className="mr-1 inline h-3 w-3" />Copy message</button></div>}</article>; })}{!candidates.length && <div className="binnie-card py-14 text-center"><CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-success/50" /><p className="text-sm font-medium text-foreground">No follow-up is due.</p><p className="mt-1 text-[12px] text-muted-foreground">Binnie will surface check-ins when their follow-up date arrives.</p></div>}</div></div>;
 }
 
 type TemplateTaskDraft = { title: string; area: AreaName | ""; assigneeId: string; targetOffsetDays: string; checklist: string; dependencyIndex: string; dependencyType: "start_blocker" | "completion_blocker" };
 
-function CanonicalTemplatesView({ onProjectClick }: { onProjectClick: (projectId: string) => void }) {
+function CanonicalTemplatesView({ onProjectClick, onBack }: { onProjectClick: (projectId: string) => void; onBack?: () => void }) {
   const router = useRouter();
   useTaskStoreVersion();
   const [creating, setCreating] = useState(false);
@@ -6317,7 +6403,7 @@ function CanonicalTemplatesView({ onProjectClick }: { onProjectClick: (projectId
     if (!result.ok) return setMessage(result.message);
     removeCanonicalWorkflowTemplate(template.id, result.revision); router.refresh();
   }
-  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workflow templates</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Start familiar work well.</h1><p className="mt-1.5 text-sm text-muted-foreground">Templates create normal projects and tasks—never a parallel task database.</p></div><button onClick={() => setCreating(true)} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />New template</button></div>{message && <p role="alert" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{CANONICAL_WORKFLOW_TEMPLATES.map(template => <article key={template.id} className="binnie-card flex min-h-56 flex-col p-5"><div className="flex items-start gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Layers className="h-4 w-4" /></span><div className="min-w-0 flex-1"><h2 className="truncate text-[14px] font-semibold text-foreground">{template.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{template.organization}{template.leadArea ? ` · ${template.leadArea}` : ""}</p></div></div><p className="mt-4 line-clamp-2 text-[11px] text-muted-foreground">{template.description || "A reusable starting point for recurring work."}</p><div className="mt-4 flex flex-wrap gap-1.5">{template.involvedDepartments.map(area => <span key={area.id} className="rounded-full bg-muted px-2 py-1 text-[9px] text-muted-foreground">{area.name}</span>)}</div><p className="mt-4 text-[10px] text-muted-foreground">{template.tasks.length} suggested task{template.tasks.length === 1 ? "" : "s"} · {template.milestones.length} milestone{template.milestones.length === 1 ? "" : "s"}</p><div className="mt-auto flex items-center gap-2 pt-5"><button onClick={() => { setApplying(template); setProjectName(""); setProjectStart(isoDate(getWorkspaceCalendarDate())); setMessage(""); }} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground">Use template</button><button onClick={() => void archiveTemplate(template)} className="rounded-lg px-2.5 py-2 text-[10px] text-muted-foreground hover:bg-muted">Archive</button></div></article>)}{!CANONICAL_WORKFLOW_TEMPLATES.length && <div className="binnie-card col-span-full py-14 text-center"><Layers className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No templates yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Turn a common project flow into a calm, reusable starting point.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ New template</button></div>}</div>{creating && <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create workflow template" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="flex items-start justify-between border-b border-border px-5 py-5"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">New template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Give familiar work a head start.</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep it light: setup can grow later.</p></div><button onClick={reset} className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5"><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Template name <span className="text-overdue">*</span><input value={name} onChange={event => setName(event.target.value)} placeholder="New promotion launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => { setOrganization(event.target.value as OrgName); setLeadArea(""); setTasks([]); }} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Choose organization</option>{Array.from(remoteOrganizationIds.keys()).map(org => <option key={org}>{org}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Lead area<select value={leadArea} onChange={event => setLeadArea(event.target.value as AreaName)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Not set</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} rows={2} placeholder="What this workflow helps the team deliver" className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Suggested work</p><p className="mt-0.5 text-[10px] text-muted-foreground">These become regular project tasks when used.</p></div><button onClick={() => setTasks(current => [...current, { title: "", area: leadArea, assigneeId: "", targetOffsetDays: "", checklist: "", dependencyIndex: "", dependencyType: "completion_blocker" }])} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add task</button></div>{tasks.map((task, index) => <div key={index} className="mt-3 rounded-xl border border-border bg-card p-3"><div className="flex gap-2"><input value={task.title} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Prepare campaign artwork" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => setTasks(current => current.filter((_, itemIndex) => itemIndex !== index).map(item => ({ ...item, dependencyIndex: item.dependencyIndex === String(index) ? "" : item.dependencyIndex })))} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><Trash2 className="h-3.5 w-3.5" /></button></div><div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={task.area} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, area: event.target.value as AreaName } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Area</option>{areas.map(area => <option key={area}>{area}</option>)}</select><select value={task.assigneeId} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, assigneeId: event.target.value } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Default owner</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><label className="text-[9px] text-muted-foreground">Target days from start<input type="number" min="0" value={task.targetOffsetDays} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetOffsetDays: event.target.value } : item))} className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground" /></label></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={task.checklist} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checklist: event.target.value } : item))} placeholder="Checklist, separated by commas" className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground" /><div className="grid grid-cols-2 gap-2"><select value={task.dependencyIndex} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyIndex: event.target.value } : item))} disabled={index === 0} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="">No dependency</option>{tasks.slice(0, index).map((item, itemIndex) => <option key={itemIndex} value={itemIndex}>{item.title || `Task ${itemIndex + 1}`}</option>)}</select><select value={task.dependencyType} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyType: event.target.value as TemplateTaskDraft["dependencyType"] } : item))} disabled={!task.dependencyIndex} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="completion_blocker">Finish after</option><option value="start_blocker">Start after</option></select></div></div></div>)}</section><div className="grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">First milestone <span className="font-normal">(optional)</span><input value={milestone} onChange={event => setMilestone(event.target.value)} placeholder="Campaign launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={focus} onChange={event => setFocus(event.target.value)} placeholder="Launch readiness" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label></div></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><button onClick={reset} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void createTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save template</button></div></div></div>}{applying && <div className="fixed inset-0 z-[95] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Use workflow template" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="flex items-start justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Use template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{applying.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">Creates one project and canonical tasks with their relationships intact.</p></div><button onClick={() => setApplying(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="mt-5 block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} placeholder={applying.name} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="mt-3 block text-[11px] font-medium text-muted-foreground">Start date <span className="font-normal">(optional)</span><input type="date" value={projectStart} onChange={event => setProjectStart(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><div className="mt-5 flex justify-end gap-2"><button onClick={() => setApplying(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={() => void applyTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create project</button></div></div></div>}</div>;
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div>{onBack && <button onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80"><ChevronLeft className="h-3.5 w-3.5" />Projects</button>}<p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workflow templates</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Start familiar work well.</h1><p className="mt-1.5 text-sm text-muted-foreground">Templates create normal projects and tasks—never a parallel task database.</p></div><button onClick={() => setCreating(true)} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />New template</button></div>{message && <p role="alert" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{CANONICAL_WORKFLOW_TEMPLATES.map(template => <article key={template.id} className="binnie-card flex min-h-56 flex-col p-5"><div className="flex items-start gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Layers className="h-4 w-4" /></span><div className="min-w-0 flex-1"><h2 className="truncate text-[14px] font-semibold text-foreground">{template.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{template.organization}{template.leadArea ? ` · ${template.leadArea}` : ""}</p></div></div><p className="mt-4 line-clamp-2 text-[11px] text-muted-foreground">{template.description || "A reusable starting point for recurring work."}</p><div className="mt-4 flex flex-wrap gap-1.5">{template.involvedDepartments.map(area => <span key={area.id} className="rounded-full bg-muted px-2 py-1 text-[9px] text-muted-foreground">{area.name}</span>)}</div><p className="mt-4 text-[10px] text-muted-foreground">{template.tasks.length} suggested task{template.tasks.length === 1 ? "" : "s"} · {template.milestones.length} milestone{template.milestones.length === 1 ? "" : "s"}</p><div className="mt-auto flex items-center gap-2 pt-5"><button onClick={() => { setApplying(template); setProjectName(""); setProjectStart(isoDate(getWorkspaceCalendarDate())); setMessage(""); }} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground">Use template</button><button onClick={() => void archiveTemplate(template)} className="rounded-lg px-2.5 py-2 text-[10px] text-muted-foreground hover:bg-muted">Archive</button></div></article>)}{!CANONICAL_WORKFLOW_TEMPLATES.length && <div className="binnie-card col-span-full py-14 text-center"><Layers className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No templates yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Turn a common project flow into a calm, reusable starting point.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ New template</button></div>}</div>{creating && <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create workflow template" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="flex items-start justify-between border-b border-border px-5 py-5"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">New template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Give familiar work a head start.</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep it light: setup can grow later.</p></div><button onClick={reset} className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5"><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Template name <span className="text-overdue">*</span><input value={name} onChange={event => setName(event.target.value)} placeholder="New promotion launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => { setOrganization(event.target.value as OrgName); setLeadArea(""); setTasks([]); }} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Choose organization</option>{Array.from(remoteOrganizationIds.keys()).map(org => <option key={org}>{org}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Lead area<select value={leadArea} onChange={event => setLeadArea(event.target.value as AreaName)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Not set</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} rows={2} placeholder="What this workflow helps the team deliver" className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Suggested work</p><p className="mt-0.5 text-[10px] text-muted-foreground">These become regular project tasks when used.</p></div><button onClick={() => setTasks(current => [...current, { title: "", area: leadArea, assigneeId: "", targetOffsetDays: "", checklist: "", dependencyIndex: "", dependencyType: "completion_blocker" }])} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add task</button></div>{tasks.map((task, index) => <div key={index} className="mt-3 rounded-xl border border-border bg-card p-3"><div className="flex gap-2"><input value={task.title} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Prepare campaign artwork" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => setTasks(current => current.filter((_, itemIndex) => itemIndex !== index).map(item => ({ ...item, dependencyIndex: item.dependencyIndex === String(index) ? "" : item.dependencyIndex })))} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><Trash2 className="h-3.5 w-3.5" /></button></div><div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={task.area} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, area: event.target.value as AreaName } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Area</option>{areas.map(area => <option key={area}>{area}</option>)}</select><select value={task.assigneeId} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, assigneeId: event.target.value } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Default owner</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><label className="text-[9px] text-muted-foreground">Target days from start<input type="number" min="0" value={task.targetOffsetDays} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetOffsetDays: event.target.value } : item))} className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground" /></label></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={task.checklist} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checklist: event.target.value } : item))} placeholder="Checklist, separated by commas" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[10px] text-foreground" /><div className="grid grid-cols-2 gap-2"><select value={task.dependencyIndex} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyIndex: event.target.value } : item))} disabled={index === 0} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="">No dependency</option>{tasks.slice(0, index).map((item, itemIndex) => <option key={itemIndex} value={itemIndex}>{item.title || `Task ${itemIndex + 1}`}</option>)}</select><select value={task.dependencyType} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyType: event.target.value as TemplateTaskDraft["dependencyType"] } : item))} disabled={!task.dependencyIndex} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="completion_blocker">Finish after</option><option value="start_blocker">Start after</option></select></div></div></div>)}</section><div className="grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">First milestone <span className="font-normal">(optional)</span><input value={milestone} onChange={event => setMilestone(event.target.value)} placeholder="Campaign launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={focus} onChange={event => setFocus(event.target.value)} placeholder="Launch readiness" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label></div></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><button onClick={reset} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void createTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save template</button></div></div></div>}{applying && <div className="fixed inset-0 z-[95] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Use workflow template" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="flex items-start justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Use template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{applying.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">Creates one project and canonical tasks with their relationships intact.</p></div><button onClick={() => setApplying(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="mt-5 block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} placeholder={applying.name} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="mt-3 block text-[11px] font-medium text-muted-foreground">Start date <span className="font-normal">(optional)</span><input type="date" value={projectStart} onChange={event => setProjectStart(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><div className="mt-5 flex justify-end gap-2"><button onClick={() => setApplying(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={() => void applyTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create project</button></div></div></div>}</div>;
 }
 
 // ─── SEARCH VIEW ─────────────────────────────────────────────────────────────
@@ -6401,13 +6487,8 @@ const NAV_GROUPS = [
   {
     label: "Manage",
     items: [
-      { id: "delegated" as NavView, label: "Delegated", icon: <Users className="w-4 h-4" />, badge: TASKS.filter(t => t.isDelegated).length },
-      { id: "waiting" as NavView, label: "Waiting", icon: <Hourglass className="w-4 h-4" />, badge: TASKS.filter(t => t.isWaiting).length },
-      { id: "followup" as NavView, label: "Follow Up", icon: <MessageSquare className="w-4 h-4" />, badge: FOLLOWUP_DATA.filter(d => d.section === "today").length },
-      { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && taskIsForCurrentUser(t, CANONICAL_ACTOR_ID)).length },
-      { id: "overdue" as NavView, label: "Overdue", icon: <AlertTriangle className="w-4 h-4" />, badge: TASKS.filter(t => t.isOverdue).length, urgent: true },
-      { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" />, badge: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length },
-      { id: "workload" as NavView, label: "Workload", icon: <BarChart2 className="w-4 h-4" /> },
+      { id: "attention" as NavView, label: "Attention", icon: <AlertTriangle className="w-4 h-4" /> },
+      { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" /> },
     ]
   },
   {
@@ -6415,7 +6496,6 @@ const NAV_GROUPS = [
     items: [
       { id: "organizations" as NavView, label: "Organizations", icon: <Building2 className="w-4 h-4" /> },
       { id: "projects" as NavView, label: "Projects", icon: <FolderKanban className="w-4 h-4" /> },
-      { id: "templates" as NavView, label: "Templates", icon: <Layers className="w-4 h-4" /> },
     ]
   },
 ];
@@ -6501,22 +6581,24 @@ function ProfilePanel({ profile, theme, onSave, onResetDemoData, onClose, onSign
 
 function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onToggleCollapse, className, onNavigate }: { view: NavView; onNav: (v: NavView) => void; profile: UserProfile; onProfileClick: () => void; collapsed?: boolean; onToggleCollapse?: () => void; className?: string; onNavigate?: () => void }) {
   const currentUserId = profile.directoryId || DEFAULT_CURRENT_USER_ID;
+  const attention = getAttentionWork(TASKS, currentUserId);
   const liveBadges: Partial<Record<NavView, number>> = {
     today: getTasksForToday(TASKS, currentUserId).length,
-    delegated: getDelegatedTasks(TASKS, currentUserId).length,
-    waiting: getWaitingTasks(TASKS, currentUserId).length,
-    followup: getFollowUpNudgeCandidates(TASKS, currentUserId).candidates.length,
-    review: getReviewTasks(TASKS, currentUserId).length + profile.pendingAccessRequestCount,
-    overdue: getOverdueTasks(TASKS).length,
+    attention: attention.allNow.length,
     people: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length,
   };
+  const hasDirectoryAccess = PEOPLE_DIRECTORY.some(person => person.active);
+  const hasOrganizationAccess = profile.workspaces.length > 0;
+  const hasProjectAccess = CANONICAL_PROJECTS.length > 0;
   const navGroups = NAV_GROUPS.map(group => ({
     ...group,
-    items: group.items.map(item => ({ ...item, badge: liveBadges[item.id] ?? ("badge" in item ? item.badge : undefined) })),
-  }));
-  const activeView = (["org-detail", "person-detail", "project-detail"].includes(view))
-    ? (view === "org-detail" ? "organizations" : view === "project-detail" ? "projects" : "people") as NavView
-    : view;
+    items: group.items
+      .filter(item => item.id !== "people" || hasDirectoryAccess)
+      .filter(item => item.id !== "organizations" || hasOrganizationAccess)
+      .filter(item => item.id !== "projects" || hasProjectAccess)
+      .map(item => ({ ...item, badge: liveBadges[item.id] ?? ("badge" in item ? item.badge : undefined) })),
+  })).filter(group => group.items.length > 0);
+  const activeView = getPrimarySidebarView(view);
   const choose = (target: NavView) => {
     onNav(target);
     onNavigate?.();
@@ -6595,10 +6677,49 @@ function SharedWorkspaceRequired() {
   return <main className="flex min-h-dvh items-center justify-center bg-background p-5"><section className="w-full max-w-lg rounded-[1.75rem] border border-border bg-card p-6 shadow-[0_18px_54px_rgb(35_41_61_/_0.10)] sm:p-8"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Database className="h-5 w-5" /></div><p className="mt-5 text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Shared workspace setup</p><h1 className="binnie-heading mt-2 text-2xl font-bold text-foreground">Connect Binnie&apos;s workspace.</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">Binnie keeps one shared record for every task and project. Add a PostgreSQL connection before creating work, so status, ownership, history, and project progress survive refreshes and stay in sync for everyone.</p><div className="mt-5 rounded-2xl bg-muted/45 p-4"><p className="text-[11px] font-medium text-foreground">Local setup</p><ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] leading-5 text-muted-foreground"><li>Copy <code className="rounded bg-card px-1.5 py-0.5 text-foreground">.env.example</code> to <code className="rounded bg-card px-1.5 py-0.5 text-foreground">.env</code> and set <code className="rounded bg-card px-1.5 py-0.5 text-foreground">DATABASE_URL</code>.</li><li>Start PostgreSQL (the included <code className="rounded bg-card px-1.5 py-0.5 text-foreground">docker-compose.yml</code> is ready for this).</li><li>Run <code className="rounded bg-card px-1.5 py-0.5 text-foreground">npm run db:deploy</code> then <code className="rounded bg-card px-1.5 py-0.5 text-foreground">npm run db:seed</code>, and restart the app.</li></ol></div><p className="mt-4 text-[11px] text-muted-foreground">Binnie has not created any temporary local projects or tasks while this connection is unavailable.</p></section></main>;
 }
 
+function attentionTabFromValue(value: string | null): AttentionTab {
+  return value === "followup" || value === "waiting" || value === "delegated" || value === "review" || value === "overdue" ? value : "all";
+}
+
+function peopleHubTabFromValue(value: string | null): PeopleHubTab {
+  return value === "teams" || value === "workload" ? value : "people";
+}
+
+function readNavigationLocation() {
+  if (typeof window === "undefined") return { view: "home" as NavView, attentionTab: "all" as AttentionTab, peopleTab: "people" as PeopleHubTab, projectsMode: "projects" as ProjectsHubMode };
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get("page");
+  const legacyAttentionTab = attentionTabFromValue(page);
+  const view: NavView = legacyAttentionTab !== "all" ? "attention"
+    : page === "attention" ? "attention"
+    : page === "people" ? "people"
+      : page === "workload" ? "people"
+      : page === "tasks" ? "all-tasks"
+        : page === "smart-inbox" ? "inbox"
+          : page === "this-week" ? "this-week"
+            : page === "today" ? "today"
+              : page === "organizations" ? "organizations"
+                : page === "org-detail" ? "org-detail"
+                    : page === "projects" || page === "templates" ? "projects"
+                    : page === "project-detail" ? "project-detail"
+                      : page === "person-detail" ? "person-detail"
+                        : page === "search" ? "search"
+                          : "home";
+  return {
+    view,
+    attentionTab: legacyAttentionTab !== "all" ? legacyAttentionTab : attentionTabFromValue(params.get("attention")),
+    peopleTab: page === "workload" ? "workload" : peopleHubTabFromValue(params.get("peopleTab")),
+    projectsMode: page === "templates" || params.get("projectsMode") === "templates" ? "templates" as const : "projects" as const,
+  };
+}
+
 export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: WorkspaceSnapshotDTO }) {
   const router = useRouter();
   const taskStoreRevision = useTaskStoreVersion();
-  const [view, setView] = useState<NavView>("home");
+  const [view, setView] = useState<NavView>(() => readNavigationLocation().view);
+  const [attentionTab, setAttentionTab] = useState<AttentionTab>(() => readNavigationLocation().attentionTab);
+  const [peopleHubTab, setPeopleHubTab] = useState<PeopleHubTab>(() => readNavigationLocation().peopleTab);
+  const [projectsHubMode, setProjectsHubMode] = useState<ProjectsHubMode>(() => readNavigationLocation().projectsMode);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<OrgName | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -6671,6 +6792,19 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    const restoreNavigation = () => {
+      const location = readNavigationLocation();
+      setView(location.view);
+      setAttentionTab(location.attentionTab);
+      setPeopleHubTab(location.peopleTab);
+      setProjectsHubMode(location.projectsMode);
+      setSelectedTask(null);
+    };
+    window.addEventListener("popstate", restoreNavigation);
+    return () => window.removeEventListener("popstate", restoreNavigation);
+  }, []);
 
   useEffect(() => {
     const preferenceTimer = window.setTimeout(() => {
@@ -6780,8 +6914,62 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     router.refresh();
   }
 
+  function writeNavigationLocation(nextView: NavView, nextAttentionTab = attentionTab, nextPeopleTab = peopleHubTab, nextProjectsMode = projectsHubMode) {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const page = nextView === "all-tasks" ? "tasks" : nextView === "inbox" ? "smart-inbox" : nextView;
+    url.searchParams.set("page", page);
+    if (nextView === "attention") url.searchParams.set("attention", nextAttentionTab); else url.searchParams.delete("attention");
+    if (nextView === "people") url.searchParams.set("peopleTab", nextPeopleTab); else url.searchParams.delete("peopleTab");
+    if (nextView === "projects" && nextProjectsMode === "templates") url.searchParams.set("projectsMode", "templates"); else url.searchParams.delete("projectsMode");
+    window.history.pushState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function setAttentionLocation(tab: AttentionTab) {
+    setView("attention");
+    setAttentionTab(tab);
+    setProjectsHubMode("projects");
+    writeNavigationLocation("attention", tab, peopleHubTab, "projects");
+  }
+
+  function setPeopleLocation(tab: PeopleHubTab) {
+    const allowedTab = tab === "workload" && !canViewWorkload(profile) ? "people" : tab;
+    setView("people");
+    setPeopleHubTab(allowedTab);
+    setProjectsHubMode("projects");
+    writeNavigationLocation("people", attentionTab, allowedTab, "projects");
+  }
+
+  function setProjectsLocation(mode: ProjectsHubMode) {
+    setView("projects");
+    setProjectsHubMode(mode);
+    writeNavigationLocation("projects", attentionTab, peopleHubTab, mode);
+  }
+
   function navTo(v: NavView, opts?: { org?: OrgName; project?: string; person?: string }) {
+    const legacyAttentionTabs: Partial<Record<NavView, AttentionTab>> = { delegated: "delegated", waiting: "waiting", followup: "followup", review: "review", overdue: "overdue" };
+    if (legacyAttentionTabs[v]) {
+      setAttentionLocation(legacyAttentionTabs[v]!);
+      setSelectedTask(null);
+      return;
+    }
+    if (v === "workload") {
+      setPeopleLocation("workload");
+      setSelectedTask(null);
+      return;
+    }
+    if (v === "templates") {
+      setProjectsLocation("templates");
+      setSelectedTask(null);
+      return;
+    }
     setView(v);
+    if (v === "attention") setAttentionTab("all");
+    if (v === "people") setPeopleHubTab("people");
+    if (v === "projects") setProjectsHubMode("projects");
+    if (!(["org-detail", "person-detail", "project-detail"] as NavView[]).includes(v)) {
+      writeNavigationLocation(v, v === "attention" ? "all" : attentionTab, v === "people" ? "people" : peopleHubTab, v === "projects" ? "projects" : projectsHubMode);
+    }
     setSelectedTask(null);
     if (opts?.org !== undefined) setSelectedOrg(opts.org);
     if (opts?.project !== undefined) setSelectedProject(opts.project);
@@ -6819,22 +7007,29 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
       case "review": return <><>{profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 lg:px-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Needs My Review</span> · {profile.pendingAccessRequestCount} member access request{profile.pendingAccessRequestCount === 1 ? "" : "s"}</span><span className="font-medium text-primary">Review access →</span></a></div>}</><ReviewView onTaskClick={setSelectedTask} /></>;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
+      case "attention": return <>{attentionTab === "review" && profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Access requests</span> · {profile.pendingAccessRequestCount} awaiting review</span><span className="font-medium text-primary">Review access →</span></a></div>}<AttentionView tab={attentionTab} onTabChange={setAttentionLocation} onTaskClick={setSelectedTask} onPrincipalClick={principal => principal.type === "team" ? openTeamTaskList(principal.id) : openPersonTaskList(principal.id)} /></>;
       case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} profile={profile} />;
-      case "people": return <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
-      case "workload": return <WorkloadView onTaskClick={setSelectedTask} />;
+      case "people": return <PeopleHub tab={peopleHubTab} onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
+      case "workload": return <PeopleHub tab="workload" onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
       case "person-detail": return selectedPerson
-        ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onViewTasks={openPersonTaskList} />
-        : <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
+        ? <PersonDetailView personName={selectedPerson} onBack={() => setPeopleLocation("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onViewTasks={principalId => {
+          const principal = PEOPLE_DIRECTORY.find(candidate => candidate.id === principalId);
+          if (principal?.type === "team") openTeamTaskList(principalId);
+          else openPersonTaskList(principalId);
+        }} />
+        : <PeopleHub tab={peopleHubTab} onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
       case "followup": return <FollowUpView onTaskClick={setSelectedTask} />;
       case "organizations": return <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
       case "org-detail": return selectedOrg
-        ? <OrgDetailView orgName={selectedOrg} onBack={() => setView("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} />
+        ? <OrgDetailView orgName={selectedOrg} onBack={() => navTo("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} />
         : <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
-      case "projects": return <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />;
-      case "templates": return <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} />;
+      case "projects": return projectsHubMode === "templates"
+        ? <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} onBack={() => setProjectsLocation("projects")} />
+        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} onManageTemplates={() => setProjectsLocation("templates")} />;
+      case "templates": return <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} onBack={() => setProjectsLocation("projects")} />;
       case "project-detail": return selectedProject
-        ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />
-        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />;
+        ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setProjectsLocation("projects")} onTaskClick={setSelectedTask} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />
+        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} onManageTemplates={() => setProjectsLocation("templates")} />;
       case "search": return <SearchView onTaskClick={setSelectedTask} />;
       default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "there"} />;
     }
