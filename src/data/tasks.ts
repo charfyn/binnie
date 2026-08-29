@@ -454,7 +454,10 @@ function toProfileDTO(actor: ActorRecord, preference?: { timezone: string; dateF
 }
 
 function readableNextAction(task: TaskRecord, actorId: string) {
-  if (task.nextActionKind === NextActionKind.READY) return "Ready";
+  // READY is a workflow status, not a person or party.  Keeping this label
+  // human and responsibility-specific prevents UI such as “Next action by:
+  // Ready” when no next actor has actually been recorded.
+  if (task.nextActionKind === NextActionKind.READY) return "Not assigned";
   if (task.nextActionKind === NextActionKind.EXTERNAL) return task.nextActionExternalLabel || "External";
   if (task.nextActionKind === NextActionKind.DEPARTMENT) return task.nextActionDepartment?.name || "Department";
   if (task.nextActionPrincipal?.id === actorId) return "me";
@@ -833,20 +836,60 @@ function canBrowseTaskPeople(actor: ActorRecord) {
   return actorIsOwner(actor) || managedOrganizationIds(actor).length > 0 || actorDepartmentHeadIds(actor).size > 0;
 }
 
-function isTaskForPerson(task: TaskRecord, personId: string, teamIds: string[] = []) {
-  return task.assignments.some((assignment) => assignment.principalId === personId || teamIds.includes(assignment.principalId))
-    || task.createdByPrincipalId === personId
-    || task.reviewCycles.some((review) => review.reviewerPrincipalId === personId);
+/**
+ * Responsibility is not visibility. This database predicate mirrors the
+ * client-safe personal-work helper and intentionally does not use a person's
+ * Team memberships. Team queues are browsed through the explicit Team scope.
+ */
+function personallyActionableTaskWhere(personId: string): Prisma.TaskWhereInput {
+  return {
+    OR: [
+      { assignments: { some: { principalId: personId } } },
+      { nextActionPrincipalId: personId },
+      {
+        status: TaskStatus.REVIEW,
+        reviewCycles: { some: { reviewerPrincipalId: personId, reviewedAt: null } },
+      },
+      {
+        dependencies: {
+          some: {
+            ownerPrincipalId: personId,
+            resolvedAt: null,
+            type: { in: [DependencyType.START_BLOCKER, DependencyType.COMPLETION_BLOCKER] },
+          },
+        },
+      },
+      // Captures without any assignment remain with their creator until work
+      // is assigned or explicitly moved to another person's next action.
+      {
+        AND: [
+          { createdByPrincipalId: personId },
+          { assignments: { none: {} } },
+          { OR: [{ nextActionPrincipalId: null }, { nextActionPrincipalId: personId }] },
+          {
+            OR: [
+              { status: { not: TaskStatus.REVIEW } },
+              { reviewCycles: { some: { reviewerPrincipalId: personId, reviewedAt: null } } },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 }
 
-function isTaskForTeam(task: TaskRecord, teamId: string) {
-  return task.assignments.some((assignment) => assignment.principalId === teamId);
-}
-
-function isTaskForDepartment(task: TaskRecord, departmentId: string) {
-  return task.leadDepartmentId === departmentId
-    || task.involvedDepartments.some((department) => department.departmentId === departmentId)
-    || task.assignments.some((assignment) => assignment.principal.type === PrincipalType.TEAM && assignment.principal.teamScopes.some((scope) => scope.departmentId === departmentId));
+/** A Team is selected by its stable Principal ID, never by display text. */
+function teamTaskWhere(teamId: string): Prisma.TaskWhereInput {
+  const departmentTeamScope = { some: { teamId, status: MembershipStatus.ACTIVE } };
+  return {
+    OR: [
+      { assignments: { some: { principalId: teamId } } },
+      { nextActionPrincipalId: teamId },
+      { dependencies: { some: { ownerPrincipalId: teamId, resolvedAt: null } } },
+      { leadDepartment: { teamScopes: departmentTeamScope } },
+      { involvedDepartments: { some: { department: { teamScopes: departmentTeamScope } } } },
+    ],
+  };
 }
 
 async function taskScopeOptions(actor: ActorRecord): Promise<{ people: TaskScopeOptionDTO[]; teams: TaskScopeOptionDTO[] }> {
@@ -878,15 +921,7 @@ async function taskScopeOptions(actor: ActorRecord): Promise<{ people: TaskScope
       ...(departmentIds.length ? [{ teamScopes: { some: { status: MembershipStatus.ACTIVE, departmentId: { in: departmentIds } } } }] : []),
     ],
   };
-  const departmentWhere: Prisma.DepartmentWhereInput = actorIsOwner(actor)
-    ? { organization: { workspaceId: actor.workspaceId } }
-    : {
-      OR: [
-        ...(organizationIds.length ? [{ organizationId: { in: organizationIds } }] : []),
-        ...(departmentIds.length ? [{ id: { in: departmentIds } }] : []),
-      ],
-    };
-  const [people, teams, departments] = await Promise.all([
+  const [people, teams] = await Promise.all([
     canBrowsePeople
       ? db.principal.findMany({
         where: peopleWhere,
@@ -907,13 +942,6 @@ async function taskScopeOptions(actor: ActorRecord): Promise<{ people: TaskScope
       },
       orderBy: { name: "asc" },
     }),
-    (actorIsOwner(actor) || organizationIds.length || departmentIds.length)
-      ? db.department.findMany({
-        where: departmentWhere,
-        select: { id: true, name: true, organization: { select: { name: true } } },
-        orderBy: [{ organization: { name: "asc" } }, { name: "asc" }],
-      })
-      : Promise.resolve([]),
   ]);
   return {
     people: people.map((person) => ({
@@ -921,20 +949,12 @@ async function taskScopeOptions(actor: ActorRecord): Promise<{ people: TaskScope
       name: person.name,
       subtitle: person.departmentMemberships[0] ? `${person.departmentMemberships[0].department.organization.name} · ${person.departmentMemberships[0].department.name}` : undefined,
     })),
-    teams: [
-      ...teams.map((team) => ({
-        id: team.id,
-        name: team.name,
-        kind: "team" as const,
-        subtitle: team.teamScopes[0] ? `${team.teamScopes[0].organization.name}${team.teamScopes[0].department ? ` · ${team.teamScopes[0].department.name}` : ""}` : undefined,
-      })),
-      ...departments.map((department) => ({
-        id: department.id,
-        name: department.name,
-        kind: "department" as const,
-        subtitle: department.organization.name,
-      })),
-    ],
+    teams: teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      kind: "team" as const,
+      subtitle: team.teamScopes[0] ? `${team.teamScopes[0].organization.name}${team.teamScopes[0].department ? ` · ${team.teamScopes[0].department.name}` : ""}` : undefined,
+    })),
   };
 }
 
@@ -961,7 +981,6 @@ export async function getCanonicalTaskScope(input: {
 
     let targetPersonId: string | undefined;
     let targetTeamId: string | undefined;
-    let targetDepartmentId: string | undefined;
     if (input.scope === "people") {
       // Opening People should remain one click. If no selector value has been
       // established yet, safely use the first server-authorized directory row;
@@ -973,29 +992,23 @@ export async function getCanonicalTaskScope(input: {
     if (input.scope === "team") {
       const selectedScope = options.teams.find((team) => team.id === (input.teamId || options.teams[0]?.id));
       if (!selectedScope) return forbidden("You do not have permission to view that team's work.");
-      if (selectedScope.kind === "department") targetDepartmentId = selectedScope.id;
-      else targetTeamId = selectedScope.id;
+      targetTeamId = selectedScope.id;
     }
 
-    const targetPersonTeamIds = targetPersonId
-      ? (await db.teamMembership.findMany({
-        where: { personId: targetPersonId, status: MembershipStatus.ACTIVE },
-        select: { teamId: true },
-      })).map((membership) => membership.teamId)
-      : [];
+    const scopeWhere = input.scope === "my"
+      ? personallyActionableTaskWhere(actor.id)
+      : targetPersonId
+        ? personallyActionableTaskWhere(targetPersonId)
+        : targetTeamId
+          ? teamTaskWhere(targetTeamId)
+          : {};
 
     const records = await db.task.findMany({
-      where: taskVisibilityWhere(actor, workspaceId),
+      where: { AND: [taskVisibilityWhere(actor, workspaceId), scopeWhere] },
       include: taskInclude,
       orderBy: { updatedAt: "desc" },
     });
-    const visible = records.filter((task) => !task.archivedAt && canViewTask(actor, task)).filter((task) => {
-      if (input.scope === "my") return isTaskForPerson(task, actor.id) || actor.teamIds.some((teamId) => isTaskForTeam(task, teamId));
-      if (targetPersonId) return isTaskForPerson(task, targetPersonId, targetPersonTeamIds);
-      if (targetTeamId) return isTaskForTeam(task, targetTeamId);
-      if (targetDepartmentId) return isTaskForDepartment(task, targetDepartmentId);
-      return true;
-    });
+    const visible = records.filter((task) => !task.archivedAt && canViewTask(actor, task));
     return {
       ok: true,
       data: {
@@ -2586,6 +2599,12 @@ export async function transitionCanonicalTask(taskId: string, expectedVersion: n
   const unresolvedCompletionBlockers = task.dependencies.filter((dependency) => dependency.type === DependencyType.COMPLETION_BLOCKER && !dependency.resolvedAt);
   const transitionBlockReason = taskTransitionBlockReason({ targetStatus: status, unresolvedStartBlockers: unresolvedStartBlockers.length, unresolvedCompletionBlockers: unresolvedCompletionBlockers.length });
   if (transitionBlockReason) return { ok: false, code: "DEPENDENCY", message: transitionBlockReason };
+  // Waiting is only meaningful when Binnie knows who (or what) is expected to
+  // move next.  Rejecting an unassigned transition prevents another
+  // “Next action by: Ready” record from entering the canonical task store.
+  if (dbStatus === TaskStatus.WAITING && task.nextActionKind === NextActionKind.READY) {
+    return { ok: false, code: "VALIDATION", message: "Set Next Action By before marking this task as Waiting." };
+  }
   const revision = await db.$transaction(async (tx) => {
     if (dbStatus === TaskStatus.BLOCKED && blocker) {
       await tx.taskDependency.create({ data: { taskId, type: DependencyType.START_BLOCKER, label: blocker.label.trim() || "A dependency", prerequisiteTaskId: blocker.prerequisiteTaskId || null, ownerPrincipalId: blocker.ownerPrincipalId || null, ownerDepartmentId: blocker.ownerDepartmentId || null } });

@@ -59,7 +59,7 @@ import {
 import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, TaskScopeResultDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
 import { getOrganizationColorStyles, ORGANIZATION_COLOR_KEYS, ORGANIZATION_COLOR_STYLES, type OrganizationColorKey } from "@/lib/organization-colors";
 import { DEFAULT_TASK_LIST_COLUMNS, TASK_LIST_COLUMNS, type TaskListColumnId } from "@/lib/task-list";
-import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getPersonalPlannerTasksForDate, getPersonalPlannerTasksForWeek, getTaskEffectiveDate as getCanonicalTaskEffectiveDate, isPersonalPlannerTask, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getDelegatedTasks as getCanonicalDelegatedTasks, getOrganizationActiveTasks as getCanonicalOrganizationActiveTasks, getOrganizationAreaTasks as getCanonicalOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks as getCanonicalOrganizationRevisitTasks, getOrganizationTasks as getCanonicalOrganizationTasks, getOrganizationTodayTasks as getCanonicalOrganizationTodayTasks, getOrganizationWaitingTasks as getCanonicalOrganizationWaitingTasks, getOrganizationWeekTasks as getCanonicalOrganizationWeekTasks, getOverdueTasks as getCanonicalOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getReviewTasks as getCanonicalReviewTasks, getTaskPlannerDate as getCanonicalTaskPlannerDate, getTodayTasks as getCanonicalTodayTasks, getWaitingWork as getCanonicalWaitingWork, getWeekTasks as getCanonicalWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
 import { authClient } from "@/lib/auth-client";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
@@ -151,7 +151,8 @@ interface Task {
   followUpDate?: string; nextActionKind?: "principal" | "department" | "external" | "ready";
   nextActionPrincipalId?: string; nextActionDepartmentId?: string; nextActionExternalLabel?: string; completionBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
   startBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
-  dependencyRecords?: Array<{ id: string; type: "start_blocker" | "completion_blocker" | "related"; label: string; prerequisiteTaskId?: string; owner?: string; resolvedAt?: string }>;
+  dependencyRecords?: Array<{ id: string; type: "start_blocker" | "completion_blocker" | "related"; label: string; prerequisiteTaskId?: string; ownerPrincipalId?: string; owner?: string; resolvedAt?: string }>;
+  dependencyActionOwnerIds?: string[];
   canStartNow?: boolean; updates?: Array<{ id: string; author: string; text: string; createdAt: string; resources?: Array<{ id: string; label: string; url?: string; fileName?: string; kind: "link" | "file" }> }>;
   checklistItems?: Array<{ id: string; title: string; position: number; completedAt?: string; completedBy?: string }>;
   subtaskProgress?: { total: number; completed: number };
@@ -257,13 +258,6 @@ interface FollowUpPerson {
   items: FollowUpItem[]; suggestedMessage: string;
 }
 
-interface ProjectDetail {
-  id: string; name: string; org: OrgName; area: AreaName;
-  progress: number; deadline: string; status: "on_track" | "at_risk" | "behind";
-  tasks: number; done: number; currentFocus: string[];
-  resources: TaskLink[]; files?: TaskFile[]; recentActivity: Activity[];
-}
-
 interface Milestone {
   id: string; name: string; date: string; project: string; owner: string;
   status: "planned" | "at_risk" | "done"; description?: string;
@@ -290,7 +284,6 @@ let taskStoreVersion = 0;
 let taskStoreUsesServer = false;
 let taskStoreServerRevision = 0;
 let CANONICAL_ACTOR_ID = DEFAULT_CURRENT_USER_ID;
-let CANONICAL_ACTOR_TEAM_IDS: string[] = [];
 let CANONICAL_PROJECTS: ProjectDTO[] = [];
 let CANONICAL_SAVED_VIEWS: SavedViewDTO[] = [];
 let CANONICAL_INBOX_CAPTURES: InboxCaptureDTO[] = [];
@@ -317,6 +310,33 @@ function publishTaskStore() {
 function taskDateLabel(iso?: string) {
   if (!iso) return undefined;
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${iso}T00:00:00Z`));
+}
+
+function workspaceDateKeyForInstant(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: WORKSPACE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+/** Formats timestamps for people while preserving the workspace calendar day. */
+function humanizeWaitingSince(value?: string) {
+  const waitingDate = value ? workspaceDateKeyForInstant(value) : undefined;
+  if (!waitingDate) return "—";
+  const today = isoDate(getWorkspaceCalendarDate());
+  const days = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00.000Z`) - Date.parse(`${waitingDate}T00:00:00.000Z`)) / 86400000));
+  const label = taskDateLabel(waitingDate)?.replace(/\s+\d{4}$/, "") || waitingDate;
+  return days ? `Since ${label} · ${days} ${days === 1 ? "day" : "days"}` : `Since ${label}`;
+}
+
+function readableTaskNextAction(task: Task) {
+  return task.nextActionBy === "me" ? "You" : task.nextActionBy || "Not assigned";
 }
 
 function taskActivityType(type: string): Activity["type"] {
@@ -363,7 +383,7 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
     responseDue: task.followUpDate ? taskDateLabel(task.followUpDate) : undefined,
     waitingSince: task.waitingSince,
     completedAt: task.completedAt,
-    isDelegated: task.assigneeIds.some(id => id !== CANONICAL_ACTOR_ID),
+    isDelegated: task.assignments.some(assignment => assignment.assignedByPrincipalId === CANONICAL_ACTOR_ID && assignment.principalId !== CANONICAL_ACTOR_ID),
     isWaiting: task.status === "waiting",
     isOverdue: task.isOverdue,
     completedInCurrentMonth: task.status === "done",
@@ -376,6 +396,10 @@ function canonicalTaskToLegacy(task: TaskDTO): Task {
     completionBlockedBy: task.completionBlockedBy,
     startBlockedBy: task.startBlockedBy,
     dependencyRecords: [...task.startBlockedBy, ...task.completionBlockedBy, ...task.relatedWork],
+    dependencyActionOwnerIds: [...task.startBlockedBy, ...task.completionBlockedBy]
+      .filter(dependency => !dependency.resolvedAt)
+      .map(dependency => dependency.ownerPrincipalId)
+      .filter((id): id is string => Boolean(id)),
     updates: task.updates.map(update => ({ id: update.id, author: update.author, text: update.text, createdAt: update.createdAt, resources: update.resources })),
     checklistItems: task.checklistItems,
     subtaskProgress: task.subtaskProgress,
@@ -425,7 +449,6 @@ function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
   taskStoreUsesServer = true;
   taskStoreServerRevision = snapshot.revision;
   CANONICAL_ACTOR_ID = snapshot.actorId;
-  CANONICAL_ACTOR_TEAM_IDS = snapshot.profile.teamIds;
   remoteDepartmentIds.clear();
   remoteOrganizationIds.clear();
   snapshot.organizations.forEach(organization => {
@@ -486,10 +509,6 @@ function removeCanonicalProject(projectId: string, revision?: number) {
   const detach = (task: Task) => task.projectId === projectId ? { ...task, projectId: undefined, project: undefined } : task;
   TASKS = TASKS.map(detach);
   ARCHIVED_TASKS = ARCHIVED_TASKS.map(detach);
-  // Older compatibility-only views still read this projection. Keep it in sync
-  // until those views are fully converted to canonical projects.
-  const legacyIndex = STRATEGIC_PROJECTS.findIndex(project => project.id === projectId);
-  if (legacyIndex >= 0) STRATEGIC_PROJECTS.splice(legacyIndex, 1);
   if (revision) taskStoreServerRevision = revision;
   publishTaskStore();
 }
@@ -605,7 +624,7 @@ function archiveCanonicalTask(taskId: string) {
 
 function markTaskDone(task: Task, lastUpdate = "Just now") {
   const statusBeforeCompletion = task.status === "done" ? task.statusBeforeCompletion : task.status;
-  const scheduledDate = getTaskEffectiveDate(task);
+  const scheduledDate = getTaskPlannerDate(task);
   Object.assign(task, {
     status: "done" as const,
     statusBeforeCompletion: statusBeforeCompletion || "ready",
@@ -629,8 +648,6 @@ function reopenTask(task: Task, lastUpdate = "Reopened just now") {
     lastUpdate,
   });
 }
-
-const STRATEGIC_PROJECTS: Array<{ id: string; name: string; org: OrgName; progress: number; tasks: number; done: number; deadline: string; status: "on_track" | "at_risk" }> = [];
 
 // A person or team is created once in Binnie. Membership stores the role and
 // area for each organization, allowing one person to contribute in more than one place.
@@ -708,20 +725,20 @@ function isoDate(date: Date) {
   return calendarDateKey(date);
 }
 
-function getTaskEffectiveDate(task: Task) {
-  return getCanonicalTaskEffectiveDate(task, getWorkspaceCalendarDate());
+function getTaskPlannerDate(task: Task) {
+  return getCanonicalTaskPlannerDate(task, getWorkspaceCalendarDate());
 }
 
 function isTaskOverdue(task: Task) {
-  const relevant = getTaskEffectiveDate(task);
-  return Boolean(task.isOverdue || (relevant && relevant < isoDate(getWorkspaceCalendarDate()) && isActiveTask(task)));
+  const today = isoDate(getWorkspaceCalendarDate());
+  return Boolean(isActiveTask(task) && (task.isOverdue || (task.deadlineDate && task.deadlineDate < today)));
 }
 
 function taskIsForCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
   // Today and This Week use this one personal relationship rule. Workspace
   // authority is deliberately excluded: management visibility belongs in the
   // People/Team task scopes, not in a person's own planner.
-  return isPersonalPlannerTask({
+  return isTaskPersonallyActionableForPerson({
     id: task.id,
     status: task.status,
     archived: task.archived,
@@ -729,12 +746,13 @@ function taskIsForCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_I
     nextActionPrincipalId: task.nextActionPrincipalId,
     createdByPrincipalId: task.createdByPrincipalId,
     reviewerPrincipalId: task.reviewerPrincipalId,
-  }, currentUserId, currentUserId === CANONICAL_ACTOR_ID ? CANONICAL_ACTOR_TEAM_IDS : []);
+    dependencyActionOwnerIds: task.dependencyActionOwnerIds,
+  }, currentUserId);
 }
 
 function getTasksForToday(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
   const today = isoDate(getWorkspaceCalendarDate());
-  return getPersonalPlannerTasksForDate(tasks, currentUserId, today, currentUserId === CANONICAL_ACTOR_ID ? CANONICAL_ACTOR_TEAM_IDS : []);
+  return getCanonicalTodayTasks(tasks, currentUserId, today);
 }
 
 /** The exact same personal planning universe as Today, expanded to a week. */
@@ -744,7 +762,7 @@ function getPersonalTasksForWeek(tasks = TASKS, currentUserId = DEFAULT_CURRENT_
   if (!weekStart) monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
   const end = new Date(monday);
   end.setUTCDate(end.getUTCDate() + 6);
-  return getPersonalPlannerTasksForWeek(tasks, currentUserId, isoDate(monday), isoDate(end), currentUserId === CANONICAL_ACTOR_ID ? CANONICAL_ACTOR_TEAM_IDS : []);
+  return getCanonicalWeekTasks(tasks, currentUserId, isoDate(monday), isoDate(end));
 }
 
 function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
@@ -754,7 +772,7 @@ function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
   const start = isoDate(monday);
   const end = new Date(monday); end.setUTCDate(end.getUTCDate() + 6);
   return tasks.filter(task => {
-    const relevant = getTaskEffectiveDate(task);
+    const relevant = getTaskPlannerDate(task);
     // The week board is both a plan and a record. Keep completed tasks until
     // their scheduled week is no longer being shown; archives remain separate.
     return Boolean(!task.archived && relevant && relevant >= start && relevant <= isoDate(end));
@@ -772,12 +790,11 @@ function weeklyTaskSortOrder(task: Task) {
 
 function getTasksForMonth(tasks = TASKS, date = getWorkspaceCalendarDate()) {
   const prefix = isoDate(date).slice(0, 7);
-  return tasks.filter(task => isActiveTask(task) && getTaskEffectiveDate(task)?.startsWith(prefix));
+  return tasks.filter(task => isActiveTask(task) && getTaskPlannerDate(task)?.startsWith(prefix));
 }
 
 function taskIsPersonallyOwnedByCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
-  return getTaskAssigneeIds(task).includes(currentUserId)
-    || task.nextActionPrincipalId === currentUserId;
+  return taskIsForCurrentUser(task, currentUserId);
 }
 
 function formatEstimatedMinutes(minutes: number) {
@@ -788,47 +805,107 @@ function formatEstimatedMinutes(minutes: number) {
 
 function getTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
   const personalTasks = tasks.filter(task => taskIsPersonallyOwnedByCurrentUser(task, currentUserId));
-  const teamTasks = tasks.filter(task => !personalTasks.includes(task) && currentUserId === CANONICAL_ACTOR_ID && getTaskAssigneeIds(task).some(id => CANONICAL_ACTOR_TEAM_IDS.includes(id)));
   const summarize = (items: Task[]) => ({
     estimatedMinutes: items.reduce((total, task) => total + (task.estimatedMinutes || 0), 0),
     unestimatedCount: items.filter(task => !task.estimatedMinutes).length,
   });
-  return { personal: summarize(personalTasks), team: summarize(teamTasks) };
+  return summarize(personalTasks);
 }
 
 function formatTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
   if (!tasks.length) return "0 tasks · Nothing planned";
-  const { personal, team } = getTodayWorkload(tasks, currentUserId);
+  const personal = getTodayWorkload(tasks, currentUserId);
   const parts = [`${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`];
   if (personal.estimatedMinutes) parts.push(`~${formatEstimatedMinutes(personal.estimatedMinutes)} estimated`);
   if (personal.unestimatedCount) parts.push(personal.estimatedMinutes ? `${personal.unestimatedCount} ${personal.unestimatedCount === 1 ? "task" : "tasks"} unestimated` : "Not estimated yet");
-  if (team.estimatedMinutes) parts.push(`Team workload: ~${formatEstimatedMinutes(team.estimatedMinutes)}`);
-  if (team.unestimatedCount) parts.push(`${team.unestimatedCount} team ${team.unestimatedCount === 1 ? "task" : "tasks"} unestimated`);
   return parts.join(" · ");
 }
 
 function getDelegatedTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
-  return tasks.filter(task => {
-    if (!isActiveTask(task)) return false;
-    const delegatedToSomeoneElse = getTaskAssigneeIds(task).some(id => id !== currentUserId);
-    return task.createdBy ? task.createdBy === currentUserId && delegatedToSomeoneElse : task.isDelegated && delegatedToSomeoneElse;
-  });
+  return getCanonicalDelegatedTasks(tasks, currentUserId);
 }
 
-function getWaitingTasks(tasks = TASKS) {
-  return tasks.filter(task => isActiveTask(task) && task.status === "waiting");
+function getWaitingWork(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getCanonicalWaitingWork(tasks, currentUserId);
+}
+
+function getWaitingTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getWaitingWork(tasks, currentUserId).all;
+}
+
+function getReviewTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getCanonicalReviewTasks(tasks, currentUserId);
+}
+
+function getOverdueTasks(tasks = TASKS) {
+  return getCanonicalOverdueTasks(tasks, isoDate(getWorkspaceCalendarDate()));
+}
+
+function getFollowUpNudgeCandidates(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const today = isoDate(getWorkspaceCalendarDate());
+  const todayMs = Date.parse(`${today}T00:00:00.000Z`);
+  const allTasks = tasks.filter(task => isActiveTask(task) && isTaskTrackedByPerson(task, currentUserId));
+  const candidates = deriveWorkNudges(allTasks.map(task => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
+    daysWithoutUpdate: task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 86400000)) : undefined,
+    reviewWaitingHours: task.status === "review" && task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 3600000)) : undefined,
+    blockedDependentCount: allTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
+    nextActionBy: task.nextActionBy,
+    deadlineDate: task.deadlineDate,
+    priority: task.priority,
+  })), new Date(`${today}T00:00:00.000Z`)).filter(candidate => {
+    const state = CANONICAL_NUDGE_STATES.find(item => item.dedupKey === candidate.dedupKey);
+    return !state || (state.disposition === "snoozed" && (!state.snoozedUntil || state.snoozedUntil <= `${today}T23:59:59.999Z`));
+  });
+  return { allTasks, candidates, today };
+}
+
+function organizationScopeId(organization: OrgName, tasks = TASKS) {
+  // Browser fallback tasks predate organization IDs. The server projection
+  // always has them; use the ID whenever it exists so organization scope is a
+  // stable relationship rather than a display-name match.
+  const canonicalId = ORGS_META.find(candidate => candidate.name === organization)?.id || remoteOrganizationIds.get(organization);
+  return tasks.some(task => Boolean(task.organizationId)) && canonicalId ? canonicalId : organization;
 }
 
 function getTasksForOrganization(organization: OrgName, tasks = TASKS) {
-  return tasks.filter(task => task.org === organization && !task.archived);
+  return getCanonicalOrganizationTasks(tasks, organizationScopeId(organization, tasks));
+}
+
+function getOrganizationActiveWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationActiveTasks(tasks, organizationScopeId(organization, tasks));
+}
+
+function getOrganizationTodayWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationTodayTasks(tasks, organizationScopeId(organization, tasks), isoDate(getWorkspaceCalendarDate()));
+}
+
+function getOrganizationWeekWork(organization: OrgName, tasks = TASKS, weekStart?: Date) {
+  const today = getWorkspaceCalendarDate();
+  const monday = weekStart ? new Date(weekStart) : new Date(today);
+  if (!weekStart) monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+  const sunday = new Date(monday); sunday.setUTCDate(sunday.getUTCDate() + 6);
+  return getCanonicalOrganizationWeekTasks(tasks, organizationScopeId(organization, tasks), isoDate(monday), isoDate(sunday));
+}
+
+function getOrganizationWaitingWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationWaitingTasks(tasks, organizationScopeId(organization, tasks));
+}
+
+function getOrganizationRevisitWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationRevisitTasks(tasks, organizationScopeId(organization, tasks), isoDate(getWorkspaceCalendarDate()));
+}
+
+function getOrganizationAreaWork(organization: OrgName, area: AreaName, tasks = TASKS) {
+  return getCanonicalOrganizationAreaTasks(tasks, organizationScopeId(organization, tasks), area);
 }
 
 function getTasksForArea(area: AreaName, organization?: OrgName, tasks = TASKS) {
   return tasks.filter(task => !task.archived && (!organization || task.org === organization) && taskInvolvesArea(task, area));
-}
-
-function getTasksForAssignee(assigneeId: string, tasks = TASKS) {
-  return tasks.filter(task => !task.archived && getTaskAssigneeIds(task).includes(assigneeId));
 }
 
 function getPersonMembership(person: DirectoryPerson, organization?: OrgName) {
@@ -838,10 +915,12 @@ function getPersonMembership(person: DirectoryPerson, organization?: OrgName) {
 function getPersonAccountability(name: string): PersonAccountability {
   const entity = getDirectoryPerson(name);
   const personId = entity?.id;
-  const involved = TASKS.filter(task => Boolean(entity && taskHasAssignee(task, entity)) || (personId && task.nextActionPrincipalId === personId) || Boolean(personId && task.contributorIds?.includes(personId)));
-  const waitingOnThem = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === personId && (task.status === "waiting" || task.isWaiting || task.status === "blocked")).length;
+  const involved = personId ? TASKS.filter(task => taskIsForCurrentUser(task, personId)) : [];
+  const waitingOnThemTasks = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === personId && (task.status === "waiting" || task.isWaiting || task.status === "blocked"));
+  const waitingOnThem = waitingOnThemTasks.length;
   const waitingOnMe = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === CANONICAL_ACTOR_ID).length;
   const updates = involved.flatMap(task => task.activity || []);
+  const oldestWaiting = [...waitingOnThemTasks].sort((left, right) => (left.waitingSince || "").localeCompare(right.waitingSince || ""))[0];
   return {
     active: involved.filter(task => task.status !== "done").length,
     ready: involved.filter(task => task.status === "ready" && !task.blockedBy).length,
@@ -852,7 +931,7 @@ function getPersonAccountability(name: string): PersonAccountability {
     overdue: involved.filter(task => task.isOverdue).length,
     review: involved.filter(task => task.status === "review").length,
     lastUpdate: updates[0]?.time || "No updates yet",
-    oldestUnanswered: waitingOnThem ? `${Math.max(...involved.filter(task => task.nextActionPrincipalId === personId).map(task => Number.parseInt(task.waitingSince || "0", 10) || 1))} days` : "—",
+    oldestUnanswered: oldestWaiting ? humanizeWaitingSince(oldestWaiting.waitingSince) : "—",
   };
 }
 
@@ -880,8 +959,6 @@ function replaceDirectoryPerson(id: string, update: (person: DirectoryPerson) =>
 const FOLLOWUP_DATA: FollowUpPerson[] = [];
 
 const ORG_RESOURCES: Record<string, OrganizationResource[]> = {};
-
-const PROJECT_DETAILS: Record<string, ProjectDetail> = {};
 
 const MILESTONES: Milestone[] = [];
 
@@ -985,8 +1062,9 @@ function DoneChip() {
 
 function WeeklyPlannerTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const isDone = task.status === "done";
+  const waitingLabel = readableTaskNextAction(task);
   const stateLabel = task.status === "waiting"
-    ? `Waiting on ${task.nextActionBy === "me" ? "you" : task.nextActionBy}`
+    ? waitingLabel === "Not assigned" ? "Waiting · next action not assigned" : `Waiting on ${waitingLabel}`
     : task.status === "in_progress"
       ? "In progress"
       : task.status === "blocked"
@@ -1148,10 +1226,19 @@ function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
 
 // ─── TASK DETAIL DRAWER ───────────────────────────────────────────────────────
 
-function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }) {
+function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, onOpenPrincipal }: {
+  task: Task;
+  onClose: () => void;
+  onOpenOrganization?: (organization: OrgName) => void;
+  onOpenProject?: (projectId: string) => void;
+  onOpenPrincipal?: (principal: DirectoryPerson) => void;
+}) {
   const [, setRevision] = useState(0);
   const [effortDraft, setEffortDraft] = useState(task.estimatedMinutes ? String(task.estimatedMinutes) : "");
   const [savingEffort, setSavingEffort] = useState(false);
+  const [planForDraft, setPlanForDraft] = useState(task.startDate || "");
+  const [deadlineDraft, setDeadlineDraft] = useState(task.deadlineDate || "");
+  const [savingPlannerDates, setSavingPlannerDates] = useState(false);
   const [waitingCheckOpen, setWaitingCheckOpen] = useState(false);
   const [blockingKind, setBlockingKind] = useState<DependencyKind>("task");
   const [areasEditOpen, setAreasEditOpen] = useState(false);
@@ -1247,18 +1334,42 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
   }
 
   async function reschedule() {
+    const tomorrow = new Date(getWorkspaceCalendarDate());
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const rescheduledDate = isoDate(tomorrow);
     if (taskStoreUsesServer && task.version) {
-      const tomorrow = new Date(getWorkspaceCalendarDate());
-      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, deadlineDate: isoDate(tomorrow) });
+      const result = await updateTaskAction({
+        taskId: task.id,
+        expectedVersion: task.version,
+        ...(task.startDate ? { startDate: rescheduledDate } : task.targetDate ? { targetDate: rescheduledDate } : { deadlineDate: rescheduledDate }),
+      });
       if (!result.ok) { setActionMessage(result.message); return; }
       Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setPlanForDraft(result.data.startDate || "");
+      setDeadlineDraft(result.data.deadlineDate || "");
       setRevision(value => value + 1);
       return;
     }
-    Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
+    Object.assign(task, task.startDate ? { startDate: rescheduledDate } : task.targetDate ? { targetDate: rescheduledDate } : { deadline: "Tomorrow", deadlineDate: rescheduledDate }, { isOverdue: false, lastUpdate: "Rescheduled just now" });
     commitTaskStore();
     onClose();
+  }
+
+  async function savePlannerDates() {
+    if (!taskStoreUsesServer || !task.version) {
+      Object.assign(task, { startDate: planForDraft || undefined, deadlineDate: deadlineDraft || undefined, deadline: deadlineDraft ? taskDateLabel(deadlineDraft) : undefined, lastUpdate: "Dates updated just now" });
+      commitTaskStore();
+      return;
+    }
+    setSavingPlannerDates(true);
+    const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, startDate: planForDraft || null, deadlineDate: deadlineDraft || null });
+    setSavingPlannerDates(false);
+    if (!result.ok) { setActionMessage(result.message); return; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setPlanForDraft(result.data.startDate || "");
+    setDeadlineDraft(result.data.deadlineDate || "");
+    setRevision(current => current + 1);
+    setActionMessage("Plan and deadline saved.");
   }
 
   async function saveEstimatedEffort(minutes: number | null) {
@@ -1523,7 +1634,7 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <PriorityDot priority={task.priority} />
-              <OrgBadge org={task.org} />
+              <button onClick={() => onOpenOrganization?.(task.org)} disabled={!onOpenOrganization} className="rounded-full disabled:cursor-default"><OrgBadge org={task.org} /></button>
               <span className="text-[10px] text-muted-foreground">Lead:</span><AreaBadge area={task.area} />
             </div>
             <h2 className="binnie-heading text-lg font-bold leading-snug text-foreground">{task.title}</h2>
@@ -1537,18 +1648,18 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
             {[
               { label: "Status", value: <div className="flex items-center gap-1.5"><StatusDot status={task.status} /><span className="capitalize text-sm">{task.status.replace("_", " ")}</span></div> },
               { label: "Priority", value: <PriorityBadge priority={task.priority} /> },
-              { label: "Assigned To", value: assignedPeople.length ? <div className="flex flex-wrap items-center gap-1.5">{assignedPeople.map(person => <span key={person.id} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2 py-1 text-sm text-foreground"><Avatar name={person.name} size="xs" />{person.name}</span>)}</div> : <span className="text-sm text-muted-foreground">Unassigned</span> },
-              { label: "Next Action By", value: <span className={cn("text-sm font-medium", task.nextActionBy === "me" ? "text-warning" : "text-primary")}>{task.nextActionBy === "me" ? "You" : task.nextActionBy}</span> },
-              { label: "Start Date", value: <span className="text-sm font-medium text-foreground">{task.startDate || "—"}</span> },
+              { label: "Assigned To", value: assignedPeople.length ? <div className="flex flex-wrap items-center gap-1.5">{assignedPeople.map(person => <button key={person.id} onClick={() => onOpenPrincipal?.(person)} disabled={!onOpenPrincipal} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2 py-1 text-sm text-foreground hover:text-primary disabled:cursor-default"><Avatar name={person.name} size="xs" />{person.name}</button>)}</div> : <span className="text-sm text-muted-foreground">Unassigned</span> },
+              { label: "Next Action By", value: <span className={cn("text-sm font-medium", task.nextActionBy === "me" ? "text-warning" : "text-primary")}>{readableTaskNextAction(task)}</span> },
+              { label: "Plan For", value: <span className="text-sm font-medium text-foreground">{task.startDate || "—"}</span> },
               { label: "Target Date", value: <span className="text-sm font-medium text-foreground">{task.targetDate || "—"}</span> },
               { label: "Deadline", value: <span className={cn("text-sm font-medium", task.isOverdue ? "text-overdue" : "text-foreground")}>{task.deadline || "—"}</span> },
               { label: "Follow-Up Date", value: <span className="text-sm font-medium text-foreground">{task.responseDue || "—"}</span> },
-              { label: "Project", value: <span className="text-sm text-foreground">{task.project || "—"}</span> },
+              { label: "Project", value: task.projectId ? <button onClick={() => onOpenProject?.(task.projectId!)} disabled={!onOpenProject} className="text-sm text-primary hover:underline disabled:cursor-default disabled:text-foreground disabled:no-underline">{task.project || "—"}</button> : <span className="text-sm text-foreground">—</span> },
               { label: "Lead Area", value: <AreaBadge area={task.area} /> },
               { label: "Involved Areas", value: <span className="text-sm text-foreground">{getTaskAreas(task).filter(area => area !== task.area).join(" · ") || "No additional areas"}</span> },
               { label: "Contributors", value: <span className="text-sm text-foreground">{directoryNames(task.contributorIds).join(" · ") || "—"}</span> },
               { label: "Blocked By", value: task.blockedBy ? <span className="flex items-center gap-1.5 text-sm font-medium text-overdue"><GitBranch className="h-3.5 w-3.5" />{task.blockedBy.label}</span> : <span className="text-sm text-muted-foreground">No blocking dependency</span> },
-              { label: "Waiting Since", value: <span className="text-sm font-mono text-muted-foreground">{task.waitingSince || "—"}</span> },
+              { label: "Waiting Since", value: <span className="text-sm text-muted-foreground">{humanizeWaitingSince(task.waitingSince)}</span> },
               { label: "Last Update", value: <span className="text-sm text-muted-foreground">{task.lastUpdate || "—"}</span> },
               { label: "Est. Time", value: <span className="text-sm font-mono text-muted-foreground">{task.estimatedMinutes ? `~${formatEstimatedMinutes(task.estimatedMinutes)}` : "Not estimated"}</span> },
             ].map(({ label, value }) => (
@@ -1558,6 +1669,14 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
               </div>
             ))}
           </div>
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div><p className="text-[12px] font-semibold text-foreground">Plan & deadline</p><p className="mt-0.5 text-[10px] text-muted-foreground">Plan for controls planner placement. Deadline stays visible as the latest completion date.</p></div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <label className="text-[10px] font-medium text-muted-foreground">Plan for<input type="date" value={planForDraft} onChange={event => setPlanForDraft(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Deadline<input type="date" value={deadlineDraft} onChange={event => setDeadlineDraft(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>
+            </div>
+            <div className="mt-2 flex justify-end"><button onClick={() => void savePlannerDates()} disabled={savingPlannerDates} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingPlannerDates ? "Saving…" : "Save dates"}</button></div>
+          </section>
           <section className="rounded-2xl border border-border bg-card p-3.5">
             <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Estimated effort</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. Used for workload planning, never multiplied across collaborators.</p></div>{task.estimatedMinutes && <button onClick={() => void saveEstimatedEffort(null)} disabled={savingEffort} className="rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-overdue disabled:opacity-50">Clear</button>}</div>
             <div className="mt-3 flex flex-wrap gap-1.5">{[[15, "15m"], [30, "30m"], [60, "1h"], [120, "2h"], [240, "4h"], [480, "1 day"]].map(([minutes, label]) => <button key={String(minutes)} onClick={() => void saveEstimatedEffort(minutes as number)} disabled={savingEffort} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium disabled:opacity-50", task.estimatedMinutes === minutes ? "border-primary/35 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{label}</button>)}</div>
@@ -1802,11 +1921,13 @@ function parseCaptureDate(text: string): { label: string; iso: string; kind: Cap
   const date = new Date(today);
   let found = false;
   const isFollowUp = /\b(?:follow\s*up|check in|nudge)\b/.test(normalized);
-  const isStart = !isFollowUp && /\b(?:start|begin|mulai)\b/.test(normalized);
+  const isStart = !isFollowUp && /\b(?:plan(?:ned)?(?:\s+for)?|schedule[ds]?|start|begin|mulai)\b/.test(normalized);
   const isTarget = !isFollowUp && !isStart && /\b(?:target|aim for|try by|around|hopefully)\b/.test(normalized);
   const isDeadline = !isTarget && !isFollowUp && !isStart && /\b(?:deadline|due|must finish(?: by)?|before|latest|by)\b/.test(normalized);
-  const kind: CaptureDateKind = isFollowUp ? "follow_up" : isStart ? "start" : isDeadline ? "deadline" : "target";
-  const semanticScope = normalized.match(/\b(?:deadline|due|must finish(?: by)?|before|latest|target|aim for|try by|around|hopefully|follow\s*up|check in|nudge|start|begin|mulai)\b[^.;\n]*/i)?.[0] || normalized;
+  // An unqualified date in a task capture means “when I plan to work on it”,
+  // not an implicit deadline or a title-only reminder.
+  const kind: CaptureDateKind = isFollowUp ? "follow_up" : isDeadline ? "deadline" : isTarget ? "target" : "start";
+  const semanticScope = normalized.match(/\b(?:deadline|due|must finish(?: by)?|before|latest|target|aim for|try by|around|hopefully|follow\s*up|check in|nudge|plan(?:ned)?(?:\s+for)?|schedule[ds]?|start|begin|mulai)\b[^.;\n]*/i)?.[0] || normalized;
   if (/\btomorrow\b/.test(semanticScope)) { date.setUTCDate(date.getUTCDate() + 1); found = true; }
   else if (/\btoday\b/.test(semanticScope)) found = true;
   else if (/\bend of (?:this )?(?:month|the month)\b/.test(semanticScope)) { date.setUTCMonth(date.getUTCMonth() + 1, 0); found = true; }
@@ -1851,11 +1972,11 @@ function parseCaptureDate(text: string): { label: string; iso: string; kind: Cap
 
 function captureMetadataParts(raw: string) {
   const commaParts = raw.split(/\s*,\s*/);
-  const useCommas = commaParts.length > 1 && commaParts.slice(1).some(part => /\b(?:deadline|target|due|by|end of|marketing|finance|operations|hr|purchasing|system development)\b/i.test(part));
+  const useCommas = commaParts.length > 1 && commaParts.slice(1).some(part => /\b(?:deadline|target|due|by|plan(?:ned)?|schedule[ds]?|end of|marketing|finance|operations|hr|purchasing|system development)\b/i.test(part));
   const parts = (useCommas ? commaParts : raw.split(/\s*(?:→|\||\/|;)\s*/)).map(part => part.trim()).filter(Boolean);
   // A date often comes first in a quick thought: “deadline tomorrow, ask
   // Marketing to…”. Treat it as metadata, never as the task's title.
-  if (parts.length > 1 && /^(?:deadline|due|target|before|by|latest|follow\s*up|start|begin)\b/i.test(parts[0])) {
+  if (parts.length > 1 && /^(?:deadline|due|target|before|by|latest|plan(?:ned)?|schedule[ds]?|follow\s*up|start|begin)\b/i.test(parts[0])) {
     return { description: parts.slice(1).join(" "), metadata: parts[0] };
   }
   return { description: parts[0] || raw.trim(), metadata: parts.slice(1).join(" ") };
@@ -1897,8 +2018,8 @@ function inferCaptureOrganization(text: string, project?: string, contextOrg?: O
   if (explicit) return { org: explicit.name, confidence: "high", reason: "Named in your capture" };
   const aliasedOrg = ORGS_META.find(org => getOrganizationAliases(org.name).some(alias => hasCaptureTerm(normalized, alias)));
   if (aliasedOrg) return { org: aliasedOrg.name, confidence: "high", reason: `Matched “${getOrganizationAliases(aliasedOrg.name).find(alias => hasCaptureTerm(normalized, alias))}”` };
-  const projectMatch = Object.values(PROJECT_DETAILS).find(item => normalized.includes(item.name.toLowerCase())) || (project ? Object.values(PROJECT_DETAILS).find(item => item.name === project) : undefined);
-  if (projectMatch) return { org: projectMatch.org, project: projectMatch.name, confidence: "high", reason: "Matched the project context" };
+  const projectMatch = CANONICAL_PROJECTS.find(item => normalized.includes(item.name.toLowerCase())) || (project ? CANONICAL_PROJECTS.find(item => item.name === project) : undefined);
+  if (projectMatch) return { org: projectMatch.organization as OrgName, project: projectMatch.name, confidence: "high", reason: "Matched the project context" };
   const areaMatches = ORGS_META.map(org => ({ org: org.name, areas: captureMentionedAreas(normalized, org.name) })).sort((left, right) => right.areas.length - left.areas.length);
   if (areaMatches[0]?.areas.length && areaMatches[0].areas.length > (areaMatches[1]?.areas.length || 0)) return { org: areaMatches[0].org, confidence: areaMatches[0].areas.length > 1 ? "high" : "medium", reason: `Matched ${areaMatches[0].areas.join(", ")} in this workspace` };
   const semantic = ORGS_META.map(org => {
@@ -1962,8 +2083,8 @@ function inferCaptureAssignees(text: string, org: OrgName | undefined, leadArea:
   // Put the lead team's assignment first for compact card display while still
   // retaining every explicitly involved team and person on the same task.
   const assignmentAreas = Array.from(new Set([...(leadArea ? [leadArea] : []), ...involvedAreas]));
-  const explicitAreaTeamIds = assignmentAreas.map(area => getAreaTeam(org, area)?.id).filter((id): id is string => Boolean(id));
   const explicitEntityIds = explicitIds.filter(id => PEOPLE_DIRECTORY.some(person => person.id === id));
+  const explicitAreaTeamIds = assignmentAreas.map(area => getAreaTeam(org, area)?.id).filter((id): id is string => Boolean(id));
   const assigneeIds = Array.from(new Set([...explicitAreaTeamIds, ...explicitEntityIds]));
   if (assigneeIds.length) return { assigneeIds, confidence: "high" as const, reason: "Named people and department teams are kept together" };
 
@@ -1977,6 +2098,7 @@ function cleanCaptureTitle(description: string) {
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/\b(?:ask|assign(?:\s+to)?|follow up with)\s+[^,]+?\s+to\s+/i, "")
     .replace(/^\s*(?:task\s+for\s+me|my\s+task|remind\s+me\s+to|i\s+need\s+to|i\s+should|need\s+to|please|can\s+you|could\s+you|buat\s+saya|tugas\s+saya|untuk\s+saya|aku\s+harus|saya\s+harus|tolong)\b[\s,:-]*/i, "")
+    .replace(/^\s*(?:today|tomorrow|besok|this\s+week|next\s+week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s,:-]*/i, "")
     .replace(/\b(?:for\s+)?(?:deadline|target)\b.*$/i, "")
     .replace(/\s+/g, " ")
     .replace(/^[\s,;:→|/\-]+|[\s,;:→|/\-]+$/g, "")
@@ -2081,10 +2203,10 @@ function createCapturePreviews(input: string, organization?: OrgName, defaultAre
     const { description, metadata } = captureMetadataParts(raw);
     const text = `${raw} ${metadata}`;
     const learned = readCaptureLearning(raw);
-    const assigneeMatch = raw.match(/\b(?:ask|assign(?:\s+to)?|follow up with)\s+(.+?)\s+to\b/i);
+    const assignmentMatch = raw.match(/\b(?:assign(?:\s+to)?|ask|follow up with)\s+(.+?)\s+to\b/i);
     const namedAssigneeIds = PEOPLE_DIRECTORY.filter(person => hasCaptureTerm(raw, person.name)).map(person => person.id);
-    const askedAssignee = resolveDirectoryAssignee(assigneeMatch?.[1]);
-    const unmatchedAssigneeName = assigneeMatch?.[1]?.trim() && !askedAssignee ? assigneeMatch[1].trim() : undefined;
+    const askedAssignee = resolveDirectoryAssignee(assignmentMatch?.[1]);
+    const unmatchedAssigneeName = assignmentMatch?.[1]?.trim() && !askedAssignee ? assignmentMatch[1].trim() : undefined;
     const askedAssigneeId = askedAssignee ? getDirectoryPerson(askedAssignee)?.id : undefined;
     const explicitAssigneeIds = Array.from(new Set([
       ...namedAssigneeIds,
@@ -2115,7 +2237,9 @@ function createCapturePreviews(input: string, organization?: OrgName, defaultAre
       blockedByTitle, link: raw.match(/https?:\/\/\S+/i)?.[0],
       notes: captureNotesForAreas(involvedAreas),
       deadline: date?.kind === "deadline" ? date.label : undefined,
+      deadlineDate: date?.kind === "deadline" ? date.iso : undefined,
       targetDate: date?.kind === "target" ? date.label : undefined,
+      targetDateISO: date?.kind === "target" ? date.iso : undefined,
       startDate: date?.kind === "start" ? date.iso : undefined,
       followUpDate: date?.kind === "follow_up" ? date.iso : undefined,
       dateISO: date?.iso, dateKind: date?.kind,
@@ -2139,7 +2263,7 @@ function filesFromCapture(names: string[]): TaskFile[] | undefined {
 }
 
 function saveCapturedTask(capture: ParsedTask, attachments: string[] = [], context?: { project?: string; area?: AreaName }, createdBy = DEFAULT_CURRENT_USER_ID) {
-  const taskOrg = capture.org || (context?.project ? PROJECT_DETAILS[context.project]?.org : undefined) || "Uncategorized";
+  const taskOrg = capture.org || (context?.project ? CANONICAL_PROJECTS.find(project => project.name === context.project)?.organization : undefined) || "Uncategorized";
   // Explicitly parsed lead area always wins over the page context. The context is
   // only a fallback for a capture that did not identify an owning department.
   const taskArea = capture.area || context?.area || (capture.involvedAreas?.length === 1 ? capture.involvedAreas[0] : "Unassigned");
@@ -2162,9 +2286,9 @@ function saveCapturedTask(capture: ParsedTask, attachments: string[] = [], conte
     assignee: primaryAssignee,
     nextActionBy: primaryAssignee || "Unassigned",
     deadline: capture.deadline,
-    deadlineDate: capture.dateKind === "deadline" ? capture.dateISO : undefined,
-    startDate: capture.dateKind === "start" ? capture.dateISO : undefined,
-    targetDate: capture.dateKind === "target" ? capture.dateISO : undefined,
+    deadlineDate: capture.deadlineDate,
+    startDate: capture.startDate,
+    targetDate: capture.targetDateISO,
     responseDue: capture.followUpDate,
     estimatedMinutes: capture.estimatedMinutes,
     isDelegated,
@@ -2198,9 +2322,9 @@ async function saveCapturedTaskToServer(capture: ParsedTask, context?: { project
     assignments: assigneeIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })),
     nextAction: assigneeIds[0] ? { kind: "principal" as const, principalId: assigneeIds[0] } : { kind: "ready" as const },
     priority: capture.priority,
-    startDate: capture.dateKind === "start" ? capture.dateISO : undefined,
-    targetDate: capture.dateKind === "target" ? capture.dateISO : undefined,
-    deadlineDate: capture.dateKind === "deadline" ? capture.dateISO : undefined,
+    startDate: capture.startDate,
+    targetDate: capture.targetDateISO,
+    deadlineDate: capture.deadlineDate,
     followUpDate: capture.followUpDate,
     estimatedMinutes: capture.estimatedMinutes,
     dependencies: capture.suggestedStatus === "blocked" && capture.blockedByTitle ? [{ type: "start_blocker" as const, label: capture.blockedByTitle }] : undefined,
@@ -2265,7 +2389,9 @@ function CapturedWorkReviewCard({
     dateKind: kind,
     dateISO: iso || undefined,
     deadline: kind === "deadline" ? (iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined) : preview.deadline,
+    deadlineDate: kind === "deadline" ? (iso || undefined) : preview.deadlineDate,
     targetDate: kind === "target" ? (iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined) : preview.targetDate,
+    targetDateISO: kind === "target" ? (iso || undefined) : preview.targetDateISO,
     startDate: kind === "start" ? (iso || undefined) : preview.startDate,
     followUpDate: kind === "follow_up" ? (iso || undefined) : preview.followUpDate,
   });
@@ -2307,7 +2433,7 @@ function CapturedWorkReviewCard({
             <span>{statusLabel}</span>
             {preview.deadline && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Deadline: {preview.deadline}</span>}
             {preview.targetDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Target: {preview.targetDate}</span>}
-            {preview.startDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Start: {captureDateLabel(new Date(`${preview.startDate}T00:00:00Z`))}</span>}
+            {preview.startDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Plan for: {captureDateLabel(new Date(`${preview.startDate}T00:00:00Z`))}</span>}
             {preview.followUpDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Follow up: {captureDateLabel(new Date(`${preview.followUpDate}T00:00:00Z`))}</span>}
             {preview.estimatedMinutes && <span>~{formatEstimatedMinutes(preview.estimatedMinutes)} estimated</span>}
             {!preview.estimatedMinutes && preview.suggestedEstimatedMinutes && <button onClick={() => onChange({ estimatedMinutes: preview.suggestedEstimatedMinutes })} className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary hover:bg-primary/15">Suggested ~{formatEstimatedMinutes(preview.suggestedEstimatedMinutes)} · Use</button>}
@@ -2339,14 +2465,14 @@ function CapturedWorkReviewCard({
               <label className="text-[10px] font-medium text-muted-foreground">Lead area<select value={preview.area || ""} onChange={event => { const area = event.target.value as AreaName; onChange({ area: area || undefined, areaConfidence: "high", involvedAreas: area ? Array.from(new Set([...(preview.involvedAreas || []), area])) : preview.involvedAreas }); }} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No lead area</option>{availableAreas.map(area => <option key={area}>{area}</option>)}</select></label>
               <div className="sm:col-span-2"><p className="text-[10px] font-medium text-muted-foreground">Involved areas</p><div className="mt-1 flex flex-wrap gap-1.5">{availableAreas.map(area => <button key={area} onClick={() => toggleArea(area)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", preview.involvedAreas?.includes(area) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{area}</button>)}</div></div>
               <label className="text-[10px] font-medium text-muted-foreground">Add assignee<select value="" onChange={event => addAssignee(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">Choose person or team</option>{getDirectoryAssignees(preview.org).filter(person => !preview.assigneeIds?.includes(person.id)).map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label>
-              <label className="text-[10px] font-medium text-muted-foreground">Project<select value={preview.project || ""} onChange={event => onChange({ project: event.target.value || undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No project</option>{Object.values(PROJECT_DETAILS).filter(project => !preview.org || project.org === preview.org).map(project => <option key={project.id} value={project.name}>{project.name}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Project<select value={preview.project || ""} onChange={event => onChange({ project: event.target.value || undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No project</option>{CANONICAL_PROJECTS.filter(project => project.status !== "archived" && (!preview.org || project.organization === preview.org)).map(project => <option key={project.id} value={project.name}>{project.name}</option>)}</select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Status<select value={preview.suggestedStatus || "ready"} onChange={event => onChange({ suggestedStatus: event.target.value as TaskStatus })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{PLANNING_COLUMNS.map(column => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Priority<select value={preview.priority} onChange={event => onChange({ priority: event.target.value as Priority, priorityExplicit: true })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{Object.entries(PRIORITY_CONFIG).map(([value, config]) => <option key={value} value={value}>{config.label}</option>)}</select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Estimated effort <span className="font-normal">(optional)</span><select value={preview.estimatedMinutes || ""} onChange={event => onChange({ estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">Not estimated</option><option value="15">15m</option><option value="30">30m</option><option value="60">1h</option><option value="120">2h</option><option value="240">4h</option><option value="480">1 day</option></select></label>
               <label className="text-[10px] font-medium text-muted-foreground">Custom effort <span className="font-normal">(minutes)</span><input type="number" min="1" max="10080" value={preview.estimatedMinutes && ![15, 30, 60, 120, 240, 480].includes(preview.estimatedMinutes) ? preview.estimatedMinutes : ""} onChange={event => onChange({ estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} placeholder="e.g. 90" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
-              <label className="text-[10px] font-medium text-muted-foreground">Target date<input type="date" value={preview.dateKind === "target" ? preview.dateISO || "" : ""} onChange={event => updateDate("target", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
-              <label className="text-[10px] font-medium text-muted-foreground">Deadline<input type="date" value={preview.dateKind === "deadline" ? preview.dateISO || "" : ""} onChange={event => updateDate("deadline", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
-              <label className="text-[10px] font-medium text-muted-foreground">Start date<input type="date" value={preview.dateKind === "start" ? preview.dateISO || "" : preview.startDate || ""} onChange={event => updateDate("start", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Target date<input type="date" value={preview.targetDateISO || ""} onChange={event => updateDate("target", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Deadline <span className="font-normal">(latest completion)</span><input type="date" value={preview.deadlineDate || ""} onChange={event => updateDate("deadline", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Plan for <span className="font-normal">(when to work on it)</span><input type="date" value={preview.startDate || ""} onChange={event => updateDate("start", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Follow-up date<input type="date" value={preview.dateKind === "follow_up" ? preview.dateISO || "" : preview.followUpDate || ""} onChange={event => updateDate("follow_up", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Blocked by <span className="font-normal">(optional)</span><input value={preview.blockedByTitle || ""} onChange={event => onChange({ blockedByTitle: event.target.value || undefined, suggestedStatus: event.target.value ? "blocked" : "ready" })} placeholder="Another task or decision" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
               <label className="text-[10px] font-medium text-muted-foreground">Notes <span className="font-normal">(optional)</span><input value={preview.notes || ""} onChange={event => onChange({ notes: event.target.value || undefined })} placeholder="Add context" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
@@ -2672,16 +2798,15 @@ function HomeView({
   const workspaceDate = getWorkspaceCalendarDate();
   const todayTasks = getTasksForToday(TASKS, currentUserId);
   const todayWorkloadLabel = formatTodayWorkload(todayTasks, currentUserId);
-  const overdueTasks = TASKS.filter(isTaskOverdue);
-  const reviewTasks = TASKS.filter(t => t.status === "review" && taskIsForCurrentUser(t, currentUserId));
+  const overdueTasks = getOverdueTasks(TASKS);
+  const reviewTasks = getReviewTasks(TASKS, currentUserId);
   const delegatedTasks = getDelegatedTasks(TASKS, currentUserId);
-  const waitingTasks = getWaitingTasks(TASKS);
-  const waitingPeople = Array.from(new Map(waitingTasks.flatMap(task => taskAssigneeNames(task).map(name => [name, task] as const))).entries()).map(([name, task]) => ({ name, outstanding: waitingTasks.filter(item => taskAssigneeNames(item).includes(name)).length, overdue: waitingTasks.filter(item => taskAssigneeNames(item).includes(name) && isTaskOverdue(item)).length, oldest: task.waitingSince || "Recently" }));
+  const waitingTasks = getWaitingTasks(TASKS, currentUserId);
+  const waitingPeople = Array.from(new Map(waitingTasks.map(task => [readableTaskNextAction(task), task] as const)).entries()).map(([name, task]) => ({ name, outstanding: waitingTasks.filter(item => readableTaskNextAction(item) === name).length, overdue: waitingTasks.filter(item => readableTaskNextAction(item) === name && isTaskOverdue(item)).length, oldest: humanizeWaitingSince(task.waitingSince) }));
   const weeklyTasks = getTasksForWeek(TASKS);
   const strategicProjects = CANONICAL_PROJECTS.filter(project => project.status !== "archived").map(project => {
-    const projectTasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
-    const done = projectTasks.filter(task => task.status === "done").length;
-    return { id: project.id, name: project.name, org: project.organization as OrgName, progress: projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0, tasks: projectTasks.length, done };
+    const progress = getProjectProgress(TASKS, project.id);
+    return { id: project.id, name: project.name, org: project.organization as OrgName, progress: progress.progress, tasks: progress.total, done: progress.done };
   });
   const weekOrgs: { org: OrgName; tasks: number; done: number }[] = ORGS_META.map(({ name: org }) => {
     const orgTasks = weeklyTasks.filter(task => task.org === org);
@@ -2947,7 +3072,9 @@ interface ParsedTask {
   assigneeIds?: string[];
   contributorIds?: string[];
   deadline?: string;
+  deadlineDate?: string;
   targetDate?: string;
+  targetDateISO?: string;
   startDate?: string;
   followUpDate?: string;
   estimatedMinutes?: number;
@@ -3174,23 +3301,28 @@ function InboxView({ projectContext }: { projectContext?: ProjectDTO }) {
 
 // ─── DELEGATED VIEW ───────────────────────────────────────────────────────────
 
-function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPersonClick: (person: string) => void }) {
+function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPrincipalClick: (principal: DirectoryPerson) => void }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const delegated = getDelegatedTasks(TASKS, currentUserId);
   const byPerson: Record<string, Task[]> = {};
-  delegated.forEach(t => { if (t.assignee) { byPerson[t.assignee] = [...(byPerson[t.assignee] || []), t]; } });
+  delegated.forEach(task => {
+    task.assignments
+      ?.filter(assignment => assignment.assignedByPrincipalId === currentUserId && assignment.principalId !== currentUserId)
+      .forEach(assignment => { byPerson[assignment.name] = [...(byPerson[assignment.name] || []), task]; });
+  });
 
   return (
     <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">
       <div className="mb-8">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Delegated</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Delegated Work</h1>
-        <p className="text-sm text-muted-foreground mt-1">{delegated.length} tasks across {Object.keys(byPerson).length} people</p>
+        <p className="text-sm text-muted-foreground mt-1">{delegated.length} tasks across {Object.keys(byPerson).length} recipients</p>
       </div>
       <div className="space-y-6">
         {Object.entries(byPerson).map(([person, tasks]) => {
           const color = getPersonColor(person);
-          const overdue = tasks.filter(t => t.isOverdue).length;
+          const overdue = tasks.filter(isTaskOverdue).length;
+          const principal = getDirectoryPerson(person);
           return (
             <div key={person} className="binnie-card overflow-hidden">
               <div className="flex items-center gap-4 px-5 py-4 border-b border-border">
@@ -3198,7 +3330,7 @@ function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick
                   style={personColorStyle(color)}>
                   {getInitials(person)}
                 </div>
-                <button onClick={() => onPersonClick(person)} className="flex-1 text-left">
+                <button onClick={() => principal && onPrincipalClick(principal)} disabled={!principal} className="flex-1 text-left disabled:cursor-default">
                   <h2 className="text-sm font-semibold text-foreground">{person}</h2>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{tasks.length} active · Last update: {tasks[0]?.lastUpdate || "Unknown"}</p>
                 </button>
@@ -3218,7 +3350,7 @@ function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick
                       <div className="flex items-center gap-2 mt-0.5"><OrgBadge org={task.org} /><span className="text-muted-foreground text-[11px]">·</span><AreaBadge area={task.area} /></div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      {task.waitingSince && <p className="text-[11px] font-mono text-muted-foreground">Waiting {task.waitingSince}</p>}
+                      {task.waitingSince && <p className="text-[11px] text-muted-foreground">{humanizeWaitingSince(task.waitingSince)}</p>}
                       {task.isOverdue && <p className="text-[10px] font-medium text-overdue">Response due for a check-in</p>}
                       {task.deadline && !task.isOverdue && <p className="text-[11px] font-mono text-muted-foreground">Due {task.deadline}</p>}
                     </div>
@@ -3237,7 +3369,8 @@ function DelegatedView({ onTaskClick, onFollowUp, onPersonClick }: { onTaskClick
 
 function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [, setRevision] = useState(0);
-  const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionPrincipalId === CANONICAL_ACTOR_ID);
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const reviewTasks = getReviewTasks(TASKS, currentUserId);
   async function approve(task: Task) {
     if (taskStoreUsesServer && task.version) {
       const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: true });
@@ -3327,11 +3460,12 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [tab, setTab] = useState<"others" | "me" | "blocked" | "external">("others");
+  const waiting = getWaitingWork(TASKS, currentUserId);
   const tabs = [
-    { id: "others" as const, label: "Waiting on Others", tasks: getWaitingTasks(TASKS).filter(t => getTaskAssigneeIds(t).some(id => id !== currentUserId)) },
-    { id: "me" as const, label: "Waiting on Me", tasks: TASKS.filter(t => t.status === "review" && taskIsForCurrentUser(t, currentUserId)) },
-    { id: "blocked" as const, label: "Blocked", tasks: TASKS.filter(t => t.status === "blocked") },
-    { id: "external" as const, label: "External", tasks: getWaitingTasks(TASKS).filter(t => !getTaskAssigneeIds(t).length) },
+    { id: "others" as const, label: "Waiting on Others", tasks: waiting.waitingOnOthers },
+    { id: "me" as const, label: "Waiting on Me", tasks: waiting.waitingOnMe },
+    { id: "blocked" as const, label: "Blocked", tasks: waiting.blocked },
+    { id: "external" as const, label: "External", tasks: waiting.external },
   ];
   const current = tabs.find(t => t.id === tab)!;
   return (
@@ -3360,8 +3494,8 @@ function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 <div className="flex items-center gap-2 mb-2 flex-wrap"><OrgBadge org={task.org} /><AreaBadge area={task.area} /></div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {[
-                    { label: "Next Action By", value: task.nextActionBy === "me" ? "You" : task.nextActionBy },
-                    { label: "Waiting Since", value: task.waitingSince || "—" },
+                    { label: "Next Action By", value: readableTaskNextAction(task) },
+                    { label: "Waiting Since", value: humanizeWaitingSince(task.waitingSince) },
                     { label: "Response Due", value: task.responseDue || task.deadline || "—" },
                   ].map(({ label, value }) => (
                     <div key={label}>
@@ -3405,7 +3539,7 @@ function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 // ─── OVERDUE VIEW ─────────────────────────────────────────────────────────────
 
 function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const overdue = TASKS.filter(isTaskOverdue);
+  const overdue = getOverdueTasks(TASKS);
   return (
     <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
       <div className="mb-8">
@@ -3448,7 +3582,7 @@ function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const dayColumns = weekDays.map(({ date, index, label }) => {
     const dateId = isoDate(date);
     const tasks = weekTasks
-      .filter(task => getTaskEffectiveDate(task) === dateId)
+      .filter(task => getTaskPlannerDate(task) === dateId)
       .sort((left, right) => weeklyTaskSortOrder(left) - weeklyTaskSortOrder(right));
     return {
       date,
@@ -3941,7 +4075,7 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
 
   const fallbackTasks = TASKS.filter((task) => {
     if (scope === "my") return taskIsForCurrentUser(task, profile.directoryId || "");
-    if (scope === "people") return Boolean(selectedPersonId && getTaskAssigneeIds(task).includes(selectedPersonId));
+    if (scope === "people") return Boolean(selectedPersonId && taskIsForCurrentUser(task, selectedPersonId));
     if (scope === "team") return Boolean(selectedTeamId && getTaskAssigneeIds(task).includes(selectedTeamId));
     return true;
   });
@@ -3955,7 +4089,7 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
   const projects = Array.from(new Set(sourceTasks.map((task) => task.project).filter((item): item is string => Boolean(item)))).sort();
   const assignees = Array.from(new Set(sourceTasks.flatMap((task) => task.assignments?.filter((assignment) => assignment.type === "person").map((assignment) => assignment.name) || task.assignee ? [task.assignee] : []))).sort();
   const assignedBy = Array.from(new Set(sourceTasks.flatMap((task) => task.assignments?.map((assignment) => assignment.assignedBy).filter((name): name is string => Boolean(name)) || []))).sort();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoDate(getWorkspaceCalendarDate());
   const filteredTasks = sourceTasks.filter((task) => {
     const searchable = [task.title, task.description, task.notes, task.org, task.area, task.project, ...(task.assignments?.map((assignment) => assignment.name) || []), ...(task.assignments?.map((assignment) => assignment.assignedBy || "") || [])].filter(Boolean).join(" ").toLowerCase();
     if (search.trim() && !searchable.includes(search.trim().toLowerCase())) return false;
@@ -4110,7 +4244,7 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
       </div>
     </div>
     {activeFilterChips.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-1.5"><span className="text-[10px] text-muted-foreground">Filtered by</span>{activeFilterChips.map((chip) => <button key={chip.id} onClick={chip.clear} className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.055] px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">{chip.label}<X className="h-3 w-3" /></button>)}</div>}
-    {filtersOpen && <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[10px] font-medium text-muted-foreground">Area / Department<select value={filterArea} onChange={(event) => setFilterArea(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All areas</option>{areas.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject} onChange={(event) => setFilterProject(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projects.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Person<select value={filterAssignee} onChange={(event) => setFilterAssignee(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any person</option>{assignees.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Team<select value={filterTeam} onChange={(event) => setFilterTeam(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any team</option>{scopeData?.teams.filter((item) => item.kind !== "department").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assigned by<select value={filterAssignedBy} onChange={(event) => setFilterAssignedBy(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{assignedBy.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={(event) => setFilterPriority(event.target.value as Priority | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Normal</option><option value="low">Low</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any date</option><option value="target">Has target date</option><option value="deadline">Has deadline</option><option value="overdue">Overdue</option></select></label><label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={(event) => setHasFilesOnly(event.target.checked)} className="h-4 w-4 accent-primary" />Has files</label><div className="flex items-end"><button onClick={clearFilters} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button></div></div>}
+    {filtersOpen && <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[10px] font-medium text-muted-foreground">Area / Department<select value={filterArea} onChange={(event) => setFilterArea(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All areas</option>{areas.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject} onChange={(event) => setFilterProject(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projects.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Person<select value={filterAssignee} onChange={(event) => setFilterAssignee(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any person</option>{assignees.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Team<select value={filterTeam} onChange={(event) => setFilterTeam(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any team</option>{scopeData?.teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assigned by<select value={filterAssignedBy} onChange={(event) => setFilterAssignedBy(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{assignedBy.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={(event) => setFilterPriority(event.target.value as Priority | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Normal</option><option value="low">Low</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any date</option><option value="target">Has target date</option><option value="deadline">Has deadline</option><option value="overdue">Overdue</option></select></label><label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={(event) => setHasFilesOnly(event.target.checked)} className="h-4 w-4 accent-primary" />Has files</label><div className="flex items-end"><button onClick={clearFilters} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button></div></div>}
     {scopeMessage && <p className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{scopeMessage}</p>}
     {mode === "list" ? (
       <div className="overflow-x-auto rounded-[1.2rem] border border-border bg-card">
@@ -4192,7 +4326,7 @@ function LegacyTaskListView({ onTaskClick, onNewTask }: { onTaskClick: (task: Ta
   const isInScope = (task: Task) => {
     if (scope === "month") return isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task);
     if (scope === "carried") return isActive(task) && Boolean(task.carriedOver || isTaskOverdue(task));
-    if (scope === "unscheduled") return isActive(task) && !getTaskEffectiveDate(task);
+    if (scope === "unscheduled") return isActive(task) && !getTaskPlannerDate(task);
     return task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task));
   };
   const matchesFilters = (task: Task) => {
@@ -4208,7 +4342,7 @@ function LegacyTaskListView({ onTaskClick, onNewTask }: { onTaskClick: (task: Ta
     if (filterDeadline === "today" && !getTasksForToday([task], currentUserId).length) return false;
     if (filterDeadline === "this-week" && !getTasksForWeek([task]).length) return false;
     if (filterDeadline === "overdue" && !isTaskOverdue(task)) return false;
-    if (filterDeadline === "no-date" && getTaskEffectiveDate(task)) return false;
+    if (filterDeadline === "no-date" && getTaskPlannerDate(task)) return false;
     if (hasFilesOnly && !task.files?.length) return false;
     return true;
   };
@@ -4265,7 +4399,7 @@ function LegacyTaskListView({ onTaskClick, onNewTask }: { onTaskClick: (task: Ta
   const scopeTabs: { id: TaskScope; label: string; count: number }[] = [
     { id: "month", label: "This Month", count: TASKS.filter(task => isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task)).length },
     { id: "carried", label: "Carried Over", count: carriedTasks.length },
-    { id: "unscheduled", label: "Unscheduled", count: TASKS.filter(task => isActive(task) && !getTaskEffectiveDate(task)).length },
+    { id: "unscheduled", label: "Unscheduled", count: TASKS.filter(task => isActive(task) && !getTaskPlannerDate(task)).length },
     { id: "done", label: "Done", count: TASKS.filter(task => task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task))).length },
   ];
   const scopeHelp: Record<TaskScope, string> = { month: "Current work with a target this month.", carried: "Unfinished work brought forward from an earlier period.", unscheduled: "Active work without a target date yet.", done: "Completed work from this month." };
@@ -4441,8 +4575,9 @@ function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp, onViewT
   void revision;
   if (!person) return <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card p-8 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">This person is not in the Binnie directory yet.</p></div></div>;
   const summary = getPersonAccountability(person.name);
-  const directlyAssignedTasks = getTasksForAssignee(person.id);
-  const personTasks = TASKS.filter(task => directlyAssignedTasks.some(assigned => assigned.id === task.id) || task.nextActionPrincipalId === person.id || task.contributorIds?.includes(person.id));
+  // People is the inspectable counterpart of My Work: management access can
+  // open another person's view without turning their Team queue into theirs.
+  const personTasks = TASKS.filter(task => taskIsForCurrentUser(task, person.id));
   const visibleTasks = personTasks.filter(task => workFilter === "all" || workFilter === "assigned" ? (workFilter === "all" || getTaskAssigneeIds(task).includes(person.id)) : workFilter === "waiting-on-them" ? task.nextActionPrincipalId === person.id && task.status !== "done" : workFilter === "waiting-on-me" ? task.nextActionPrincipalId === CANONICAL_ACTOR_ID : Boolean(task.isOverdue));
   const defaultMembership = person.memberships[0];
   const removeActiveTasks = removeMembership ? TASKS.filter(task => task.org === removeMembership.organization && task.status !== "done" && (task.assignee === person.name || task.nextActionBy === person.name)) : [];
@@ -4481,7 +4616,7 @@ interface OrganizationMeta { id: string; name: OrgName; desc: string; colorKey: 
 
 const ORGS_META: OrganizationMeta[] = [];
 
-type OrgTaskFilter = "all" | "today" | "mine" | "delegated" | "waiting" | "review" | "overdue";
+type OrgTaskFilter = "all" | "today" | "week" | "mine" | "delegated" | "waiting" | "review" | "revisit" | "overdue";
 type OrgTaskSort = "deadline" | "priority" | "title" | "updated";
 type ResourceDraft = { label: string; type: ResourceType; url: string; area: string; project: string; description: string };
 
@@ -4491,16 +4626,26 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void; onNavigate: (view: NavView) => void; onPersonClick: (person: string) => void;
 }) {
   useTaskStoreVersion();
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const orgMeta = ORGS_META.find(o => o.name === orgName);
   const c = ORG_COLORS[orgName] || DEFAULT_ORG_COLOR;
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
   const [areas, setAreas] = useState<AreaName[]>(() => orgMeta?.areas || []);
-  const [legacyProjects, setProjects] = useState(() => STRATEGIC_PROJECTS.filter(project => project.org === orgName));
-  const projects = taskStoreUsesServer ? CANONICAL_PROJECTS.filter(project => project.organization === orgName && project.status !== "archived").map(project => {
-    const projectTasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
-    const done = projectTasks.filter(task => task.status === "done").length;
-    return { id: project.id, name: project.name, org: project.organization as OrgName, progress: projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0, tasks: projectTasks.length, done, deadline: project.targetDate ? taskDateLabel(project.targetDate) || "No target yet" : "No target yet", status: "on_track" as const };
-  }) : legacyProjects;
+  const projects = CANONICAL_PROJECTS.filter(project => project.organization === orgName && project.status !== "archived").map(project => {
+    const progress = getProjectProgress(TASKS, project.id);
+    return {
+      id: project.id,
+      name: project.name,
+      org: project.organization as OrgName,
+      progress: progress.progress,
+      tasks: progress.total,
+      done: progress.done,
+      deadline: project.targetDate ? taskDateLabel(project.targetDate) || "No target yet" : "No target yet",
+      status: project.status,
+      focus: project.focusItems[0]?.text,
+      leadArea: project.leadArea,
+    };
+  });
   const [resources, setResources] = useState<OrganizationResource[]>(() => ORG_RESOURCES[orgName] || []);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -4563,16 +4708,18 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   const orgTasks = getTasksForOrganization(orgName);
   const scopedAreaTasks = selectedArea ? getTasksForArea(selectedArea, orgName) : orgTasks;
   const taskMatchesFilter = (task: Task) => {
-    if (taskFilter === "today" && !getTasksForToday([task]).length) return false;
-    if (taskFilter === "mine" && task.nextActionBy !== "me") return false;
-    if (taskFilter === "delegated" && !getDelegatedTasks([task]).length) return false;
+    if (taskFilter === "today" && !getOrganizationTodayWork(orgName, [task]).length) return false;
+    if (taskFilter === "week" && !getOrganizationWeekWork(orgName, [task]).length) return false;
+    if (taskFilter === "mine" && !taskIsForCurrentUser(task, currentUserId)) return false;
+    if (taskFilter === "delegated" && !getDelegatedTasks([task], currentUserId).length) return false;
     if (taskFilter === "waiting" && task.status !== "waiting") return false;
-    if (taskFilter === "review" && task.status !== "review") return false;
+    if (taskFilter === "review" && !getReviewTasks([task], currentUserId).length) return false;
+    if (taskFilter === "revisit" && !getOrganizationRevisitWork(orgName, [task]).length) return false;
     if (taskFilter === "overdue" && !isTaskOverdue(task)) return false;
     if (taskPriority !== "all" && task.priority !== taskPriority) return false;
     if (taskProject && task.project !== taskProject) return false;
-    if (dateFilter === "dated" && !getTaskEffectiveDate(task)) return false;
-    if (dateFilter === "none" && getTaskEffectiveDate(task)) return false;
+    if (dateFilter === "dated" && !getTaskPlannerDate(task)) return false;
+    if (dateFilter === "none" && getTaskPlannerDate(task)) return false;
     if (taskSearch && ![task.title, task.area, task.project || "", task.assignee || "", task.nextActionBy].join(" ").toLowerCase().includes(taskSearch.toLowerCase())) return false;
     return true;
   };
@@ -4583,17 +4730,16 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
     return (left.deadline || "zzzz").localeCompare(right.deadline || "zzzz");
   });
   const visibleTasks = showAllWork ? filteredTasks : filteredTasks.slice(0, 8);
-  const selectedAreaOwnedCount = selectedArea ? orgTasks.filter(task => task.area === selectedArea && task.status !== "done").length : 0;
-  const selectedAreaSharedCount = selectedArea ? orgTasks.filter(task => task.area !== selectedArea && taskInvolvesArea(task, selectedArea) && task.status !== "done").length : 0;
-  const scopedProjects = projects.filter(project => !selectedArea || PROJECT_DETAILS[project.id]?.area === selectedArea);
+  const selectedAreaOwnedCount = selectedArea ? getOrganizationActiveWork(orgName).filter(task => task.area === selectedArea).length : 0;
+  const selectedAreaSharedCount = selectedArea ? getOrganizationAreaWork(orgName, selectedArea).filter(task => task.area !== selectedArea).length : 0;
+  const scopedProjects = projects.filter(project => !selectedArea || project.leadArea === selectedArea);
   const scopedPeople = PEOPLE_DIRECTORY.filter(person => person.active && person.memberships.some(membership => membership.organization === orgName && (!selectedArea || membership.area === selectedArea || orgTasks.some(task => taskInvolvesArea(task, selectedArea) && (taskHasAssignee(task, person) || task.nextActionBy === person.name)))));
   const attentionTasks = scopedAreaTasks.filter(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review" || (task.status === "waiting" && task.waitingSince));
   const readyToStart = scopedAreaTasks.filter(task => task.status === "ready" && !task.blockedBy);
   const teamsWaitingOnThisArea = orgTasks.filter(task => task.status === "blocked" && task.blockedBy && (!selectedArea || task.blockedBy.owner === selectedArea));
-  const activityEntries: Array<Activity & { key: string; task?: Task; project?: { id: string } }> = [
-    ...orgTasks.flatMap(task => (task.activity || []).slice(-1).map(activity => ({ ...activity, key: `${task.id}-${activity.time}`, task }))),
-    ...projects.flatMap(project => (PROJECT_DETAILS[project.id]?.recentActivity || []).slice(0, 1).map(activity => ({ ...activity, key: `${project.id}-${activity.time}`, project }))),
-  ].slice(0, showActivity ? 10 : 4);
+  const activityEntries: Array<Activity & { key: string; task?: Task }> = orgTasks
+    .flatMap(task => (task.activity || []).slice(-1).map(activity => ({ ...activity, key: `${task.id}-${activity.time}`, task })))
+    .slice(0, showActivity ? 10 : 4);
   const projectNames = projects.map(project => project.name);
   const activeFilterCount = Number(taskFilter !== "all") + Number(taskPriority !== "all") + Number(Boolean(taskProject)) + Number(dateFilter !== "all");
   const organizationColor = getOrganizationColorStyles(orgColorKey);
@@ -4675,7 +4821,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
       applyCanonicalTask(result.data, result.revision);
       return refreshWorkspace(`Moved to ${target.name}`);
     }
-    Object.assign(task, { project: target.name, area: PROJECT_DETAILS[target.id]?.area || task.area, lastUpdate: `Moved to ${target.name}` });
+    Object.assign(task, { project: target.name, area: target.leadArea || task.area, lastUpdate: `Moved to ${target.name}` });
     refreshWorkspace(`Moved to ${target.name}`);
   }
 
@@ -4787,15 +4933,25 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
     refreshWorkspace(editingResourceIndex === null ? "Resource added" : "Resource updated");
   }
 
-  function createProject() {
+  async function createProject() {
     const name = projectDraft.name.trim();
     if (!name) return setProjectError("Give this project a name.");
-    const id = `project-${Date.now()}`;
-    const deadline = projectDraft.target.trim() || "No target yet";
-    const project = { id, name, org: orgName, progress: 0, tasks: 0, done: 0, deadline, status: "on_track" as const };
-    STRATEGIC_PROJECTS.push(project);
-    PROJECT_DETAILS[id] = { id, name, org: orgName, area: projectDraft.area as AreaName, progress: 0, deadline, status: "on_track", tasks: 0, done: 0, currentFocus: [projectDraft.focus.trim() || "Set a focused next step"], resources: [], recentActivity: [{ type: "assigned", actor: projectDraft.owner || "Current user", text: `Created ${name}`, time: "Just now" }] };
-    setProjects(current => [...current, project]);
+    const organizationId = remoteOrganizationIds.get(orgName) || canonicalOrganization.id;
+    const leadDepartmentId = getRemoteDepartmentId(orgName, projectDraft.area as AreaName);
+    const ownerId = projectDraft.owner ? getDirectoryPerson(projectDraft.owner)?.id : undefined;
+    if (projectDraft.target && !/^\d{4}-\d{2}-\d{2}$/.test(projectDraft.target)) return setProjectError("Use a calendar date for the project target.");
+    const result = await createProjectAction({
+      name,
+      organizationId,
+      description: projectDraft.description.trim() || undefined,
+      leadDepartmentId,
+      involvedDepartmentIds: leadDepartmentId ? [leadDepartmentId] : [],
+      targetDate: projectDraft.target || undefined,
+      members: ownerId ? [{ principalId: ownerId, role: "owner" }] : [],
+      focusItems: projectDraft.focus.trim() ? [projectDraft.focus.trim()] : [],
+    });
+    if (!result.ok) return setProjectError(result.message);
+    applyCanonicalProject(result.data, result.revision);
     setProjectDraft({ name: "", area: areas[0] || "Operations", description: "", target: "", owner: "", focus: "" });
     setProjectError("");
     setProjectOpen(false);
@@ -4803,12 +4959,12 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
   }
 
   const stats: { label: string; value: number; color: string; filter: OrgTaskFilter }[] = [
-    { label: "Today", value: orgTasks.filter(task => getTasksForToday([task]).length).length, color: "text-primary", filter: "today" },
-    { label: "This Week", value: getTasksForWeek(orgTasks).length, color: "text-foreground", filter: "all" },
-    { label: "Dates to revisit", value: orgTasks.filter(isTaskOverdue).length, color: "text-overdue", filter: "overdue" },
-    { label: "Waiting", value: orgTasks.filter(task => task.status === "waiting").length, color: "text-info", filter: "waiting" },
-    { label: "Delegated", value: getDelegatedTasks(orgTasks).length, color: "text-success", filter: "delegated" },
-    { label: "Review", value: orgTasks.filter(task => task.status === "review").length, color: "text-review", filter: "review" },
+    { label: "Today", value: getOrganizationTodayWork(orgName).length, color: "text-primary", filter: "today" },
+    { label: "This Week", value: getOrganizationWeekWork(orgName).length, color: "text-foreground", filter: "week" },
+    { label: "Dates to revisit", value: getOrganizationRevisitWork(orgName).length, color: "text-overdue", filter: "revisit" },
+    { label: "Waiting", value: getOrganizationWaitingWork(orgName).length, color: "text-info", filter: "waiting" },
+    { label: "Delegated by me", value: getDelegatedTasks(orgTasks, currentUserId).length, color: "text-success", filter: "delegated" },
+    { label: "Needs My Review", value: getReviewTasks(orgTasks, currentUserId).length, color: "text-review", filter: "review" },
   ];
 
   if (loading) {
@@ -4838,32 +4994,32 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
           <section>
             <div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Areas</p><button onClick={() => setAreasOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">Manage Areas</button></div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => setSelectedArea(null)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", !selectedArea ? cn(c.border, c.bg, c.text) : "border-border bg-card text-muted-foreground hover:text-foreground")}>All <span className="ml-1 text-[10px] opacity-65">{orgTasks.length}</span></button>
-              {areas.map(area => <button key={area} onClick={() => setSelectedArea(current => current === area ? null : area)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", selectedArea === area ? "border-primary/25 bg-secondary text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{area} <span className="ml-1 text-[10px] opacity-65">{orgTasks.filter(task => taskInvolvesArea(task, area)).length}</span></button>)}
+              <button onClick={() => setSelectedArea(null)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", !selectedArea ? cn(c.border, c.bg, c.text) : "border-border bg-card text-muted-foreground hover:text-foreground")}>All <span className="ml-1 text-[10px] opacity-65">{getOrganizationActiveWork(orgName).length}</span></button>
+              {areas.map(area => <button key={area} onClick={() => setSelectedArea(current => current === area ? null : area)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", selectedArea === area ? "border-primary/25 bg-secondary text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{area} <span className="ml-1 text-[10px] opacity-65">{getOrganizationAreaWork(orgName, area).length}</span></button>)}
             </div>
           </section>
 
           {selectedArea && <section className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl border border-primary/15 bg-primary/[0.045] p-4"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><div><p className="text-[12px] font-semibold text-foreground">Ready to Start</p><p className="text-[10px] text-muted-foreground">{readyToStart.length} {selectedArea} tasks can move now.</p></div></div><div className="mt-3 space-y-1.5">{readyToStart.slice(0, 3).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="block w-full truncate rounded-lg bg-card px-2.5 py-2 text-left text-[11px] font-medium text-foreground shadow-sm">{task.title}</button>)}{!readyToStart.length && <p className="text-[11px] text-muted-foreground">No ready work in this area right now.</p>}</div></div><div className="rounded-2xl border border-overdue/15 bg-overdue/[0.035] p-4"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Other Teams Waiting on {selectedArea}</p><p className="text-[10px] text-muted-foreground">Only real dependencies appear here.</p></div></div><div className="mt-3 space-y-1.5">{teamsWaitingOnThisArea.slice(0, 3).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="block w-full truncate rounded-lg bg-card px-2.5 py-2 text-left text-[11px] font-medium text-foreground shadow-sm">{task.area} · {task.title}</button>)}{!teamsWaitingOnThisArea.length && <p className="text-[11px] text-muted-foreground">No other teams are blocked by this area.</p>}</div></div></section>}
 
-          <section><div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center"><p className="flex-1 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">{selectedArea || "All Work"} · {filteredTasks.length}</p><div className="flex flex-wrap gap-2"><div className="flex min-w-[11rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={taskSearch} onChange={event => setTaskSearch(event.target.value)} placeholder="Search work" className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground" />{taskSearch && <button onClick={() => setTaskSearch("")} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setTaskFilterOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors", taskFilterOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button><select value={taskSort} onChange={event => setTaskSort(event.target.value as OrgTaskSort)} className="rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground"><option value="deadline">Sort: target date</option><option value="priority">Sort: priority</option><option value="title">Sort: title</option><option value="updated">Sort: updated</option></select></div></div>{taskFilterOpen && <div className="mb-3 grid gap-3 rounded-2xl border border-border bg-card p-3 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Work state<select value={taskFilter} onChange={event => setTaskFilter(event.target.value as OrgTaskFilter)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">All work</option><option value="mine">Mine</option><option value="delegated">Delegated</option><option value="waiting">Waiting</option><option value="review">Needs review</option><option value="overdue">Overdue</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={taskPriority} onChange={event => setTaskPriority(event.target.value as Priority | "all")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any priority</option><option value="urgent">Needs attention</option><option value="high">Important</option><option value="medium">Planned</option><option value="low">When there’s room</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={taskProject} onChange={event => setTaskProject(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projectNames.map(name => <option key={name}>{name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={event => setDateFilter(event.target.value as "all" | "dated" | "none")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any date</option><option value="dated">Has target date</option><option value="none">No target date</option></select></label><button onClick={() => { setTaskFilter("all"); setTaskPriority("all"); setTaskProject(""); setDateFilter("all"); }} className="w-fit text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear filters</button></div>}<div className="binnie-card overflow-visible">{visibleTasks.map(task => <div key={task.id} className="group relative border-b border-border/70 last:border-b-0"><div className="flex items-center gap-3 px-4 py-3"><button onClick={() => onTaskClick(task)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><PriorityDot priority={task.priority} /><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground"><AreaBadge area={task.area} />{task.project && <span>· {task.project}</span>}<span>· {task.nextActionBy === "me" ? "Next: me" : `Waiting on ${task.nextActionBy}`}</span></span></span></button><span className={cn("hidden text-[10px] font-medium sm:inline", task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{task.deadline || "No date"}</span><div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><button onClick={() => completeTask(task)} aria-label={`Complete ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success"><Check className="h-3.5 w-3.5" /></button><button onClick={() => { setEditingTaskId(task.id); setEditingTaskTitle(task.title); }} aria-label={`Edit ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">Edit</button><button onClick={() => reassignTask(task)} aria-label={`Delegate ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Users className="h-3.5 w-3.5" /></button><button onClick={() => rescheduleTask(task)} aria-label={`Reschedule ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Calendar className="h-3.5 w-3.5" /></button><button onClick={() => setQuickMenuTaskId(current => current === task.id ? null : task.id)} aria-label={`More actions for ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" /></button></div></div>{editingTaskId === task.id && <div className="flex gap-2 border-t border-border bg-muted/25 px-4 py-2"><input autoFocus value={editingTaskTitle} onChange={event => setEditingTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveTaskTitle(task)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground" /><button onClick={() => saveTaskTitle(task)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setEditingTaskId(null)} className="rounded-lg px-2 text-[11px] text-muted-foreground">Cancel</button></div>}{quickMenuTaskId === task.id && <div className="absolute right-3 top-11 z-20 w-40 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]"><button onClick={() => onTaskClick(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Open Detail</button><button onClick={() => duplicateTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Duplicate</button><button onClick={() => moveTaskToProject(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Move to Project</button><button onClick={() => moveTaskToNextArea(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Change Area</button><button onClick={() => archiveTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Archive / Cancel</button></div>}</div>)}{filteredTasks.length === 0 && <div className="px-5 py-12 text-center"><ListTodo className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No work matches these filters.</p><p className="mt-1 text-[11px] text-muted-foreground">Try a different area or clear a filter.</p></div>}{filteredTasks.length > 8 && <button onClick={() => setShowAllWork(current => !current)} className="w-full border-t border-border px-4 py-3 text-center text-[11px] font-medium text-primary transition-colors hover:bg-primary/[0.025]">{showAllWork ? "Show less" : "View all work →"}</button>}</div></section>
+          <section><div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center"><p className="flex-1 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">{selectedArea || "All Work"} · {filteredTasks.length}</p><div className="flex flex-wrap gap-2"><div className="flex min-w-[11rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={taskSearch} onChange={event => setTaskSearch(event.target.value)} placeholder="Search work" className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground" />{taskSearch && <button onClick={() => setTaskSearch("")} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setTaskFilterOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors", taskFilterOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button><select value={taskSort} onChange={event => setTaskSort(event.target.value as OrgTaskSort)} className="rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground"><option value="deadline">Sort: target date</option><option value="priority">Sort: priority</option><option value="title">Sort: title</option><option value="updated">Sort: updated</option></select></div></div>{taskFilterOpen && <div className="mb-3 grid gap-3 rounded-2xl border border-border bg-card p-3 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Work state<select value={taskFilter} onChange={event => setTaskFilter(event.target.value as OrgTaskFilter)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">All work</option><option value="today">Planned today</option><option value="week">Planned this week</option><option value="mine">Mine</option><option value="delegated">Delegated by me</option><option value="waiting">Waiting</option><option value="review">Needs my review</option><option value="revisit">Dates to revisit</option><option value="overdue">Overdue</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={taskPriority} onChange={event => setTaskPriority(event.target.value as Priority | "all")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any priority</option><option value="urgent">Needs attention</option><option value="high">Important</option><option value="medium">Planned</option><option value="low">When there’s room</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={taskProject} onChange={event => setTaskProject(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projectNames.map(name => <option key={name}>{name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={event => setDateFilter(event.target.value as "all" | "dated" | "none")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any date</option><option value="dated">Has planner date</option><option value="none">No planner date</option></select></label><button onClick={() => { setTaskFilter("all"); setTaskPriority("all"); setTaskProject(""); setDateFilter("all"); }} className="w-fit text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear filters</button></div>}<div className="binnie-card overflow-visible">{visibleTasks.map(task => <div key={task.id} className="group relative border-b border-border/70 last:border-b-0"><div className="flex items-center gap-3 px-4 py-3"><button onClick={() => onTaskClick(task)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><PriorityDot priority={task.priority} /><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground"><AreaBadge area={task.area} />{task.project && <span>· {task.project}</span>}<span>· {task.nextActionBy === "me" ? "Next: me" : `Waiting on ${task.nextActionBy}`}</span></span></span></button><span className={cn("hidden text-[10px] font-medium sm:inline", task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{task.deadline || "No date"}</span><div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><button onClick={() => completeTask(task)} aria-label={`Complete ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success"><Check className="h-3.5 w-3.5" /></button><button onClick={() => { setEditingTaskId(task.id); setEditingTaskTitle(task.title); }} aria-label={`Edit ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">Edit</button><button onClick={() => reassignTask(task)} aria-label={`Delegate ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Users className="h-3.5 w-3.5" /></button><button onClick={() => rescheduleTask(task)} aria-label={`Reschedule ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Calendar className="h-3.5 w-3.5" /></button><button onClick={() => setQuickMenuTaskId(current => current === task.id ? null : task.id)} aria-label={`More actions for ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" /></button></div></div>{editingTaskId === task.id && <div className="flex gap-2 border-t border-border bg-muted/25 px-4 py-2"><input autoFocus value={editingTaskTitle} onChange={event => setEditingTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveTaskTitle(task)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground" /><button onClick={() => saveTaskTitle(task)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setEditingTaskId(null)} className="rounded-lg px-2 text-[11px] text-muted-foreground">Cancel</button></div>}{quickMenuTaskId === task.id && <div className="absolute right-3 top-11 z-20 w-40 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]"><button onClick={() => onTaskClick(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Open Detail</button><button onClick={() => duplicateTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Duplicate</button><button onClick={() => moveTaskToProject(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Move to Project</button><button onClick={() => moveTaskToNextArea(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Change Area</button><button onClick={() => archiveTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Archive / Cancel</button></div>}</div>)}{filteredTasks.length === 0 && <div className="px-5 py-12 text-center"><ListTodo className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No work matches these filters.</p><p className="mt-1 text-[11px] text-muted-foreground">Try a different area or clear a filter.</p></div>}{filteredTasks.length > 8 && <button onClick={() => setShowAllWork(current => !current)} className="w-full border-t border-border px-4 py-3 text-center text-[11px] font-medium text-primary transition-colors hover:bg-primary/[0.025]">{showAllWork ? "Show less" : "View all work →"}</button>}</div></section>
 
           <section><div className="mb-2 flex items-center justify-between"><div><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">People</p><p className="mt-0.5 text-[10px] text-muted-foreground">People are shared across Binnie and connected here by membership.</p></div><button onClick={() => setPeopleManagerOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Person</button></div>{scopedPeople.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{scopedPeople.map(person => { const summary = getPersonAccountability(person.name); return <button key={person.id} onClick={() => onPersonClick(person.name)} className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/25"><div className="flex items-center gap-2.5"><Avatar name={person.name} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{person.name}</span><span className="block truncate text-[10px] text-muted-foreground">{personRole(person, orgName)}</span></span>{summary.overdue > 0 && <span className="text-[10px] font-medium text-overdue">{summary.overdue} overdue</span>}</div><div className="mt-2 flex gap-3 border-t border-border pt-2 text-[10px] text-muted-foreground"><span>{summary.active} active</span><span>{summary.waitingOnThem} waiting</span>{summary.blocked > 0 && <span className="text-overdue">{summary.blocked} blocked</span>}</div></button>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No one has been added to this organization yet.</p><button onClick={() => setPeopleManagerOpen(true)} className="mt-3 text-[11px] font-medium text-primary">+ Add Person</button></div>}{peopleManagerOpen && <PersonManagerDrawer open organizationContext={orgName} onClose={() => setPeopleManagerOpen(false)} onSaved={() => { setPeopleManagerOpen(false); refreshWorkspace("People updated"); }} />}</section>
 
-          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><button onClick={() => setShowActivity(current => !current)} className="text-[11px] font-medium text-primary hover:text-primary/80">{showActivity ? "Show less" : "View Activity"}</button></div>{activityEntries.length ? <div className="binnie-card divide-y divide-border/70">{activityEntries.map(entry => <button key={entry.key} onClick={() => entry.task ? onTaskClick(entry.task) : entry.project ? onProjectClick(entry.project.id) : undefined} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/45"><div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary" /><span className="min-w-0 flex-1"><span className="block text-[12px] text-foreground">{entry.text}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{entry.actor} · {entry.time}</span></span><ChevronRight className="mt-1 h-3.5 w-3.5 text-muted-foreground" /></button>)}</div> : <div className="binnie-card px-5 py-10 text-center"><p className="text-sm font-medium text-foreground">No recent activity yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Updates will appear here as work moves.</p></div>}</section>
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><button onClick={() => setShowActivity(current => !current)} className="text-[11px] font-medium text-primary hover:text-primary/80">{showActivity ? "Show less" : "View Activity"}</button></div>{activityEntries.length ? <div className="binnie-card divide-y divide-border/70">{activityEntries.map(entry => <button key={entry.key} onClick={() => entry.task && onTaskClick(entry.task)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/45"><div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary" /><span className="min-w-0 flex-1"><span className="block text-[12px] text-foreground">{entry.text}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{entry.actor} · {entry.time}</span></span><ChevronRight className="mt-1 h-3.5 w-3.5 text-muted-foreground" /></button>)}</div> : <div className="binnie-card px-5 py-10 text-center"><p className="text-sm font-medium text-foreground">No recent activity yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Updates will appear here as work moves.</p></div>}</section>
         </div>
 
         <div className="space-y-6">
-          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Current Projects</p><button onClick={() => setProjectOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Project</button></div>{scopedProjects.length ? <div className="space-y-2">{scopedProjects.map(project => { const detail = PROJECT_DETAILS[project.id]; const remaining = Math.max(project.tasks - project.done, 0); return <button key={project.id} onClick={() => onProjectClick(project.id)} className="binnie-card binnie-card-hover w-full p-4 text-left"><div className="mb-2 flex items-start gap-3"><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-foreground">{project.name}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{detail?.currentFocus[0] || "Set a focused next step"}</span></span>{project.status === "at_risk" && <span className="rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div><div className="mb-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} /></div><div className="flex items-center justify-between text-[10px] text-muted-foreground"><span>{project.progress}% · {remaining} remaining</span><span>Target: {project.deadline}</span></div></button>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><FolderKanban className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No active projects yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Create one when a piece of work needs its own focus.</p></div>}</section>
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Current Projects</p><button onClick={() => setProjectOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Project</button></div>{scopedProjects.length ? <div className="space-y-2">{scopedProjects.map(project => { const remaining = Math.max(project.tasks - project.done, 0); return <button key={project.id} onClick={() => onProjectClick(project.id)} className="binnie-card binnie-card-hover w-full p-4 text-left"><div className="mb-2 flex items-start gap-3"><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-foreground">{project.name}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{project.focus || "No current focus"}</span></span></div><div className="mb-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} /></div><div className="flex items-center justify-between text-[10px] text-muted-foreground"><span>{project.progress}% · {remaining} remaining</span><span>Target: {project.deadline}</span></div></button>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><FolderKanban className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No active projects yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Create one when a piece of work needs its own focus.</p></div>}</section>
 
           <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Resources</p><button onClick={() => openResourceForm()} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Resource</button></div>{resources.length ? <div className="space-y-1.5">{resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{resource.label}</span>{(resource.area || resource.project) && <span className="block truncate text-[10px] text-muted-foreground">{resource.project || resource.area}</span>}</span>{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Open ↗</a> : <button onClick={() => openResourceForm(index)} className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Add link</button>}</div>)}</div> : <div className="binnie-card px-5 py-10 text-center"><Link2 className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">Keep important links close.</p><p className="mt-1 text-[11px] text-muted-foreground">Add your Drive, website, dashboards, or project tools here.</p></div>}</section>
 
-          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-warning">Needs Attention</p><span className="text-[10px] text-muted-foreground">{attentionTasks.length} items</span></div>{attentionTasks.length ? <div className="space-y-1.5">{attentionTasks.slice(0, 4).map(task => { const isReview = task.status === "review"; const reason = isReview ? "Needs Review" : task.isOverdue ? "Overdue" : `No update from ${task.nextActionBy} for ${task.waitingSince || "a while"}`; return <div key={task.id} className="rounded-xl border border-warning/15 bg-warning/[0.04] p-3"><p className="truncate text-[12px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{reason}</p><div className="mt-2 flex gap-2"><button onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{isReview ? "Review" : "Open"}</button>{!isReview && task.isWaiting && <button onClick={() => onNavigate("followup")} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary">Follow Up</button>}</div></div>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-success/45" /><p className="text-sm font-medium text-foreground">Nothing needs attention right now.</p></div>}</section>
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-warning">Needs Attention</p><span className="text-[10px] text-muted-foreground">{attentionTasks.length} items</span></div>{attentionTasks.length ? <div className="space-y-1.5">{attentionTasks.slice(0, 4).map(task => { const isReview = task.status === "review"; const reason = isReview ? "Needs Review" : task.isOverdue ? "Overdue" : `${readableTaskNextAction(task)} · ${humanizeWaitingSince(task.waitingSince)}`; return <div key={task.id} className="rounded-xl border border-warning/15 bg-warning/[0.04] p-3"><p className="truncate text-[12px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{reason}</p><div className="mt-2 flex gap-2"><button onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{isReview ? "Review" : "Open"}</button>{!isReview && task.isWaiting && <button onClick={() => onNavigate("followup")} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary">Follow Up</button>}</div></div>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-success/45" /><p className="text-sm font-medium text-foreground">Nothing needs attention right now.</p></div>}</section>
         </div>
       </div>
 
       {captureOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.5rem] border border-border bg-background p-4 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)] sm:p-5"><div className="mb-3 flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Quick Capture for {orgTitle}</p><p className="text-[10px] text-muted-foreground">This organization is already selected.</p></div><button onClick={() => setCaptureOpen(false)} aria-label="Close quick capture" className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><QuickCapture organization={orgName} onSaved={() => refreshWorkspace("Saved to this organization")} /></div></div>}
 
-      {projectOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Add project" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Add Project</h2><p className="mt-1 text-[11px] text-muted-foreground">{orgTitle} is already selected.</p></div><button onClick={() => setProjectOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Project name<input autoFocus value={projectDraft.name} onChange={event => setProjectDraft(current => ({ ...current, name: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization<input value={orgTitle} disabled className="mt-1.5 w-full rounded-xl border border-border bg-muted px-3 py-2.5 text-[12px] text-muted-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Area<select value={projectDraft.area} onChange={event => setProjectDraft(current => ({ ...current, area: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={projectDraft.description} onChange={event => setProjectDraft(current => ({ ...current, description: event.target.value }))} className="mt-1.5 min-h-16 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input value={projectDraft.target} onChange={event => setProjectDraft(current => ({ ...current, target: event.target.value }))} placeholder="September" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Owner<input value={projectDraft.owner} onChange={event => setProjectDraft(current => ({ ...current, owner: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={projectDraft.focus} onChange={event => setProjectDraft(current => ({ ...current, focus: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div>{projectError && <p className="mt-3 text-[11px] text-overdue">{projectError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setProjectOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={createProject} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create Project</button></div></div></div>}
+      {projectOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Add project" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Add Project</h2><p className="mt-1 text-[11px] text-muted-foreground">{orgTitle} is already selected.</p></div><button onClick={() => setProjectOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Project name<input autoFocus value={projectDraft.name} onChange={event => setProjectDraft(current => ({ ...current, name: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization<input value={orgTitle} disabled className="mt-1.5 w-full rounded-xl border border-border bg-muted px-3 py-2.5 text-[12px] text-muted-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Area<select value={projectDraft.area} onChange={event => setProjectDraft(current => ({ ...current, area: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={projectDraft.description} onChange={event => setProjectDraft(current => ({ ...current, description: event.target.value }))} className="mt-1.5 min-h-16 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input type="date" value={projectDraft.target} onChange={event => setProjectDraft(current => ({ ...current, target: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Owner<input value={projectDraft.owner} onChange={event => setProjectDraft(current => ({ ...current, owner: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={projectDraft.focus} onChange={event => setProjectDraft(current => ({ ...current, focus: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div>{projectError && <p className="mt-3 text-[11px] text-overdue">{projectError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setProjectOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void createProject()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create Project</button></div></div></div>}
 
       {resourceManagerOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Manage resources" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-center justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Manage Resources</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep the tools for {orgTitle} close.</p></div><button onClick={() => setResourceManagerOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="max-h-64 space-y-2 overflow-y-auto">{resources.length ? resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2 rounded-xl border border-border p-3"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{resource.label}</span><button onClick={() => openResourceForm(index)} className="text-[11px] font-medium text-primary">Edit</button></div>) : <p className="rounded-xl bg-muted/45 px-3 py-6 text-center text-[11px] text-muted-foreground">No resources yet.</p>}</div><div className="mt-4 flex justify-end gap-2"><button onClick={() => setResourceManagerOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Close</button><button onClick={() => openResourceForm()} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Resource</button></div></div></div>}
 
@@ -5422,12 +5578,12 @@ function CanonicalProjectDetailContent({ project, onBack, onTaskClick, onAddWork
   const [memberEditorOpen, setMemberEditorOpen] = useState(false);
   const [message, setMessage] = useState("");
   const projectFileInputRef = useRef<HTMLInputElement>(null);
-  const projectTasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
-  const statusCounts: Record<TaskStatus, number> = { ready: 0, in_progress: 0, waiting: 0, blocked: 0, review: 0, done: 0 };
-  projectTasks.forEach(task => { statusCounts[task.status] += 1; });
-  const done = statusCounts.done;
-  const progress = projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0;
-  const readyTasks = projectTasks.filter(task => (task.status === "ready" || task.status === "in_progress") && task.canStartNow !== false && !task.blockedBy);
+  const projectProgress = getProjectProgress(TASKS, project.id);
+  const projectTasks = projectProgress.tasks as Task[];
+  const statusCounts = projectProgress.statusCounts;
+  const done = projectProgress.done;
+  const progress = projectProgress.progress;
+  const readyTasks = getProjectMovableTasks(TASKS, project.id) as Task[];
   const waitingOnTeams = projectTasks.filter(task => task.status === "blocked" && task.blockedBy);
   const projectAreas = Array.from(new Set([project.leadArea, ...project.involvedDepartments.map(department => department.name), ...projectTasks.flatMap(task => getTaskAreas(task))].filter((area): area is AreaName => Boolean(area))));
   const people = Array.from(new Map([
@@ -5746,13 +5902,12 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {ORGS_META.map(org => {
           const color = getOrganizationColorStyles(org.colorKey);
-          const orgTasks = TASKS.filter(t => t.org === org.name);
-          const activeTasks = orgTasks.filter(task => task.status !== "done");
+          const activeTasks = getOrganizationActiveWork(org.name);
           const orgProjects = CANONICAL_PROJECTS.filter(project => project.organization === org.name && project.status !== "archived");
-          const waiting = activeTasks.filter(task => task.isWaiting).length;
-          const attention = activeTasks.filter(task => task.isOverdue || task.status === "blocked" || task.status === "review").length;
+          const waiting = getOrganizationWaitingWork(org.name).length;
+          const revisit = getOrganizationRevisitWork(org.name).length;
           const visibleAreas = org.areas.slice(0, 3);
-          const currentFocus = orgProjects.slice(0, 2).map(project => project.name).join(" · ") || activeTasks[0]?.title || "A quieter personal workspace.";
+          const currentFocus = getOrganizationCurrentFocus(orgProjects)[0] || "No current focus";
           return (
             <button key={org.name} onClick={() => onOrgClick(org.name)}
               className={cn("binnie-card binnie-card-hover group relative flex h-full min-h-[15.5rem] overflow-hidden p-4 text-left sm:p-[1.125rem]", color.card)}>
@@ -5763,7 +5918,7 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
                   <div className="min-w-0">
                     <div className="flex h-5 items-center gap-1.5">
                       <h2 className="binnie-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{org.name}</h2>
-                      {attention > 0 && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">{attention} to revisit</span>}
+                      {revisit > 0 && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">{revisit} to revisit</span>}
                     </div>
                     <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">{org.desc}</p>
                   </div>
@@ -5798,8 +5953,6 @@ type ProjectMilestoneDraft = { title: string; targetDate: string };
 
 function archiveCanonicalProjectFromClient(projectId: string, revision?: number) {
   CANONICAL_PROJECTS = CANONICAL_PROJECTS.filter(project => project.id !== projectId);
-  const legacyIndex = STRATEGIC_PROJECTS.findIndex(project => project.id === projectId);
-  if (legacyIndex >= 0) STRATEGIC_PROJECTS.splice(legacyIndex, 1);
   if (revision) taskStoreServerRevision = revision;
   publishTaskStore();
 }
@@ -6006,10 +6159,9 @@ function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: stri
   const [deleting, setDeleting] = useState<ProjectDTO | null>(null);
   const projects = CANONICAL_PROJECTS.filter(project => project.status !== "archived");
   const taskSummary = (project: ProjectDTO) => {
-    const tasks = TASKS.filter(task => task.projectId === project.id && !task.archived);
-    const done = tasks.filter(task => task.status === "done").length;
-    const attention = tasks.some(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && done < tasks.length);
-    return { tasks, done, progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0, attention };
+    const progress = getProjectProgress(TASKS, project.id);
+    const attention = progress.tasks.some(task => isTaskOverdue(task as Task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && progress.done < progress.total);
+    return { ...progress, attention };
   };
   const summaries = new Map(projects.map(project => [project.id, taskSummary(project)]));
   const permittedOrganizations = ORGS_META;
@@ -6047,7 +6199,7 @@ function ProjectsView({ onProjectClick, onAddWork }: { onProjectClick: (id: stri
       const summary = summaries.get(project.id)!;
       const organization = permittedOrganizations.find(candidate => candidate.name === project.organization);
       const color = getOrganizationColorStyles(organization?.colorKey);
-      const next = summary.tasks.find(task => task.nextActionBy === "me" && task.status !== "done") || summary.tasks.find(task => task.status !== "done");
+      const next = getProjectNextTask(TASKS, project.id);
       const completed = completedProjects.some(candidate => candidate.id === project.id);
       const status = completed ? { label: "Completed", className: "bg-success/10 text-success" } : summary.attention ? { label: "Needs attention", className: "bg-warning/12 text-warning" } : { label: "Active", className: "bg-muted text-muted-foreground" };
       return <article key={project.id} role="button" tabIndex={0} onClick={() => onProjectClick(project.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onProjectClick(project.id); } }} className={cn("binnie-card binnie-card-hover group relative flex h-full cursor-pointer overflow-hidden p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/45", viewMode === "grid" ? "min-h-[17.5rem]" : "min-h-0", viewMode === "grid" ? color.card : color.listCard)}>
@@ -6082,38 +6234,24 @@ function WorkloadView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
     isOverdue: isTaskOverdue(task),
     isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
     assigneeIds: task.assigneeIds,
+    nextActionPrincipalId: task.nextActionPrincipalId,
+    createdByPrincipalId: task.createdByPrincipalId,
+    reviewerPrincipalId: task.reviewerPrincipalId,
+    dependencyActionOwnerIds: task.dependencyActionOwnerIds,
     primaryOwnerId: task.assigneeIds?.[0],
     blockedDependentCount: activeTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
   })), PEOPLE_DIRECTORY.map(person => ({ id: person.id, name: person.name, type: person.type, active: person.active })));
   const visible = workload.filter(item => kind === "all" || item.type === kind);
   const focus = visible.filter(item => item.needsAttention > 0 || item.load === "full");
-  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workload</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">See where work is landing.</h1><p className="mt-1.5 text-sm text-muted-foreground">A directional view of active work, attention, reviews, and blockers—not capacity forecasting.</p></div><div className="flex rounded-xl border border-border bg-card p-1">{([{ id: "all", label: "Everyone" }, { id: "person", label: "People" }, { id: "team", label: "Teams" }] as const).map(option => <button key={option.id} onClick={() => setKind(option.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", kind === option.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div></div><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Active work</p><p className="mt-1 text-2xl font-bold text-primary">{activeTasks.length}</p><p className="mt-1 text-[10px] text-muted-foreground">shared task records, counted once</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-warning">{visible.reduce((sum, item) => sum + item.needsAttention, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">overdue, follow-up, blocked, or review work</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Blocking others</p><p className="mt-1 text-2xl font-bold text-overdue">{visible.reduce((sum, item) => sum + item.blockingOthers, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">downstream work waiting on a primary owner</p></div></div>{focus.length > 0 && <section className="mb-5 rounded-2xl border border-warning/20 bg-warning/[0.055] p-4"><p className="text-[12px] font-semibold text-foreground">Where a conversation could help</p><p className="mt-1 text-[10px] text-muted-foreground">These are signals to look at, not automatic judgments about people.</p><div className="mt-3 flex flex-wrap gap-2">{focus.slice(0, 6).map(item => <span key={item.principalId} className="rounded-full border border-warning/15 bg-card px-2.5 py-1.5 text-[10px] text-foreground">{item.name} · {item.needsAttention ? `${item.needsAttention} attention` : "full focus"}</span>)}</div></section>}<div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="hidden grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] border-b border-border bg-muted/35 px-4 py-3 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid"><span>Owner / team</span><span>Ready</span><span>Moving</span><span>Waiting</span><span>Blocked</span><span>Review</span><span>Overdue</span><span>Signal</span></div>{visible.length ? visible.map(item => { const assigned = activeTasks.filter(task => task.assigneeIds?.includes(item.principalId)); return <div key={item.principalId} className="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] lg:items-center"><div><p className="text-[12px] font-semibold text-foreground">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.type === "team" ? "Team queue" : "Individual"} · {item.primaryOwned} primary</p>{assigned.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{assigned.slice(0, 2).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="max-w-40 truncate rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-primary">{task.title}</button>)}</div>}</div>{[[item.ready, "Ready"], [item.inProgress, "Moving"], [item.waiting, "Waiting"], [item.blocked, "Blocked"], [item.review, "Review"], [item.overdue, "Overdue"]].map(([count, label]) => <div key={String(label)} className="flex items-center justify-between text-[11px] text-muted-foreground lg:block"><span className="lg:hidden">{label}</span><span className={cn("font-semibold", Number(count) > 0 && (label === "Blocked" || label === "Overdue") ? "text-overdue" : label === "Review" && Number(count) > 0 ? "text-review" : "text-foreground")}>{count}</span></div>)}<span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", item.load === "full" ? "bg-warning/10 text-warning" : item.load === "steady" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.load === "full" ? "Full focus" : item.load === "steady" ? "Steady" : "Light"}</span></div>; }) : <div className="px-5 py-12 text-center text-[12px] text-muted-foreground">No active work is assigned yet.</div>}</div></div>;
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workload</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">See where work is landing.</h1><p className="mt-1.5 text-sm text-muted-foreground">A directional view of active work, attention, reviews, and blockers—not capacity forecasting.</p></div><div className="flex rounded-xl border border-border bg-card p-1">{([{ id: "all", label: "Everyone" }, { id: "person", label: "People" }, { id: "team", label: "Teams" }] as const).map(option => <button key={option.id} onClick={() => setKind(option.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", kind === option.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div></div><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Active work</p><p className="mt-1 text-2xl font-bold text-primary">{activeTasks.length}</p><p className="mt-1 text-[10px] text-muted-foreground">shared task records, counted once</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-warning">{visible.reduce((sum, item) => sum + item.needsAttention, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">overdue, follow-up, blocked, or review work</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Blocking others</p><p className="mt-1 text-2xl font-bold text-overdue">{visible.reduce((sum, item) => sum + item.blockingOthers, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">downstream work waiting on a primary owner</p></div></div>{focus.length > 0 && <section className="mb-5 rounded-2xl border border-warning/20 bg-warning/[0.055] p-4"><p className="text-[12px] font-semibold text-foreground">Where a conversation could help</p><p className="mt-1 text-[10px] text-muted-foreground">These are signals to look at, not automatic judgments about people.</p><div className="mt-3 flex flex-wrap gap-2">{focus.slice(0, 6).map(item => <span key={item.principalId} className="rounded-full border border-warning/15 bg-card px-2.5 py-1.5 text-[10px] text-foreground">{item.name} · {item.needsAttention ? `${item.needsAttention} attention` : "full focus"}</span>)}</div></section>}<div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="hidden grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] border-b border-border bg-muted/35 px-4 py-3 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid"><span>Owner / team</span><span>Ready</span><span>Moving</span><span>Waiting</span><span>Blocked</span><span>Review</span><span>Overdue</span><span>Signal</span></div>{visible.length ? visible.map(item => { const assigned = activeTasks.filter(task => item.type === "team" ? task.assigneeIds?.includes(item.principalId) : taskIsForCurrentUser(task, item.principalId)); return <div key={item.principalId} className="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] lg:items-center"><div><p className="text-[12px] font-semibold text-foreground">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.type === "team" ? "Team queue" : "Individual"} · {item.primaryOwned} primary</p>{assigned.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{assigned.slice(0, 2).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="max-w-40 truncate rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-primary">{task.title}</button>)}</div>}</div>{[[item.ready, "Ready"], [item.inProgress, "Moving"], [item.waiting, "Waiting"], [item.blocked, "Blocked"], [item.review, "Review"], [item.overdue, "Overdue"]].map(([count, label]) => <div key={String(label)} className="flex items-center justify-between text-[11px] text-muted-foreground lg:block"><span className="lg:hidden">{label}</span><span className={cn("font-semibold", Number(count) > 0 && (label === "Blocked" || label === "Overdue") ? "text-overdue" : label === "Review" && Number(count) > 0 ? "text-review" : "text-foreground")}>{count}</span></div>)}<span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", item.load === "full" ? "bg-warning/10 text-warning" : item.load === "steady" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.load === "full" ? "Full focus" : item.load === "steady" ? "Steady" : "Light"}</span></div>; }) : <div className="px-5 py-12 text-center text-[12px] text-muted-foreground">No active work is assigned yet.</div>}</div></div>;
 }
 
 function CanonicalFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const router = useRouter();
   useTaskStoreVersion();
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [draftFor, setDraftFor] = useState<string | null>(null);
-  const [today] = useState(() => isoDate(getWorkspaceCalendarDate()));
-  const [nudgeStates, setNudgeStates] = useState<NudgeStateDTO[]>(() => CANONICAL_NUDGE_STATES);
-  const todayMs = Date.parse(`${today}T00:00:00.000Z`);
-  const allTasks = TASKS.filter(task => !task.archived && task.status !== "done");
-  const candidates = deriveWorkNudges(allTasks.map(task => ({
-    id: task.id,
-    title: task.title,
-    status: task.status,
-    isOverdue: isTaskOverdue(task),
-    isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
-    daysWithoutUpdate: task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 86400000)) : undefined,
-    reviewWaitingHours: task.status === "review" && task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 3600000)) : undefined,
-    blockedDependentCount: allTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
-    nextActionBy: task.nextActionBy,
-    deadlineDate: task.deadlineDate,
-    priority: task.priority,
-  }))).filter(candidate => {
-    const state = nudgeStates.find(item => item.dedupKey === candidate.dedupKey);
-    return !state || (state.disposition === "snoozed" && (!state.snoozedUntil || state.snoozedUntil <= `${today}T23:59:59.999Z`));
-  });
+  const { allTasks, candidates, today } = getFollowUpNudgeCandidates(TASKS, currentUserId);
   async function setState(candidate: typeof candidates[number], disposition: "dismissed" | "snoozed") {
     const snoozeDate = new Date(`${today}T00:00:00.000Z`);
     snoozeDate.setUTCDate(snoozeDate.getUTCDate() + 3);
@@ -6121,7 +6259,6 @@ function CanonicalFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => v
     const result = await setNudgeStateAction({ dedupKey: candidate.dedupKey, taskId: candidate.taskId, disposition, snoozedUntil });
     if (!result.ok) return;
     const nextState: NudgeStateDTO = { dedupKey: candidate.dedupKey, taskId: candidate.taskId, disposition, snoozedUntil };
-    setNudgeStates(current => [...current.filter(item => item.dedupKey !== candidate.dedupKey), nextState]);
     applyCanonicalNudgeState(nextState, result.revision);
     router.refresh();
   }
@@ -6267,7 +6404,7 @@ const NAV_GROUPS = [
       { id: "delegated" as NavView, label: "Delegated", icon: <Users className="w-4 h-4" />, badge: TASKS.filter(t => t.isDelegated).length },
       { id: "waiting" as NavView, label: "Waiting", icon: <Hourglass className="w-4 h-4" />, badge: TASKS.filter(t => t.isWaiting).length },
       { id: "followup" as NavView, label: "Follow Up", icon: <MessageSquare className="w-4 h-4" />, badge: FOLLOWUP_DATA.filter(d => d.section === "today").length },
-      { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && t.nextActionPrincipalId === CANONICAL_ACTOR_ID).length },
+      { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && taskIsForCurrentUser(t, CANONICAL_ACTOR_ID)).length },
       { id: "overdue" as NavView, label: "Overdue", icon: <AlertTriangle className="w-4 h-4" />, badge: TASKS.filter(t => t.isOverdue).length, urgent: true },
       { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" />, badge: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length },
       { id: "workload" as NavView, label: "Workload", icon: <BarChart2 className="w-4 h-4" /> },
@@ -6367,10 +6504,10 @@ function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onTo
   const liveBadges: Partial<Record<NavView, number>> = {
     today: getTasksForToday(TASKS, currentUserId).length,
     delegated: getDelegatedTasks(TASKS, currentUserId).length,
-    waiting: getWaitingTasks(TASKS).length,
-    followup: getWaitingTasks(TASKS).filter(task => !taskIsForCurrentUser(task, currentUserId)).length,
-    review: TASKS.filter(task => task.status === "review" && taskIsForCurrentUser(task, currentUserId)).length + profile.pendingAccessRequestCount,
-    overdue: TASKS.filter(isTaskOverdue).length,
+    waiting: getWaitingTasks(TASKS, currentUserId).length,
+    followup: getFollowUpNudgeCandidates(TASKS, currentUserId).candidates.length,
+    review: getReviewTasks(TASKS, currentUserId).length + profile.pendingAccessRequestCount,
+    overdue: getOverdueTasks(TASKS).length,
     people: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length,
   };
   const navGroups = NAV_GROUPS.map(group => ({
@@ -6609,6 +6746,10 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
       const leadDepartmentId = task.leadDepartmentId || (organizationId ? getRemoteDepartmentId(task.org, task.area) : undefined);
       const involvedDepartmentIds = (task.involvedDepartmentIds || task.involvedAreas?.map(area => getRemoteDepartmentId(task.org, area)).filter((id): id is string => Boolean(id)) || []).filter(id => Boolean(id));
       const assignmentIds = (task.assigneeIds || []).filter(id => PEOPLE_DIRECTORY.some(person => person.id === id));
+      // Older browser-only records sometimes expressed a date only as a label
+      // such as “Tomorrow”. Import it once into the canonical Task fields so
+      // it can never become an independent planner source after refresh.
+      const legacyPlannerDate = getCanonicalTaskPlannerDate(task, getWorkspaceCalendarDate());
       return {
         legacyLocalId: task.id,
         title: task.title,
@@ -6621,7 +6762,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
         priority: task.priority,
         startDate: task.startDate,
         targetDate: task.targetDate,
-        deadlineDate: task.deadlineDate,
+        deadlineDate: task.deadlineDate || (!task.startDate && !task.targetDate ? legacyPlannerDate : undefined),
         followUpDate: task.followUpDate,
         estimatedMinutes: task.estimatedMinutes || (task.estimatedHours ? Math.round(task.estimatedHours * 60) : undefined),
         status: task.status === "review" ? "in_progress" as const : task.status,
@@ -6658,13 +6799,23 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     navTo("all-tasks");
   }
 
+  function openTeamTaskList(teamId: string) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "list");
+    params.set("scope", "team");
+    params.set("team", teamId);
+    params.delete("person");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    navTo("all-tasks");
+  }
+
   function renderView() {
     switch (view) {
       case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "there"} />;
       case "today": return <TodayView onTaskClick={setSelectedTask} />;
       case "this-week": return <ThisWeekView onTaskClick={setSelectedTask} />;
       case "inbox": return <InboxView projectContext={projectCaptureContext || undefined} />;
-      case "delegated": return <DelegatedView onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onPersonClick={person => navTo("person-detail", { person })} />;
+      case "delegated": return <DelegatedView onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onPrincipalClick={principal => principal.type === "team" ? openTeamTaskList(principal.id) : openPersonTaskList(principal.id)} />;
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
       case "review": return <><>{profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 lg:px-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Needs My Review</span> · {profile.pendingAccessRequestCount} member access request{profile.pendingAccessRequestCount === 1 ? "" : "s"}</span><span className="font-medium text-primary">Review access →</span></a></div>}</><ReviewView onTaskClick={setSelectedTask} /></>;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
@@ -6715,7 +6866,13 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
           <Sidebar className="relative z-10 !flex shadow-[16px_0_40px_rgb(38_48_71_/_0.12)]" view={view} onNav={v => navTo(v)} profile={profile} onProfileClick={() => { setMobileMenuOpen(false); setProfileOpen(true); }} onNavigate={() => setMobileMenuOpen(false)} />
         </div>
       )}
-      {selectedTask && <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />}
+      {selectedTask && <TaskDetailDrawer
+        task={selectedTask}
+        onClose={() => setSelectedTask(null)}
+        onOpenOrganization={(organization) => { setSelectedTask(null); navTo("org-detail", { org: organization }); }}
+        onOpenProject={(projectId) => { setSelectedTask(null); navTo("project-detail", { project: projectId }); }}
+        onOpenPrincipal={(principal) => { setSelectedTask(null); if (principal.type === "team") openTeamTaskList(principal.id); else openPersonTaskList(principal.id); }}
+      />}
       {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onSave={saveProfile} onResetDemoData={process.env.NODE_ENV === "development" ? resetDevelopmentDemoData : undefined} onClose={() => setProfileOpen(false)} onSignOut={() => void signOut()} />}
       {accountMessage && <div role="status" className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl border border-success/20 bg-card px-3.5 py-2 text-[12px] font-medium text-success shadow-[0_8px_22px_rgb(35_41_61_/_0.10)]">{accountMessage}</div>}
     </div>

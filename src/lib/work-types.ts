@@ -83,8 +83,8 @@ export interface TaskScopeOptionDTO {
   id: string;
   name: string;
   subtitle?: string;
-  /** Team scope may represent a real Team or an authorized Department. */
-  kind?: "team" | "department";
+  /** Team scopes always use a stable Team Principal ID. */
+  kind?: "team";
 }
 
 /** Server-authorized task data for one Tasks page scope. */
