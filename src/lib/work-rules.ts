@@ -153,6 +153,49 @@ export type WorkQueueTask = PersonalPlannerTask & {
 };
 
 /**
+ * Attention scopes are a presentation filter over an already-authorized task
+ * set.  They deliberately use canonical IDs: organization and principal names
+ * are only labels in the UI, never query keys.
+ */
+export type AttentionScope = {
+  organizationId?: string;
+  principalId?: string;
+};
+
+export type AttentionScopeTask = WorkQueueTask & {
+  organizationId?: string;
+};
+
+/**
+ * Returns every explicit principal relationship that can make a task relevant
+ * in Attention. This is broader than personal action on purpose: the People &
+ * Teams filter can inspect assignments, delegation, review, next action, and
+ * unresolved dependency ownership without inventing a second relationship.
+ */
+export function getTaskAttentionPrincipalIds(task: AttentionScopeTask) {
+  return Array.from(new Set([
+    ...(task.assigneeIds || []),
+    ...(task.assignments || []).flatMap((assignment) => [assignment.principalId, assignment.assignedByPrincipalId]),
+    task.createdByPrincipalId,
+    task.nextActionPrincipalId,
+    task.reviewerPrincipalId,
+    ...(task.dependencyActionOwnerIds || []),
+  ].filter((id): id is string => Boolean(id))));
+}
+
+/**
+ * Applies an intersection-only Attention scope. Callers provide their
+ * server-authorized snapshot first, so narrowing by IDs can never broaden a
+ * member's visibility.
+ */
+export function filterAttentionTasks<T extends AttentionScopeTask>(tasks: T[], scope: AttentionScope) {
+  return tasks.filter((task) =>
+    (!scope.organizationId || task.organizationId === scope.organizationId)
+    && (!scope.principalId || getTaskAttentionPrincipalIds(task).includes(scope.principalId)),
+  );
+}
+
+/**
  * The one definition of a person's actionable work. Authorization is
  * intentionally absent: being allowed to inspect a Team's work never makes
  * that work personal. Team IDs must therefore never be supplied as a match

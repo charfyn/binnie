@@ -59,8 +59,10 @@ import {
 import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, TaskScopeResultDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
 import { getOrganizationColorStyles, ORGANIZATION_COLOR_KEYS, ORGANIZATION_COLOR_STYLES, type OrganizationColorKey } from "@/lib/organization-colors";
 import { DEFAULT_TASK_LIST_COLUMNS, TASK_LIST_COLUMNS, type TaskListColumnId } from "@/lib/task-list";
+import { getTaskDetailPrimaryAction, getTaskDetailPriorityLabel, hasTaskDetailSecondaryContext } from "@/lib/task-detail";
+import { getTasksFilterControls } from "@/lib/tasks-filter-controls";
 import { getPrimarySidebarView } from "@/lib/primary-navigation";
-import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getAttentionWork as getCanonicalAttentionWork, getDelegatedTasks as getCanonicalDelegatedTasks, getOrganizationActiveTasks as getCanonicalOrganizationActiveTasks, getOrganizationAreaTasks as getCanonicalOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks as getCanonicalOrganizationRevisitTasks, getOrganizationTasks as getCanonicalOrganizationTasks, getOrganizationTodayTasks as getCanonicalOrganizationTodayTasks, getOrganizationWaitingTasks as getCanonicalOrganizationWaitingTasks, getOrganizationWeekTasks as getCanonicalOrganizationWeekTasks, getOverdueTasks as getCanonicalOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getReviewTasks as getCanonicalReviewTasks, getTaskPlannerDate as getCanonicalTaskPlannerDate, getTodayTasks as getCanonicalTodayTasks, getWaitingWork as getCanonicalWaitingWork, getWeekTasks as getCanonicalWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, filterAttentionTasks, getAttentionWork as getCanonicalAttentionWork, getDelegatedTasks as getCanonicalDelegatedTasks, getOrganizationActiveTasks as getCanonicalOrganizationActiveTasks, getOrganizationAreaTasks as getCanonicalOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks as getCanonicalOrganizationRevisitTasks, getOrganizationTasks as getCanonicalOrganizationTasks, getOrganizationTodayTasks as getCanonicalOrganizationTodayTasks, getOrganizationWaitingTasks as getCanonicalOrganizationWaitingTasks, getOrganizationWeekTasks as getCanonicalOrganizationWeekTasks, getOverdueTasks as getCanonicalOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getReviewTasks as getCanonicalReviewTasks, getTaskAttentionPrincipalIds, getTaskPlannerDate as getCanonicalTaskPlannerDate, getTodayTasks as getCanonicalTodayTasks, getWaitingWork as getCanonicalWaitingWork, getWeekTasks as getCanonicalWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
 import { authClient } from "@/lib/auth-client";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
@@ -128,6 +130,15 @@ type NavView =
   | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup" | "workload" | "templates" | "attention";
 type AttentionTab = "all" | "followup" | "waiting" | "delegated" | "review" | "overdue";
 type AttentionReason = "follow_up" | "waiting_on_me" | "blocked" | "review" | "overdue";
+type WaitingFilterKey = "others" | "me" | "blocked" | "external";
+type AttentionFilterState = {
+  search: string;
+  organizationId: string;
+  principalId: string;
+  waitingKinds: WaitingFilterKey[];
+  followUpDueOnly: boolean;
+};
+const EMPTY_ATTENTION_FILTERS: AttentionFilterState = { search: "", organizationId: "", principalId: "", waitingKinds: [], followUpDueOnly: false };
 type PeopleHubTab = "people" | "teams" | "workload";
 type ProjectsHubMode = "projects" | "templates";
 
@@ -992,10 +1003,10 @@ const DEFAULT_ORG_COLOR = { bg: "bg-primary/10", text: "text-primary", dot: "bg-
 const ORG_COLORS: Record<string, typeof DEFAULT_ORG_COLOR> = {};
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; dot: string }> = {
-  urgent: { label: "Needs attention", color: "text-overdue", bg: "bg-overdue/10", dot: "bg-overdue" },
-  high: { label: "Important", color: "text-[#a87955]", bg: "bg-[#fff1e7]", dot: "bg-[#dfa17c]" },
-  medium: { label: "Planned", color: "text-warning", bg: "bg-[#fff9e4]", dot: "bg-[#e2c66d]" },
-  low: { label: "When there’s room", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-[#a8afbd]" },
+  urgent: { label: "Urgent", color: "text-overdue", bg: "bg-overdue/10", dot: "bg-overdue" },
+  high: { label: "High", color: "text-[#a87955]", bg: "bg-[#fff1e7]", dot: "bg-[#dfa17c]" },
+  medium: { label: "Normal", color: "text-warning", bg: "bg-[#fff9e4]", dot: "bg-[#e2c66d]" },
+  low: { label: "Low", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-[#a8afbd]" },
 };
 
 const AREA_COLORS: Record<string, string> = {
@@ -1058,7 +1069,7 @@ function PriorityDot({ priority }: { priority: Priority }) {
 
 function PriorityBadge({ priority }: { priority: Priority }) {
   const c = PRIORITY_CONFIG[priority];
-  return <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", c.bg, c.color)}>{c.label}</span>;
+  return <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", c.bg, c.color)}>{getTaskDetailPriorityLabel(priority)}</span>;
 }
 
 function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" | "md" | "lg" }) {
@@ -1261,6 +1272,10 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
   onOpenProject?: (projectId: string) => void;
   onOpenPrincipal?: (principal: DirectoryPerson) => void;
 }) {
+  // Task details are a view over the authenticated person's canonical task.  The
+  // drawer never falls back to a display name or role when deciding which
+  // execution actions to offer.
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [, setRevision] = useState(0);
   const [effortDraft, setEffortDraft] = useState(task.estimatedMinutes ? String(task.estimatedMinutes) : "");
   const [savingEffort, setSavingEffort] = useState(false);
@@ -1274,6 +1289,7 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
   const [updateText, setUpdateText] = useState("");
   const [updateAttachments, setUpdateAttachments] = useState<File[]>([]);
   const [reviewTarget, setReviewTarget] = useState("");
+  const [reviewDecisionOpen, setReviewDecisionOpen] = useState(false);
   const [revisionRequestOpen, setRevisionRequestOpen] = useState(false);
   const [revisionNote, setRevisionNote] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -1285,7 +1301,9 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
   const [dependencyTaskId, setDependencyTaskId] = useState("");
   const [dependencyLabel, setDependencyLabel] = useState("");
   const [checklistText, setChecklistText] = useState("");
+  const [checklistComposerOpen, setChecklistComposerOpen] = useState(false);
   const [subtaskText, setSubtaskText] = useState("");
+  const [subtaskComposerOpen, setSubtaskComposerOpen] = useState(false);
   const [subtaskArea, setSubtaskArea] = useState<AreaName | "">("");
   const [subtaskAssigneeId, setSubtaskAssigneeId] = useState("");
   const [subtaskDeadline, setSubtaskDeadline] = useState("");
@@ -1299,15 +1317,37 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
   const [mergeTaskId, setMergeTaskId] = useState("");
   const [mergeDatesFrom, setMergeDatesFrom] = useState<"survivor" | "source">("survivor");
   const [splitText, setSplitText] = useState("");
+  const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [statusActionsOpen, setStatusActionsOpen] = useState(false);
+  const [quickRescheduleOpen, setQuickRescheduleOpen] = useState(false);
+  const [taskActionsOpen, setTaskActionsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const updateFileInputRef = useRef<HTMLInputElement>(null);
+  const footerActionsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (quickRescheduleOpen || taskActionsOpen) {
+        setQuickRescheduleOpen(false);
+        setTaskActionsOpen(false);
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, quickRescheduleOpen, taskActionsOpen]);
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!footerActionsRef.current?.contains(event.target as Node)) {
+        setQuickRescheduleOpen(false);
+        setTaskActionsOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   function applyServerTask(result: Awaited<ReturnType<typeof transitionTaskAction>>) {
     if (!result.ok) { setActionMessage(result.message); return false; }
@@ -1332,6 +1372,26 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
     });
     commitTaskStore();
     onClose();
+  }
+
+  async function startTask() {
+    if (taskStoreUsesServer && task.version) {
+      applyServerTask(await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "in_progress" }));
+      return;
+    }
+    Object.assign(task, { status: "in_progress" as TaskStatus, isWaiting: false, lastUpdate: "Started just now" });
+    commitTaskStore();
+    setRevision(value => value + 1);
+  }
+
+  async function resumeTask() {
+    if (taskStoreUsesServer && task.version) {
+      applyServerTask(await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "ready" }));
+      return;
+    }
+    Object.assign(task, { status: "ready" as TaskStatus, isWaiting: false, blockedBy: undefined, lastUpdate: "Ready to move just now" });
+    commitTaskStore();
+    setRevision(value => value + 1);
   }
 
   async function reopen() {
@@ -1361,43 +1421,29 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
     onClose();
   }
 
-  async function reschedule() {
-    const tomorrow = new Date(getWorkspaceCalendarDate());
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    const rescheduledDate = isoDate(tomorrow);
-    if (taskStoreUsesServer && task.version) {
-      const result = await updateTaskAction({
-        taskId: task.id,
-        expectedVersion: task.version,
-        ...(task.startDate ? { startDate: rescheduledDate } : task.targetDate ? { targetDate: rescheduledDate } : { deadlineDate: rescheduledDate }),
-      });
-      if (!result.ok) { setActionMessage(result.message); return; }
-      Object.assign(task, applyCanonicalTask(result.data, result.revision));
-      setPlanForDraft(result.data.startDate || "");
-      setDeadlineDraft(result.data.deadlineDate || "");
-      setRevision(value => value + 1);
-      return;
-    }
-    Object.assign(task, task.startDate ? { startDate: rescheduledDate } : task.targetDate ? { targetDate: rescheduledDate } : { deadline: "Tomorrow", deadlineDate: rescheduledDate }, { isOverdue: false, lastUpdate: "Rescheduled just now" });
-    commitTaskStore();
-    onClose();
+  function openFollowUpComposer() {
+    setActionMessage("Use Updates to record the next follow-up.");
+    const updateInput = document.getElementById(`task-update-${task.id}`);
+    updateInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+    updateInput?.focus();
   }
 
   async function savePlannerDates() {
     if (!taskStoreUsesServer || !task.version) {
       Object.assign(task, { startDate: planForDraft || undefined, deadlineDate: deadlineDraft || undefined, deadline: deadlineDraft ? taskDateLabel(deadlineDraft) : undefined, lastUpdate: "Dates updated just now" });
       commitTaskStore();
-      return;
+      return true;
     }
     setSavingPlannerDates(true);
     const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, startDate: planForDraft || null, deadlineDate: deadlineDraft || null });
     setSavingPlannerDates(false);
-    if (!result.ok) { setActionMessage(result.message); return; }
+    if (!result.ok) { setActionMessage(result.message); return false; }
     Object.assign(task, applyCanonicalTask(result.data, result.revision));
     setPlanForDraft(result.data.startDate || "");
     setDeadlineDraft(result.data.deadlineDate || "");
     setRevision(current => current + 1);
     setActionMessage("Plan and deadline saved.");
+    return true;
   }
 
   async function saveEstimatedEffort(minutes: number | null) {
@@ -1502,7 +1548,7 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
       const result = await postTaskUpdateAction({ taskId: task.id, expectedVersion: task.version, text: updateText });
       if (!result.ok) { setActionMessage(result.message); return; }
       Object.assign(task, applyCanonicalTask(result.data, result.revision));
-      const update = result.data.updates.find(item => item.authorId === DEFAULT_CURRENT_USER_ID && item.text === updateText.trim());
+      const update = result.data.updates.find(item => item.authorId === currentUserId && item.text === updateText.trim());
       let expectedVersion = result.data.version;
       if (update && updateAttachments.length) {
         for (const file of updateAttachments) {
@@ -1530,7 +1576,8 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
 
   async function submitForReview() {
     if (!taskStoreUsesServer || !task.version) return;
-    const reviewerId = reviewTarget || DEFAULT_CURRENT_USER_ID;
+    const reviewerId = reviewTarget;
+    if (!reviewerId) { setActionMessage("Choose the person who needs to review this work."); return; }
     const result = await submitTaskForReviewAction({ taskId: task.id, expectedVersion: task.version, reviewerId });
     if (!result.ok) { setActionMessage(result.message); return; }
     Object.assign(task, applyCanonicalTask(result.data, result.revision));
@@ -1581,6 +1628,7 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
     const result = await addChecklistItemAction({ taskId: task.id, expectedVersion: task.version, title: checklistText });
     if (!applyServerTask(result)) return;
     setChecklistText("");
+    setChecklistComposerOpen(false);
   }
 
   async function toggleChecklistItem(itemId: string, completed: boolean) {
@@ -1593,7 +1641,7 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
     const leadDepartmentId = subtaskArea ? getRemoteDepartmentId(task.org, subtaskArea) : task.leadDepartmentId;
     const result = await createSubtaskAction({ parentTaskId: task.id, title: subtaskText, priority: task.priority, leadDepartmentId, projectId: task.projectId, involvedDepartmentIds: leadDepartmentId ? [leadDepartmentId] : task.involvedDepartmentIds, deadlineDate: subtaskDeadline || undefined, assignments: subtaskAssigneeId ? [{ principalId: subtaskAssigneeId, role: "primary_owner" as const }] : task.assigneeIds?.length ? task.assigneeIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })) : undefined });
     if (!result.ok) { setActionMessage(result.message); return; }
-    setSubtaskText(""); setSubtaskArea(""); setSubtaskAssigneeId(""); setSubtaskDeadline(""); setActionMessage("Subtask added.");
+    setSubtaskText(""); setSubtaskArea(""); setSubtaskAssigneeId(""); setSubtaskDeadline(""); setSubtaskComposerOpen(false); setActionMessage("Subtask added.");
   }
 
   async function saveRecurrence() {
@@ -1652,6 +1700,45 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
   }
 
   const assignedPeople = getTaskAssignees(task);
+  const currentUserIsAssignee = Boolean(currentUserId && getTaskAssigneeIds(task).includes(currentUserId));
+  const currentUserHasNextAction = Boolean(currentUserId && task.nextActionPrincipalId === currentUserId);
+  const currentUserIsReviewer = Boolean(currentUserId && task.reviewerPrincipalId === currentUserId);
+  const hasTeamAssignment = assignedPeople.some(person => person.type === "team");
+  const hasPersonalAssignment = assignedPeople.some(person => person.type === "person");
+  const currentUserCanMoveTask = currentUserIsAssignee || currentUserHasNextAction || (task.status === "review" && currentUserIsReviewer);
+  const isWaitingTask = task.status === "waiting" || task.status === "blocked" || Boolean(task.isWaiting);
+  // The server action is the authority for a specific permission decision. A
+  // canonical task with a revision is eligible for the same edit controls as
+  // the Plan & deadline section; local fallback tasks retain their existing
+  // local editing behavior.
+  const canEditTask = !taskStoreUsesServer || Boolean(task.version);
+  const canFollowUp = isWaitingTask && !currentUserHasNextAction && (task.isDelegated || Boolean(task.followUpDate));
+  const primaryAction = getTaskDetailPrimaryAction({
+    status: task.status,
+    isServerTask: taskStoreUsesServer,
+    currentUserIsAssignee,
+    currentUserHasNextAction,
+    currentUserIsReviewer,
+    hasTeamAssignment,
+    hasPersonalAssignment,
+    isWaiting: isWaitingTask,
+  });
+  const hasSecondaryDetails = hasTaskDetailSecondaryContext({
+    targetDate: task.targetDate,
+    followUpDate: task.followUpDate,
+    responseDue: task.responseDue,
+    estimatedMinutes: task.estimatedMinutes,
+    involvedAreaCount: getTaskAreas(task).filter(area => area !== task.area).length,
+    contributorCount: task.contributorIds?.length,
+    dependencyCount: task.dependencyRecords?.length,
+    checklistCount: task.checklistItems?.length,
+    subtaskCount: task.subtaskProgress?.total,
+    recurring: task.recurrence?.active,
+    linkCount: task.links?.length,
+    fileCount: task.files?.length,
+    hasOriginalCapture: Boolean(task.originalCapture),
+    activityCount: task.activity?.length,
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-end">
@@ -1672,31 +1759,32 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
           </button>
         </div>
         <div className="flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {[
-              { label: "Status", value: <div className="flex items-center gap-1.5"><StatusDot status={task.status} /><span className="capitalize text-sm">{task.status.replace("_", " ")}</span></div> },
-              { label: "Priority", value: <PriorityBadge priority={task.priority} /> },
-              { label: "Assigned To", value: assignedPeople.length ? <div className="flex flex-wrap items-center gap-1.5">{assignedPeople.map(person => <button key={person.id} onClick={() => onOpenPrincipal?.(person)} disabled={!onOpenPrincipal} className="inline-flex items-center gap-1.5 rounded-full bg-card px-2 py-1 text-sm text-foreground hover:text-primary disabled:cursor-default"><Avatar name={person.name} size="xs" />{person.name}</button>)}</div> : <span className="text-sm text-muted-foreground">Unassigned</span> },
-              { label: "Next Action By", value: <span className={cn("text-sm font-medium", task.nextActionBy === "me" ? "text-warning" : "text-primary")}>{readableTaskNextAction(task)}</span> },
-              { label: "Plan For", value: <span className="text-sm font-medium text-foreground">{task.startDate || "—"}</span> },
-              { label: "Target Date", value: <span className="text-sm font-medium text-foreground">{task.targetDate || "—"}</span> },
-              { label: "Deadline", value: <span className={cn("text-sm font-medium", task.isOverdue ? "text-overdue" : "text-foreground")}>{task.deadline || "—"}</span> },
-              { label: "Follow-Up Date", value: <span className="text-sm font-medium text-foreground">{task.responseDue || "—"}</span> },
-              { label: "Project", value: task.projectId ? <button onClick={() => onOpenProject?.(task.projectId!)} disabled={!onOpenProject} className="text-sm text-primary hover:underline disabled:cursor-default disabled:text-foreground disabled:no-underline">{task.project || "—"}</button> : <span className="text-sm text-foreground">—</span> },
-              { label: "Lead Area", value: <AreaBadge area={task.area} /> },
-              { label: "Involved Areas", value: <span className="text-sm text-foreground">{getTaskAreas(task).filter(area => area !== task.area).join(" · ") || "No additional areas"}</span> },
-              { label: "Contributors", value: <span className="text-sm text-foreground">{directoryNames(task.contributorIds).join(" · ") || "—"}</span> },
-              { label: "Blocked By", value: task.blockedBy ? <span className="flex items-center gap-1.5 text-sm font-medium text-overdue"><GitBranch className="h-3.5 w-3.5" />{task.blockedBy.label}</span> : <span className="text-sm text-muted-foreground">No blocking dependency</span> },
-              { label: "Waiting Since", value: <span className="text-sm text-muted-foreground">{humanizeWaitingSince(task.waitingSince)}</span> },
-              { label: "Last Update", value: <span className="text-sm text-muted-foreground">{task.lastUpdate || "—"}</span> },
-              { label: "Est. Time", value: <span className="text-sm font-mono text-muted-foreground">{task.estimatedMinutes ? `~${formatEstimatedMinutes(task.estimatedMinutes)}` : "Not estimated"}</span> },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded-xl bg-muted/55 p-3">
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
-                {value}
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Status</p>
+                <div className="mt-1 flex items-center gap-1.5"><StatusDot status={task.status} /><span className="capitalize text-sm text-foreground">{task.status.replace("_", " ")}</span><PriorityBadge priority={task.priority} /></div>
               </div>
-            ))}
-          </div>
+              <div>
+                <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Assigned to</p><button onClick={() => { setAssigneesEditOpen(current => !current); setNextActionEditOpen(false); }} className="text-[10px] font-medium text-primary hover:text-primary/80">Edit</button></div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">{assignedPeople.length ? assignedPeople.map(person => <button key={person.id} onClick={() => onOpenPrincipal?.(person)} disabled={!onOpenPrincipal} className="inline-flex items-center gap-1.5 rounded-full bg-muted/55 px-2 py-1 text-[11px] text-foreground hover:text-primary disabled:cursor-default"><Avatar name={person.name} size="xs" />{person.name}</button>) : <span className="text-sm text-muted-foreground">Unassigned</span>}</div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Next action</p>{taskStoreUsesServer && <button onClick={() => { setNextActionEditOpen(current => !current); setAssigneesEditOpen(false); }} className="text-[10px] font-medium text-primary hover:text-primary/80">Edit</button>}</div>
+                <p className={cn("mt-1 text-sm font-medium", task.nextActionBy === "me" ? "text-warning" : "text-primary")}>{readableTaskNextAction(task)}</p>
+              </div>
+              {task.projectId && <div><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Project</p><button onClick={() => onOpenProject?.(task.projectId!)} disabled={!onOpenProject} className="mt-1 text-sm font-medium text-primary hover:underline disabled:cursor-default disabled:text-foreground disabled:no-underline">{task.project || "Project"}</button></div>}
+            </div>
+            {isWaitingTask && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-[11px]"><span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium", task.status === "blocked" ? "bg-overdue/[0.08] text-overdue" : "bg-info/[0.08] text-info")}><Hourglass className="h-3.5 w-3.5" />{task.status === "blocked" ? "Blocked" : "Waiting"}</span><span className="text-muted-foreground">{task.blockedBy ? `Waiting on ${task.blockedBy.label}` : readableTaskNextAction(task)}{task.waitingSince ? ` · since ${humanizeWaitingSince(task.waitingSince)}` : ""}</span></div>}
+          </section>
+          {assigneesEditOpen && <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Edit assignees</p><p className="mt-0.5 text-[10px] text-muted-foreground">Choose the people or teams responsible for this shared task.</p></div><button onClick={() => setAssigneesEditOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted">Done</button></div>
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">{getDirectoryAssignees(task.org).map(person => <button key={person.id} onClick={() => void toggleTaskAssignee(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", getTaskAssigneeIds(task).includes(person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div>
+          </section>}
+          {taskStoreUsesServer && nextActionEditOpen && <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Edit next action</p><p className="mt-0.5 text-[10px] text-muted-foreground">Make the next move clear without changing ownership.</p></div><button onClick={() => setNextActionEditOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted">Close</button></div>
+            <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[9rem_1fr_auto]"><select value={nextActionKind} onChange={event => { setNextActionKind(event.target.value as typeof nextActionKind); setNextActionTarget(""); }} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="ready">Nobody / Ready</option><option value="principal">Person or team</option><option value="department">Department</option><option value="external">External</option></select>{nextActionKind === "principal" ? <select value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Choose person or team</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : nextActionKind === "department" ? <select value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Choose department</option>{captureOrgAreas(task.org).map(area => <option key={area} value={getRemoteDepartmentId(task.org, area)}>{area}</option>)}</select> : nextActionKind === "external" ? <input value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} placeholder="Supplier, guest, bank…" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /> : <span className="rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-muted-foreground">Ready for anyone to take.</span>}<button onClick={() => void saveNextAction()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button></div>
+          </section>}
           <section className="rounded-2xl border border-border bg-card p-3.5">
             <div><p className="text-[12px] font-semibold text-foreground">Plan & deadline</p><p className="mt-0.5 text-[10px] text-muted-foreground">Plan for controls planner placement. Deadline stays visible as the latest completion date.</p></div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1705,6 +1793,16 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
             </div>
             <div className="mt-2 flex justify-end"><button onClick={() => void savePlannerDates()} disabled={savingPlannerDates} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingPlannerDates ? "Saving…" : "Save dates"}</button></div>
           </section>
+          {task.blockedBy && (
+            <div className="rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-4">
+              <div className="flex items-start gap-2.5"><GitBranch className="mt-0.5 h-4 w-4 flex-shrink-0 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Real dependency</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">This task is blocked by {task.blockedBy.label}{task.blockedBy.owner ? ` · next action: ${task.blockedBy.owner}` : ""}.</p></div></div>
+            </div>
+          )}
+          <div className="rounded-2xl border border-border bg-muted/25 px-3.5 py-3">
+            <button onClick={() => setMoreDetailsOpen(current => !current)} aria-expanded={moreDetailsOpen} className="flex w-full items-center justify-between gap-3 text-left"><span><span className="block text-[12px] font-semibold text-foreground">More details</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{hasSecondaryDetails ? "Effort, shared work, dependencies, repeat, files, and history." : "Add optional task context only when you need it."}</span></span>{moreDetailsOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}</button>
+          </div>
+          {moreDetailsOpen && <div className="space-y-4">
+          {(task.targetDate || task.followUpDate || task.responseDue) && <section className="rounded-2xl border border-border bg-card p-3.5"><p className="text-[12px] font-semibold text-foreground">Additional dates</p><div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">{task.targetDate && <span className="rounded-lg bg-muted/55 px-2.5 py-1.5">Target · {taskDateLabel(task.targetDate)}</span>}{task.followUpDate && <span className="rounded-lg bg-muted/55 px-2.5 py-1.5">Follow up · {taskDateLabel(task.followUpDate)}</span>}{task.responseDue && <span className="rounded-lg bg-muted/55 px-2.5 py-1.5">Response due · {taskDateLabel(task.responseDue)}</span>}</div></section>}
           <section className="rounded-2xl border border-border bg-card p-3.5">
             <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Estimated effort</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. Used for workload planning, never multiplied across collaborators.</p></div>{task.estimatedMinutes && <button onClick={() => void saveEstimatedEffort(null)} disabled={savingEffort} className="rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-overdue disabled:opacity-50">Clear</button>}</div>
             <div className="mt-3 flex flex-wrap gap-1.5">{[[15, "15m"], [30, "30m"], [60, "1h"], [120, "2h"], [240, "4h"], [480, "1 day"]].map(([minutes, label]) => <button key={String(minutes)} onClick={() => void saveEstimatedEffort(minutes as number)} disabled={savingEffort} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium disabled:opacity-50", task.estimatedMinutes === minutes ? "border-primary/35 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{label}</button>)}</div>
@@ -1714,24 +1812,16 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
             <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Shared work</p><p className="mt-0.5 text-[10px] text-muted-foreground">One task stays visible to every involved department.</p></div><button onClick={() => setAreasEditOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{areasEditOpen ? "Done" : "Edit"}</button></div>
             {areasEditOpen && <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Lead Area<select value={task.area} onChange={event => setLeadArea(event.target.value as AreaName)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground">{captureOrgAreas(task.org).map(area => <option key={area}>{area}</option>)}</select></label><div><p className="text-[10px] font-medium text-muted-foreground">Involved Areas</p><div className="mt-1 flex flex-wrap gap-1">{captureOrgAreas(task.org).map(area => <button key={area} onClick={() => toggleInvolvedArea(area)} className={cn("rounded-full border px-2 py-1 text-[10px]", getTaskAreas(task).includes(area) ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{area}</button>)}</div></div></div>}
           </section>
-          <section className="rounded-2xl border border-border bg-card p-3.5">
-            <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Assigned to</p><p className="mt-0.5 text-[10px] text-muted-foreground">People and teams can collaborate on one shared task.</p></div><button onClick={() => setAssigneesEditOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{assigneesEditOpen ? "Done" : "+ Add assignee"}</button></div>
-            {assignedPeople.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{assignedPeople.map(person => <span key={person.id} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[10px] text-foreground"><Avatar name={person.name} size="xs" />{person.name}{assigneesEditOpen && <button onClick={() => toggleTaskAssignee(person.id)} aria-label={`Remove ${person.name}`} className="text-muted-foreground hover:text-overdue"><X className="h-3 w-3" /></button>}</span>)}</div>}
-            {assigneesEditOpen && <div className="mt-3 border-t border-border pt-3"><p className="text-[10px] font-medium text-muted-foreground">Add people or teams</p><div className="mt-2 flex flex-wrap gap-1.5">{getDirectoryAssignees(task.org).map(person => <button key={person.id} onClick={() => toggleTaskAssignee(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", getTaskAssigneeIds(task).includes(person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div></div>}
-          </section>
-          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5">
-            <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Next action by</p><p className="mt-0.5 text-[10px] text-muted-foreground">Make the next move clear without changing who owns the task.</p></div><button onClick={() => setNextActionEditOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{nextActionEditOpen ? "Close" : "Edit"}</button></div>
-            {nextActionEditOpen && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[9rem_1fr_auto]"><select value={nextActionKind} onChange={event => { setNextActionKind(event.target.value as typeof nextActionKind); setNextActionTarget(""); }} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="ready">Nobody / Ready</option><option value="principal">Person or team</option><option value="department">Department</option><option value="external">External</option></select>{nextActionKind === "principal" ? <select value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Choose person or team</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : nextActionKind === "department" ? <select value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Choose department</option>{captureOrgAreas(task.org).map(area => <option key={area} value={getRemoteDepartmentId(task.org, area)}>{area}</option>)}</select> : nextActionKind === "external" ? <input value={nextActionTarget} onChange={event => setNextActionTarget(event.target.value)} placeholder="Supplier, guest, bank…" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /> : <span className="rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-muted-foreground">Ready for anyone to take.</span>}<button onClick={() => void saveNextAction()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button></div>}
-          </section>}
           {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5">
             <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Dependencies & related work</p><p className="mt-0.5 text-[10px] text-muted-foreground">Start blockers stop starting. Completion blockers still let work move now.</p></div><button onClick={() => setDependencyOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add</button></div>
             {task.dependencyRecords?.length ? <div className="mt-3 space-y-1.5">{task.dependencyRecords.map(dependency => <div key={dependency.id} className="flex items-center gap-2 rounded-xl bg-muted/45 px-2.5 py-2"><GitBranch className={cn("h-3.5 w-3.5", dependency.type === "related" ? "text-primary" : dependency.type === "completion_blocker" ? "text-info" : "text-overdue")} /><span className="min-w-0 flex-1 truncate text-[11px] text-foreground">{dependency.label}</span><span className="text-[9px] text-muted-foreground">{dependency.type.replace("_", " ")}</span><button onClick={() => void changeDependency(dependency.id, !dependency.resolvedAt)} className="text-[10px] font-medium text-primary">{dependency.resolvedAt ? "Reopen" : "Resolve"}</button><button onClick={() => void changeDependency(dependency.id, false, true)} className="text-muted-foreground hover:text-overdue"><X className="h-3 w-3" /></button></div>)}</div> : <p className="mt-3 text-[11px] text-muted-foreground">No dependencies or related work yet.</p>}
             {dependencyOpen && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[10rem_1fr_auto]"><select value={dependencyType} onChange={event => setDependencyType(event.target.value as typeof dependencyType)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="start_blocker">Start blocker</option><option value="completion_blocker">Completion blocker</option><option value="related">Related</option></select><select value={dependencyTaskId} onChange={event => { setDependencyTaskId(event.target.value); setDependencyLabel(""); }} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Describe instead…</option>{TASKS.filter(candidate => candidate.id !== task.id && !candidate.archived).map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><button onClick={() => void addDependency()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Add</button><input value={dependencyLabel} onChange={event => setDependencyLabel(event.target.value)} placeholder="Or describe an approval, department, or external response" className="sm:col-span-3 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div>}
           </section>}
-          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Completion criteria</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional checks for work that needs a clear Done state.</p></div>{task.checklistItems?.length ? <span className="text-[10px] text-muted-foreground">{task.checklistItems.filter(item => item.completedAt).length}/{task.checklistItems.length}</span> : null}</div>{task.checklistItems?.length ? <div className="mt-3 space-y-1.5">{task.checklistItems.map(item => <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-foreground"><input type="checkbox" checked={Boolean(item.completedAt)} onChange={event => void toggleChecklistItem(item.id, event.target.checked)} className="accent-primary" /> <span className={cn(item.completedAt && "line-through text-muted-foreground")}>{item.title}</span></label>)}</div> : null}<div className="mt-3 flex gap-2"><input value={checklistText} onChange={event => setChecklistText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addChecklistItem()} placeholder="Add completion item" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addChecklistItem()} disabled={!checklistText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add</button></div></section>}
-          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Subtasks</p><p className="mt-0.5 text-[10px] text-muted-foreground">Use only for distinct deliverables inside this work.</p></div>{task.subtaskProgress?.total ? <span className="text-[10px] text-muted-foreground">{task.subtaskProgress.completed}/{task.subtaskProgress.total} complete</span> : null}</div><div className="mt-3 grid gap-2"><input value={subtaskText} onChange={event => setSubtaskText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addSubtask()} placeholder="Add a distinct deliverable" className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="grid gap-2 sm:grid-cols-3"><select value={subtaskArea} onChange={event => setSubtaskArea(event.target.value as AreaName)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent area</option>{captureOrgAreas(task.org).map(area => <option key={area}>{area}</option>)}</select><select value={subtaskAssigneeId} onChange={event => setSubtaskAssigneeId(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent assignee</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={subtaskDeadline} onChange={event => setSubtaskDeadline(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div><button onClick={() => void addSubtask()} disabled={!subtaskText.trim()} className="w-fit rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add subtask</button></div></section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Completion criteria</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional checks for work that needs a clear Done state.</p></div>{task.checklistItems?.length ? <span className="text-[10px] text-muted-foreground">{task.checklistItems.filter(item => item.completedAt).length}/{task.checklistItems.length}</span> : <button onClick={() => setChecklistComposerOpen(true)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add</button>}</div>{task.checklistItems?.length ? <div className="mt-3 space-y-1.5">{task.checklistItems.map(item => <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-foreground"><input type="checkbox" checked={Boolean(item.completedAt)} onChange={event => void toggleChecklistItem(item.id, event.target.checked)} className="accent-primary" /> <span className={cn(item.completedAt && "line-through text-muted-foreground")}>{item.title}</span></label>)}</div> : null}{(task.checklistItems?.length || checklistComposerOpen) && <div className="mt-3 flex gap-2"><input value={checklistText} onChange={event => setChecklistText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addChecklistItem()} placeholder="Add completion item" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addChecklistItem()} disabled={!checklistText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add</button></div>}</section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Subtasks</p><p className="mt-0.5 text-[10px] text-muted-foreground">Use only for distinct deliverables inside this work.</p></div>{task.subtaskProgress?.total ? <span className="text-[10px] text-muted-foreground">{task.subtaskProgress.completed}/{task.subtaskProgress.total} complete</span> : <button onClick={() => setSubtaskComposerOpen(true)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add subtask</button>}</div>{(task.subtaskProgress?.total || subtaskComposerOpen) && <div className="mt-3 grid gap-2"><input value={subtaskText} onChange={event => setSubtaskText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addSubtask()} placeholder="Add a distinct deliverable" className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="grid gap-2 sm:grid-cols-3"><select value={subtaskArea} onChange={event => setSubtaskArea(event.target.value as AreaName)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent area</option>{captureOrgAreas(task.org).map(area => <option key={area}>{area}</option>)}</select><select value={subtaskAssigneeId} onChange={event => setSubtaskAssigneeId(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent assignee</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={subtaskDeadline} onChange={event => setSubtaskDeadline(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div><button onClick={() => void addSubtask()} disabled={!subtaskText.trim()} className="w-fit rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add subtask</button></div>}</section>}
           {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Repeat</p><p className="mt-0.5 text-[10px] text-muted-foreground">Create the next occurrence only after this one is complete.</p></div><button onClick={() => setRecurrenceOpen(current => !current)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{task.recurrence?.active ? "Edit" : "Set repeat"}</button></div>{task.recurrence?.active && <p className="mt-3 text-[11px] text-foreground">Every {task.recurrence.interval > 1 ? `${task.recurrence.interval} ` : ""}{task.recurrence.frequency} · next {task.recurrence.nextOccurrenceDate ? taskDateLabel(task.recurrence.nextOccurrenceDate) : "after completion"}</p>}{recurrenceOpen && <div className="mt-3 space-y-2 border-t border-border pt-3"><div className="grid gap-2 sm:grid-cols-4"><select value={repeatFrequency} onChange={event => setRepeatFrequency(event.target.value as typeof repeatFrequency)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="months">Every N months</option></select><input aria-label="Repeat interval" type="number" min="1" value={repeatInterval} onChange={event => setRepeatInterval(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><input aria-label="Repeat start date" type="date" value={repeatStart} onChange={event => setRepeatStart(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><input aria-label="Repeat end date" type="date" value={repeatEnd} onChange={event => setRepeatEnd(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div>{repeatFrequency === "weekly" && <div className="flex flex-wrap gap-1.5">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, day) => <button key={label} onClick={() => setRepeatWeekDays(current => current.includes(day) ? current.filter(item => item !== day) : [...current, day])} className={cn("rounded-lg border px-2 py-1 text-[10px] font-medium", repeatWeekDays.includes(day) ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{label}</button>)}</div>}{(repeatFrequency === "monthly" || repeatFrequency === "months") && <label className="block text-[10px] font-medium text-muted-foreground">Day of month<input aria-label="Day of month" type="number" min="1" max="31" value={repeatMonthDay} onChange={event => setRepeatMonthDay(event.target.value)} className="ml-2 w-16 rounded-lg border border-border bg-background px-2 py-1 text-[11px] text-foreground" /></label>}<div className="flex items-center gap-3"><button onClick={() => void saveRecurrence()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button>{task.recurrence?.active && <button onClick={() => void stopRecurrence()} className="text-left text-[10px] font-medium text-overdue">Stop repeating</button>}<span className="text-[10px] text-muted-foreground">End date is optional.</span></div></div>}</section>}
-          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5"><div><p className="text-[12px] font-semibold text-foreground">Reshape work</p><p className="mt-0.5 text-[10px] text-muted-foreground">Merge duplicate captures, or split truly independent actions while preserving history.</p></div><div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[1fr_auto]"><select value={mergeTaskId} onChange={event => setMergeTaskId(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Merge another task into this one…</option>{TASKS.filter(candidate => candidate.id !== task.id && !candidate.archived && candidate.status !== "done").map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><button onClick={() => void mergeTask()} disabled={!mergeTaskId} className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Merge</button>{mergeTaskId && <label className="sm:col-span-2 flex items-center gap-2 text-[10px] text-muted-foreground">Dates <select value={mergeDatesFrom} onChange={event => setMergeDatesFrom(event.target.value as "survivor" | "source")} className="rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground"><option value="survivor">Keep this task&apos;s dates</option><option value="source">Use selected task&apos;s dates</option></select><span>Choose before merging when dates differ.</span></label>}<textarea value={splitText} onChange={event => setSplitText(event.target.value)} rows={2} placeholder="One distinct action per line to split this task" className="sm:col-span-2 resize-none rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void splitTask()} disabled={splitText.split(/\n|,/).filter(value => value.trim()).length < 2} className="w-fit rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-foreground disabled:opacity-40">Split into tasks</button></div></section>}
+          {taskStoreUsesServer && <div className="flex justify-end"><button onClick={() => setAdvancedOpen(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" />Advanced</button></div>}
+          {taskStoreUsesServer && advancedOpen && <section className="rounded-2xl border border-border bg-card p-3.5"><div><p className="text-[12px] font-semibold text-foreground">Reshape work</p><p className="mt-0.5 text-[10px] text-muted-foreground">Merge duplicate captures, or split truly independent actions while preserving history.</p></div><div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[1fr_auto]"><select value={mergeTaskId} onChange={event => setMergeTaskId(event.target.value)} className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Merge another task into this one…</option>{TASKS.filter(candidate => candidate.id !== task.id && !candidate.archived && candidate.status !== "done").map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><button onClick={() => void mergeTask()} disabled={!mergeTaskId} className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Merge</button>{mergeTaskId && <label className="sm:col-span-2 flex items-center gap-2 text-[10px] text-muted-foreground">Dates <select value={mergeDatesFrom} onChange={event => setMergeDatesFrom(event.target.value as "survivor" | "source")} className="rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground"><option value="survivor">Keep this task&apos;s dates</option><option value="source">Use selected task&apos;s dates</option></select><span>Choose before merging when dates differ.</span></label>}<textarea value={splitText} onChange={event => setSplitText(event.target.value)} rows={2} placeholder="One distinct action per line to split this task" className="sm:col-span-2 resize-none rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void splitTask()} disabled={splitText.split(/\n|,/).filter(value => value.trim()).length < 2} className="w-fit rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-foreground disabled:opacity-40">Split into tasks</button><button onClick={() => void archiveTask()} className="w-fit rounded-lg border border-overdue/20 bg-overdue/[0.04] px-3 py-2 text-[11px] font-medium text-overdue">Archive task</button></div></section>}
           {task.links && task.links.length > 0 && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</h3>
@@ -1760,6 +1850,7 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
             </div>
           )}
           {taskStoreUsesServer && <div className="flex items-center gap-2"><input ref={fileInputRef} type="file" multiple className="hidden" onChange={event => void uploadFiles(event.target.files)} /><button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary hover:bg-primary/5"><Paperclip className="h-3.5 w-3.5" />Attach file</button><span className="text-[10px] text-muted-foreground">Up to 5 MB each</span></div>}
+          </div>}
           {task.notes && (
             <div>
               <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Notes</h3>
@@ -1769,9 +1860,9 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
           <section className="rounded-2xl border border-border bg-card p-3.5">
             <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Updates</p><p className="mt-0.5 text-[10px] text-muted-foreground">Share progress without changing the task status.</p></div></div>
             {task.updates && task.updates.length > 0 && <div className="mt-3 space-y-2 border-t border-border pt-3">{task.updates.map(update => <div key={update.id} className="rounded-xl bg-muted/45 p-2.5"><p className="text-[12px] text-foreground">{update.text}</p>{update.resources?.length ? <div className="mt-2 flex flex-wrap gap-1.5">{update.resources.map(resource => resource.url ? <a key={resource.id} href={resource.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-primary"><Paperclip className="h-3 w-3" />{resource.fileName || resource.label}</a> : <span key={resource.id} className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground"><Paperclip className="h-3 w-3" />{resource.fileName || resource.label}</span>)}</div> : null}<p className="mt-1 text-[10px] text-muted-foreground">{update.author} · {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(update.createdAt))}</p></div>)}</div>}
-            <div className="mt-3 flex flex-wrap gap-2"><input ref={updateFileInputRef} type="file" multiple className="hidden" onChange={event => setUpdateAttachments(Array.from(event.target.files || []).slice(0, 4))} /><input value={updateText} onChange={event => setUpdateText(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void postUpdate(); }} placeholder="Add a short work update…" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><button onClick={() => updateFileInputRef.current?.click()} className="rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-medium text-primary"><Paperclip className="h-3.5 w-3.5" /></button><button onClick={() => void postUpdate()} disabled={!updateText.trim()} className="rounded-xl bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Post</button>{updateAttachments.length ? <p className="w-full text-[10px] text-muted-foreground">{updateAttachments.map(file => file.name).join(" · ")}</p> : null}</div>
+            <div className="mt-3 flex flex-wrap gap-2"><input ref={updateFileInputRef} type="file" multiple className="hidden" onChange={event => setUpdateAttachments(Array.from(event.target.files || []).slice(0, 4))} /><input id={`task-update-${task.id}`} value={updateText} onChange={event => setUpdateText(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void postUpdate(); }} placeholder="Add a short work update…" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><button onClick={() => updateFileInputRef.current?.click()} className="rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-medium text-primary"><Paperclip className="h-3.5 w-3.5" /></button><button onClick={() => void postUpdate()} disabled={!updateText.trim()} className="rounded-xl bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Post</button>{updateAttachments.length ? <p className="w-full text-[10px] text-muted-foreground">{updateAttachments.map(file => file.name).join(" · ")}</p> : null}</div>
           </section>
-          {task.originalCapture && (
+          {moreDetailsOpen && task.originalCapture && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Original Capture</h3>
               <div className="rounded-xl border border-border bg-muted/45 p-3">
@@ -1779,17 +1870,12 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
               </div>
             </div>
           )}
-          {task.blockedBy && (
-            <div className="rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-4">
-              <div className="flex items-start gap-2.5"><GitBranch className="mt-0.5 h-4 w-4 flex-shrink-0 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Real dependency</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">This task is blocked by {task.blockedBy.label}{task.blockedBy.owner ? ` · next action: ${task.blockedBy.owner}` : ""}. It will stay visible separately from work that can still move.</p></div></div>
-            </div>
-          )}
           {task.completionBlockedBy && task.completionBlockedBy.length > 0 && (
             <div className="rounded-2xl border border-info/20 bg-info/[0.045] p-4">
               <div className="flex items-start gap-2.5"><GitBranch className="mt-0.5 h-4 w-4 flex-shrink-0 text-info" /><div><p className="text-[12px] font-semibold text-foreground">Can start now</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Final completion is waiting on {task.completionBlockedBy.map(dependency => dependency.label).join(" · ")}. Keep moving the work that is available now.</p></div></div>
             </div>
           )}
-          {task.activity && task.activity.length > 0 && (
+          {moreDetailsOpen && task.activity && task.activity.length > 0 && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Activity</h3>
               <div className="space-y-3">
@@ -1816,24 +1902,38 @@ function TaskDetailDrawer({ task, onClose, onOpenOrganization, onOpenProject, on
           )}
         </div>
         {actionMessage && <p role="status" className="mx-4 mb-2 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue sm:mx-5">{actionMessage}</p>}
+        {reviewDecisionOpen && <div className="mx-4 mb-2 rounded-2xl border border-review/20 bg-review/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Review this work</p><p className="mt-1 text-[11px] text-muted-foreground">Approve it when it is complete, or send it back with a clear revision note.</p><div className="mt-3 flex flex-wrap justify-end gap-2"><button onClick={() => { setReviewDecisionOpen(false); setRevisionRequestOpen(true); }} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-secondary-foreground hover:bg-muted">Request revision</button><button onClick={() => void markDone()} className="rounded-lg bg-review px-2.5 py-1.5 text-[10px] font-medium text-white">Approve</button></div></div>}
         {revisionRequestOpen && <div className="mx-4 mb-2 rounded-2xl border border-warning/20 bg-warning/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">What needs revision?</p><textarea value={revisionNote} onChange={event => setRevisionNote(event.target.value)} rows={2} placeholder="Add a concise revision note…" className="mt-2 w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><div className="mt-2 flex justify-end gap-2"><button onClick={() => setRevisionRequestOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">Cancel</button><button onClick={() => void requestRevision()} className="rounded-lg bg-warning px-2.5 py-1.5 text-[10px] font-medium text-white">Send back for revision</button></div></div>}
-        {task.status === "in_progress" && taskStoreUsesServer && <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-review/20 bg-review/[0.045] p-3 sm:mx-5"><span className="text-[11px] font-medium text-foreground">Submit for review</span><select value={reviewTarget} onChange={event => setReviewTarget(event.target.value)} className="min-w-36 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] text-foreground"><option value="">Choose reviewer</option>{PEOPLE_DIRECTORY.filter(person => person.type === "person" && person.active).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><button onClick={() => void submitForReview()} disabled={!reviewTarget} className="rounded-lg bg-review px-2.5 py-1.5 text-[10px] font-medium text-white disabled:opacity-45">Submit</button></div>}
+        {task.status === "in_progress" && taskStoreUsesServer && currentUserCanMoveTask && <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-review/20 bg-review/[0.045] p-3 sm:mx-5"><span className="text-[11px] font-medium text-foreground">Submit for review</span><select value={reviewTarget} onChange={event => setReviewTarget(event.target.value)} className="min-w-36 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] text-foreground"><option value="">Choose reviewer</option>{PEOPLE_DIRECTORY.filter(person => person.type === "person" && person.active).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><button onClick={() => void submitForReview()} disabled={!reviewTarget} className="rounded-lg bg-review px-2.5 py-1.5 text-[10px] font-medium text-white disabled:opacity-45">Submit</button></div>}
         {waitingCheckOpen && <div className="mx-4 mb-1 rounded-2xl border border-info/20 bg-info/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Does this stop the task from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting can still leave room for other progress. Only use Blocked for a real dependency.</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void markWaiting(true)} className="rounded-lg border border-info/20 bg-card px-3 py-2 text-[11px] font-medium text-info">No, I can still continue</button><button onClick={() => void markWaiting(false)} className="rounded-lg bg-overdue px-3 py-2 text-[11px] font-medium text-white">Yes, this task is blocked</button><select value={blockingKind} onChange={event => setBlockingKind(event.target.value as DependencyKind)} aria-label="Blocking dependency type" className="rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-muted-foreground"><option value="task">Another task</option><option value="department">Another department</option><option value="decision">Waiting for approval</option><option value="external">External dependency</option><option value="other">Other</option></select></div></div>}
-        <div className="flex flex-wrap gap-2 border-t border-border p-4 sm:p-5">
-          {task.status === "done"
-            ? <button onClick={() => void reopen()} className="flex-1 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15">Reopen</button>
-            : <button onClick={() => void markDone()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">{task.status === "review" ? "Approve" : "Mark Done"}</button>}
-          {task.status === "review" && (
-            <button onClick={() => taskStoreUsesServer ? setRevisionRequestOpen(current => !current) : void requestRevision()} className="flex-1 rounded-xl border border-border bg-secondary px-4 py-2.5 text-[13px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">
-              Request Revision
-            </button>
-          )}
-          {taskStoreUsesServer && task.status !== "done" && task.assignee && getDirectoryPerson(task.assignee)?.id !== DEFAULT_CURRENT_USER_ID && getTaskAssignees(task).some(assignee => assignee.type === "team") && <button onClick={() => void claimTask()} className="rounded-xl border border-primary/20 bg-primary/[0.06] px-3 py-2.5 text-[11px] font-medium text-primary">Claim task</button>}
-          {task.status !== "done" && <button onClick={() => setWaitingCheckOpen(current => !current)} className="rounded-xl border border-info/20 bg-info/[0.06] px-3 py-2.5 text-[11px] font-medium text-info transition-colors hover:bg-info/10">Mark waiting</button>}
-          <button aria-label="Reschedule for tomorrow" onClick={() => void reschedule()} className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-            <Calendar className="w-4 h-4" />
-          </button>
-          <button onClick={() => void archiveTask()} className="rounded-xl border border-overdue/20 bg-overdue/[0.04] px-3 py-2.5 text-[11px] font-medium text-overdue">Archive</button>
+        {statusActionsOpen && isWaitingTask && <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-info/20 bg-info/[0.045] p-3 sm:mx-5"><span className="text-[11px] font-medium text-foreground">Update waiting status</span><button onClick={() => void resumeTask()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Resume work</button><button onClick={() => { setStatusActionsOpen(false); setWaitingCheckOpen(true); }} className="rounded-lg border border-info/20 bg-card px-3 py-2 text-[11px] font-medium text-info">Still waiting or blocked</button></div>}
+        <div ref={footerActionsRef} className="relative border-t border-border">
+          {quickRescheduleOpen && <div role="dialog" aria-label="Quick reschedule" className="absolute bottom-full left-4 right-4 z-30 mb-2 rounded-2xl border border-border bg-card p-3.5 shadow-[0_10px_30px_rgb(38_48_71_/_0.14)] sm:left-5 sm:right-5">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Quick reschedule</p><p className="mt-0.5 text-[10px] text-muted-foreground">Update the same Plan for and Deadline fields used everywhere else.</p></div><button onClick={() => setQuickRescheduleOpen(false)} aria-label="Close quick reschedule" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Plan for<input type="date" value={planForDraft} onChange={event => setPlanForDraft(event.target.value)} disabled={!canEditTask || savingPlannerDates} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground disabled:cursor-not-allowed disabled:opacity-50" /></label><label className="text-[10px] font-medium text-muted-foreground">Deadline<input type="date" value={deadlineDraft} onChange={event => setDeadlineDraft(event.target.value)} disabled={!canEditTask || savingPlannerDates} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground disabled:cursor-not-allowed disabled:opacity-50" /></label></div>
+            <div className="mt-3 flex justify-end gap-2"><button onClick={() => setQuickRescheduleOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void savePlannerDates().then(saved => { if (saved) setQuickRescheduleOpen(false); })} disabled={!canEditTask || savingPlannerDates} className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingPlannerDates ? "Saving…" : "Save dates"}</button></div>
+          </div>}
+          {taskActionsOpen && <div role="menu" aria-label="More task actions" className="absolute bottom-full right-4 z-30 mb-2 w-52 rounded-2xl border border-border bg-card p-1.5 shadow-[0_10px_30px_rgb(38_48_71_/_0.14)] sm:right-5">
+            {task.status === "done" && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); void reopen(); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Reopen task</button>}
+            {isWaitingTask && currentUserHasNextAction && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); void resumeTask(); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-primary hover:bg-primary/8">Continue task</button>}
+            {canFollowUp && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); openFollowUpComposer(); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-info hover:bg-info/[0.08]">Write follow-up</button>}
+            {task.status !== "done" && currentUserCanMoveTask && !isWaitingTask && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); setWaitingCheckOpen(true); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Mark waiting</button>}
+            {isWaitingTask && currentUserCanMoveTask && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); setStatusActionsOpen(true); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Change waiting status</button>}
+            {taskStoreUsesServer && canEditTask && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); setMoreDetailsOpen(true); setAdvancedOpen(true); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Advanced actions</button>}
+            {canEditTask && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); void archiveTask(); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-overdue hover:bg-overdue/[0.06]">Archive task</button>}
+          </div>}
+          <div className="flex flex-wrap gap-2 p-4 sm:p-5">
+            {task.status === "done" && <button onClick={() => void reopen()} className="flex-1 rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15">Reopen</button>}
+            {primaryAction === "claim" && <button onClick={() => void claimTask()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Claim task</button>}
+            {primaryAction === "start" && <button onClick={() => void startTask()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Start task</button>}
+            {primaryAction === "complete" && <button onClick={() => void markDone()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Mark Done</button>}
+            {primaryAction === "approve" && <button onClick={() => setReviewDecisionOpen(current => !current)} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Review</button>}
+            {primaryAction === "continue" && <button onClick={() => void resumeTask()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Continue task</button>}
+            {primaryAction === "update_waiting" && <button onClick={() => canFollowUp ? openFollowUpComposer() : setStatusActionsOpen(current => !current)} className="flex-1 rounded-xl border border-info/20 bg-info/[0.06] px-4 py-2.5 text-[13px] font-medium text-info transition-colors hover:bg-info/10">{canFollowUp ? "Follow up" : "Update status"}</button>}
+            {task.status === "review" && currentUserCanMoveTask && <button onClick={() => taskStoreUsesServer ? setRevisionRequestOpen(current => !current) : void requestRevision()} className="rounded-xl border border-border bg-secondary px-3 py-2.5 text-[11px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">Request revision</button>}
+            {task.status !== "done" && <button aria-label="Reschedule" title="Reschedule" aria-haspopup="dialog" aria-expanded={quickRescheduleOpen} onClick={() => { setQuickRescheduleOpen(current => !current); setTaskActionsOpen(false); }} disabled={!canEditTask} className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"><Calendar className="w-4 h-4" /></button>}
+            <button aria-label="More task actions" title="More task actions" aria-haspopup="menu" aria-expanded={taskActionsOpen} onClick={() => { setTaskActionsOpen(current => !current); setQuickRescheduleOpen(false); }} className="rounded-xl border border-border bg-card p-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>
+          </div>
         </div>
         </div>
       </div>
@@ -3329,13 +3429,14 @@ function InboxView({ projectContext }: { projectContext?: ProjectDTO }) {
 
 // ─── DELEGATED VIEW ───────────────────────────────────────────────────────────
 
-function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick, embedded = false }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPrincipalClick: (principal: DirectoryPerson) => void; embedded?: boolean }) {
+function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPrincipalClick: (principal: DirectoryPerson) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
-  const delegated = getDelegatedTasks(TASKS, currentUserId);
+  const delegationOwnerId = principalId || currentUserId;
+  const delegated = getDelegatedTasks(tasks || TASKS, delegationOwnerId);
   const byPerson: Record<string, Task[]> = {};
   delegated.forEach(task => {
     task.assignments
-      ?.filter(assignment => assignment.assignedByPrincipalId === currentUserId && assignment.principalId !== currentUserId)
+      ?.filter(assignment => assignment.assignedByPrincipalId === delegationOwnerId && assignment.principalId !== delegationOwnerId)
       .forEach(assignment => { byPerson[assignment.name] = [...(byPerson[assignment.name] || []), task]; });
   });
 
@@ -3395,10 +3496,10 @@ function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick, embedded = f
 
 // ─── NEEDS MY REVIEW VIEW ─────────────────────────────────────────────────────
 
-function ReviewView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
+function ReviewView({ onTaskClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
   const [, setRevision] = useState(0);
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
-  const reviewTasks = getReviewTasks(TASKS, currentUserId);
+  const reviewTasks = getReviewTasks(tasks || TASKS, principalId || currentUserId);
   async function approve(task: Task) {
     if (taskStoreUsesServer && task.version) {
       const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: true });
@@ -3485,34 +3586,91 @@ function ReviewView({ onTaskClick, embedded = false }: { onTaskClick: (task: Tas
 
 // ─── WAITING VIEW ─────────────────────────────────────────────────────────────
 
-function WaitingView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
+function WaitingView({ onTaskClick, embedded = false, tasks, attentionFilters, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; attentionFilters?: Pick<AttentionFilterState, "search" | "waitingKinds" | "followUpDueOnly">; principalId?: string }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
-  const [tab, setTab] = useState<"others" | "me" | "blocked" | "external">("others");
-  const waiting = getWaitingWork(TASKS, currentUserId);
-  const tabs = [
-    { id: "others" as const, label: "Waiting on Others", tasks: waiting.waitingOnOthers },
-    { id: "me" as const, label: "Waiting on Me", tasks: waiting.waitingOnMe },
-    { id: "blocked" as const, label: "Blocked", tasks: waiting.blocked },
-    { id: "external" as const, label: "External", tasks: waiting.external },
+  const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [kindFilters, setKindFilters] = useState<WaitingFilterKey[]>([]);
+  const [organizationFilter, setOrganizationFilter] = useState<OrgName | "all">("all");
+  const [principalFilter, setPrincipalFilter] = useState("");
+  const [followUpDueOnly, setFollowUpDueOnly] = useState(false);
+  const sourceTasks = tasks || TASKS;
+  const waiting = getWaitingWork(sourceTasks, principalId || currentUserId);
+  const activeQuery = attentionFilters?.search ?? query;
+  const activeKindFilters = attentionFilters?.waitingKinds ?? kindFilters;
+  const activeFollowUpDueOnly = attentionFilters?.followUpDueOnly ?? followUpDueOnly;
+  const today = isoDate(getWorkspaceCalendarDate());
+  const filterOptions: Array<{ id: WaitingFilterKey; label: string; tasks: Task[] }> = [
+    { id: "others", label: "Waiting on others", tasks: waiting.waitingOnOthers },
+    { id: "me", label: "Waiting on me", tasks: waiting.waitingOnMe },
+    { id: "blocked", label: "Blocked", tasks: waiting.blocked },
+    { id: "external", label: "External", tasks: waiting.external },
   ];
-  const current = tabs.find(t => t.id === tab)!;
+  const kindsByTaskId = new Map<string, WaitingFilterKey[]>();
+  const addKind = (tasks: Task[], kind: WaitingFilterKey) => tasks.forEach(task => {
+    const current = kindsByTaskId.get(task.id) || [];
+    if (!current.includes(kind)) current.push(kind);
+    kindsByTaskId.set(task.id, current);
+  });
+  addKind(waiting.waitingOnOthers, "others");
+  addKind(waiting.waitingOnMe, "me");
+  addKind(waiting.blocked, "blocked");
+  addKind(waiting.external, "external");
+  const toggleKindFilter = (kind: WaitingFilterKey) => setKindFilters(current => current.includes(kind) ? current.filter(item => item !== kind) : [...current, kind]);
+  const isFollowUpDue = (task: Task) => Boolean(task.followUpDate && task.followUpDate <= today);
+  const downstreamBlockedCount = (task: Task) => sourceTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length;
+  const visibleTasks = waiting.all.filter(task => {
+    const kinds = kindsByTaskId.get(task.id) || [];
+    const searchable = [task.title, task.org, task.area, readableTaskNextAction(task), ...taskAssigneeNames(task)].join(" ").toLowerCase();
+    if (activeQuery.trim() && !searchable.includes(activeQuery.trim().toLowerCase())) return false;
+    if (activeKindFilters.length && !activeKindFilters.some(kind => kinds.includes(kind))) return false;
+    if (!attentionFilters && organizationFilter !== "all" && task.org !== organizationFilter) return false;
+    if (!attentionFilters && principalFilter && task.nextActionPrincipalId !== principalFilter && !getTaskAssigneeIds(task).includes(principalFilter)) return false;
+    if (activeFollowUpDueOnly && !isFollowUpDue(task)) return false;
+    return true;
+  }).sort((left, right) => {
+    const rank = (task: Task) => {
+      const kinds = kindsByTaskId.get(task.id) || [];
+      if (kinds.includes("me")) return 0;
+      if (kinds.includes("blocked") && downstreamBlockedCount(task) > 0) return 1;
+      if (isFollowUpDue(task)) return 2;
+      if (isTaskOverdue(task)) return 3;
+      if (kinds.includes("others")) return 4;
+      return 5;
+    };
+    const rankDifference = rank(left) - rank(right);
+    if (rankDifference) return rankDifference;
+    return (left.deadlineDate || "9999-12-31").localeCompare(right.deadlineDate || "9999-12-31");
+  });
+  const activeFilterCount = activeKindFilters.length + Number(organizationFilter !== "all") + Number(Boolean(principalFilter)) + Number(activeFollowUpDueOnly);
+  const clearFilters = () => { setKindFilters([]); setOrganizationFilter("all"); setPrincipalFilter(""); setFollowUpDueOnly(false); };
+
+  function waitingChips(task: Task) {
+    const kinds = kindsByTaskId.get(task.id) || [];
+    const chips: Array<{ label: string; className: string }> = [];
+    if (kinds.includes("me")) chips.push({ label: "Waiting on you", className: "bg-primary/10 text-primary" });
+    if (kinds.includes("blocked")) chips.push({ label: downstreamBlockedCount(task) ? `Blocked · ${downstreamBlockedCount(task)} downstream` : "Blocked", className: "bg-overdue/10 text-overdue" });
+    if (kinds.includes("external")) chips.push({ label: `Waiting on ${readableTaskNextAction(task)}`, className: "bg-info/10 text-info" });
+    if (kinds.includes("others")) chips.push({ label: `Waiting on ${readableTaskNextAction(task)}`, className: "bg-warning/10 text-warning" });
+    if (isFollowUpDue(task)) chips.push({ label: `Follow-up ${taskDateLabel(task.followUpDate)}`, className: "bg-info/10 text-info" });
+    if (isTaskOverdue(task)) chips.push({ label: "Overdue", className: "bg-overdue/10 text-overdue" });
+    return chips;
+  }
+
   return (
     <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
-      {!embedded && <div className="mb-6">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Status Board</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Waiting</h1>
-      </div>}
-      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/45 p-1">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn("flex-shrink-0 px-3 py-2 text-[12px] font-medium transition-all", tab === t.id ? "rounded-lg border border-border bg-card text-foreground shadow-sm" : "rounded-lg text-muted-foreground hover:text-foreground")}>
-            {t.label}
-            {t.tasks.length > 0 && <span className={cn("ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full", tab === t.id ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground")}>{t.tasks.length}</span>}
-          </button>
-        ))}
+      <div className="mb-6">
+        {!embedded && <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest">Status Board</p>}
+        <h2 className={cn("font-bold text-foreground", embedded ? "binnie-heading text-xl" : "mt-1 text-2xl")} style={{ fontFamily: embedded ? undefined : "var(--font-display)" }}>Waiting</h2>
+        <p className="mt-1 text-[12px] text-muted-foreground">Work that cannot move until something happens.</p>
       </div>
+      {!attentionFilters && <><div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search waiting work…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{query && <button onClick={() => setQuery("")} aria-label="Clear waiting search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div>
+        <button onClick={() => setFiltersOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filter · ${activeFilterCount}` : "Filter"}</button>
+      </div>
+      {filtersOpen && <section className="mb-5 rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-semibold text-foreground">Refine waiting work</p>{activeFilterCount > 0 && <button onClick={clearFilters} className="text-[10px] font-medium text-muted-foreground hover:text-foreground">Clear all</button>}</div><div className="mt-3 grid gap-3 sm:grid-cols-2"><div><p className="mb-1.5 text-[10px] font-medium text-muted-foreground">Waiting context</p><div className="space-y-1.5">{filterOptions.map(option => <label key={option.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-foreground"><input type="checkbox" checked={kindFilters.includes(option.id)} onChange={() => toggleKindFilter(option.id)} className="accent-primary" /><span className="flex-1">{option.label}</span><span className="text-muted-foreground">{option.tasks.length}</span></label>)}<label className="flex cursor-pointer items-center gap-2 text-[11px] text-foreground"><input type="checkbox" checked={followUpDueOnly} onChange={event => setFollowUpDueOnly(event.target.checked)} className="accent-primary" /><span>Follow-up due</span></label></div></div><div className="space-y-2"><label className="block text-[10px] font-medium text-muted-foreground">Organization<select value={organizationFilter} onChange={event => setOrganizationFilter(event.target.value as OrgName | "all")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">All organizations</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label><label className="block text-[10px] font-medium text-muted-foreground">Person or team<select value={principalFilter} onChange={event => setPrincipalFilter(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{PEOPLE_DIRECTORY.filter(person => person.active).map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div></div></section>}</>}
       <div className="space-y-3">
-        {current.tasks.map(task => (
+        {visibleTasks.map(task => (
           <button key={task.id} onClick={() => onTaskClick(task)}
             className="binnie-card binnie-card-hover w-full p-4 text-left">
             <div className="flex items-start gap-3">
@@ -3520,24 +3678,14 @@ function WaitingView({ onTaskClick, embedded = false }: { onTaskClick: (task: Ta
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground mb-1">{task.title}</p>
                 <div className="flex items-center gap-2 mb-2 flex-wrap"><OrgBadge org={task.org} /><AreaBadge area={task.area} /></div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {[
-                    { label: "Next Action By", value: readableTaskNextAction(task) },
-                    { label: "Waiting Since", value: humanizeWaitingSince(task.waitingSince) },
-                    { label: "Response Due", value: task.responseDue || task.deadline || "—" },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <p className="text-[10px] font-mono text-muted-foreground uppercase">{label}</p>
-                      <p className="text-[12px] font-mono text-foreground mt-0.5">{value}</p>
-                    </div>
-                  ))}
-                </div>
+                <div className="flex flex-wrap gap-1.5">{waitingChips(task).map(chip => <span key={`${task.id}-${chip.label}`} className={cn("rounded-full px-2 py-1 text-[10px] font-medium", chip.className)}>{chip.label}</span>)}</div>
+                <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-muted-foreground"><span>Next: {readableTaskNextAction(task)}</span>{task.waitingSince && <><span className="text-border">·</span><span>{humanizeWaitingSince(task.waitingSince)}</span></>}{task.deadline && <><span className="text-border">·</span><span className={cn(isTaskOverdue(task) && "font-medium text-overdue")}>Due {task.deadline}</span></>}{task.blockedBy && <><span className="text-border">·</span><span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />{task.blockedBy.label}</span></>}</div>
               </div>
             </div>
           </button>
         ))}
-        {current.tasks.length === 0 && (
-          <div className="py-12 text-center text-muted-foreground"><Hourglass className="mx-auto mb-3 h-10 w-10 opacity-20" /><p className="text-sm">You’re not waiting on anyone right now.</p></div>
+        {visibleTasks.length === 0 && (
+          <div className="py-12 text-center text-muted-foreground"><Hourglass className="mx-auto mb-3 h-10 w-10 opacity-20" /><p className="text-sm">No waiting work matches this view.</p><p className="mt-1 text-[11px]">Try another filter or clear your search.</p></div>
         )}
       </div>
     </div>
@@ -3566,8 +3714,8 @@ function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── OVERDUE VIEW ─────────────────────────────────────────────────────────────
 
-function OverdueView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
-  const overdue = getOverdueTasks(TASKS);
+function OverdueView({ onTaskClick, embedded = false, tasks }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[] }) {
+  const overdue = getOverdueTasks(tasks || TASKS);
   return (
     <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
       {!embedded && <div className="mb-8">
@@ -3596,9 +3744,15 @@ const ATTENTION_REASON_META: Record<AttentionReason, { label: string; className:
   overdue: { label: "Overdue", className: "bg-overdue/10 text-overdue" },
 };
 
-function AttentionAllView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function taskMatchesAttentionSearch(task: Task, query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return [task.title, task.org, task.area, task.project || "", readableTaskNextAction(task), ...taskAssigneeNames(task)].join(" ").toLowerCase().includes(normalized);
+}
+
+function AttentionAllView({ onTaskClick, tasks, principalId }: { onTaskClick: (task: Task) => void; tasks?: Task[]; principalId?: string }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
-  const attention = getAttentionWork(TASKS, currentUserId);
+  const attention = getAttentionWork(tasks || TASKS, principalId || currentUserId);
   const order = ["overdue", "blocked", "review", "waiting_on_me", "follow_up"] as const;
   const items = [...attention.allNow].sort((left, right) => {
     const leftReasons = attention.reasonsByTaskId.get(left.id) || [];
@@ -3611,18 +3765,44 @@ function AttentionAllView({ onTaskClick }: { onTaskClick: (task: Task) => void }
   })}</div>{!items.length && <div className="py-16 text-center text-muted-foreground"><CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-success/40" /><p className="text-sm font-medium text-foreground">Nothing needs your attention right now.</p><p className="mt-1 text-[12px]">Binnie will keep the broader context in its own tabs until it needs a move from you.</p></div>}</div>;
 }
 
-function AttentionView({ tab, onTabChange, onTaskClick, onPrincipalClick }: { tab: AttentionTab; onTabChange: (tab: AttentionTab) => void; onTaskClick: (task: Task) => void; onPrincipalClick: (principal: DirectoryPerson) => void }) {
+function AttentionView({ tab, filters, profile, onTabChange, onFiltersChange, onTaskClick, onPrincipalClick }: { tab: AttentionTab; filters: AttentionFilterState; profile: UserProfile; onTabChange: (tab: AttentionTab) => void; onFiltersChange: (patch: Partial<AttentionFilterState>) => void; onTaskClick: (task: Task) => void; onPrincipalClick: (principal: DirectoryPerson) => void }) {
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
-  const attention = getAttentionWork(TASKS, currentUserId);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const authorizedOrganizationIds = new Set(profile.workspaces.map(workspace => workspace.organizationId));
+  const organizations = ORGS_META.filter(organization => authorizedOrganizationIds.has(organization.id));
+  const authorizedOrganizationNames = new Set(organizations.map(organization => organization.name));
+  const visiblePrincipalIds = new Set(TASKS.filter(task => !task.organizationId || authorizedOrganizationIds.has(task.organizationId)).flatMap(task => getTaskAttentionPrincipalIds(task)));
+  const principals = PEOPLE_DIRECTORY.filter(principal => principal.active && (principal.id === profile.directoryId || visiblePrincipalIds.has(principal.id) || principal.memberships.some(membership => authorizedOrganizationNames.has(membership.organization))));
+  const scopedTasks = filterAttentionTasks(TASKS, { organizationId: filters.organizationId || undefined, principalId: filters.principalId || undefined }).filter(task => taskMatchesAttentionSearch(task, filters.search));
+  // A selected principal turns Attention into that authorized Person or Team's
+  // operational lens. With no selection it remains the signed-in person's
+  // Attention, preserving the personal default.
+  const attentionActorId = filters.principalId || currentUserId;
+  const attention = getAttentionWork(scopedTasks, attentionActorId);
+  const waiting = getWaitingWork(scopedTasks, attentionActorId);
+  const delegated = getDelegatedTasks(scopedTasks, attentionActorId);
+  const review = getReviewTasks(scopedTasks, attentionActorId);
+  const overdue = getOverdueTasks(scopedTasks);
+  const followUpCount = new Set(getFollowUpNudgeCandidates(scopedTasks, attentionActorId).candidates.filter(candidate => candidate.kind === "follow_up").map(candidate => candidate.taskId)).size;
+  const hasFilters = Boolean(filters.search.trim() || filters.organizationId || filters.principalId || filters.waitingKinds.length || filters.followUpDueOnly);
+  const selectedOrganization = organizations.find(organization => organization.id === filters.organizationId);
+  const selectedPrincipal = principals.find(principal => principal.id === filters.principalId);
+  const waitingFilterOptions: Array<{ id: WaitingFilterKey; label: string; count: number }> = [
+    { id: "others", label: "Waiting on others", count: waiting.waitingOnOthers.length },
+    { id: "me", label: "Waiting on me", count: waiting.waitingOnMe.length },
+    { id: "blocked", label: "Blocked", count: waiting.blocked.length },
+    { id: "external", label: "External", count: waiting.external.length },
+  ];
+  const toggleWaitingKind = (kind: WaitingFilterKey) => onFiltersChange({ waitingKinds: filters.waitingKinds.includes(kind) ? filters.waitingKinds.filter(item => item !== kind) : [...filters.waitingKinds, kind] });
   const tabs: Array<{ id: AttentionTab; label: string; count: number }> = [
     { id: "all", label: "All", count: attention.allNow.length },
-    { id: "followup", label: "Follow Up", count: attention.followUp.length },
-    { id: "waiting", label: "Waiting", count: attention.waiting.all.length },
-    { id: "delegated", label: "Delegated", count: attention.delegated.length },
-    { id: "review", label: "Review", count: attention.review.length },
-    { id: "overdue", label: "Overdue", count: attention.overdue.length },
+    { id: "followup", label: "Follow Up", count: followUpCount },
+    { id: "waiting", label: "Waiting", count: waiting.all.length },
+    { id: "delegated", label: "Delegated", count: delegated.length },
+    { id: "review", label: "Review", count: review.length },
+    { id: "overdue", label: "Overdue", count: overdue.length },
   ];
-  return <div><div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><div className="mb-5"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Attention</h1><p className="mt-1.5 text-sm text-muted-foreground">What needs a move from you now, with the rest of your management context close by.</p></div><div role="tablist" aria-label="Attention views" className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => onTabChange(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}{item.count > 0 && <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5 text-[9px]", tab === item.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.count}</span>}</button>)}</div></div>{tab === "all" && <AttentionAllView onTaskClick={onTaskClick} />}{tab === "followup" && <FollowUpView embedded onTaskClick={onTaskClick} />}{tab === "waiting" && <WaitingView embedded onTaskClick={onTaskClick} />}{tab === "delegated" && <DelegatedView embedded onTaskClick={onTaskClick} onFollowUp={() => onTabChange("followup")} onPrincipalClick={onPrincipalClick} />}{tab === "review" && <ReviewView embedded onTaskClick={onTaskClick} />}{tab === "overdue" && <OverdueView embedded onTaskClick={onTaskClick} />}</div>;
+  return <div><div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><div className="mb-5"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Attention</h1><p className="mt-1.5 text-sm text-muted-foreground">What needs a move from you now, with the rest of your management context close by.</p></div><div role="tablist" aria-label="Attention views" className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => onTabChange(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}{item.count > 0 && <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5 text-[9px]", tab === item.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.count}</span>}</button>)}</div><div className="mt-3 flex flex-wrap items-center gap-2"><div className="flex min-w-[12rem] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /><input value={filters.search} onChange={event => onFiltersChange({ search: event.target.value })} placeholder="Search attention…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{filters.search && <button onClick={() => onFiltersChange({ search: "" })} aria-label="Clear attention search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><label className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 text-[11px] text-muted-foreground"><Building2 className="h-3.5 w-3.5 shrink-0" /><span className="sr-only">Organization</span><select value={filters.organizationId} onChange={event => onFiltersChange({ organizationId: event.target.value })} className="max-w-44 bg-transparent text-[11px] font-medium text-foreground outline-none"><option value="">All organizations</option>{organizations.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><label className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 text-[11px] text-muted-foreground"><Users className="h-3.5 w-3.5 shrink-0" /><span className="sr-only">People and teams</span><select value={filters.principalId} onChange={event => onFiltersChange({ principalId: event.target.value })} className="max-w-48 bg-transparent text-[11px] font-medium text-foreground outline-none"><option value="">All people &amp; teams</option><optgroup label="People">{principals.filter(principal => principal.type === "person").map(principal => <option key={principal.id} value={principal.id}>{principal.name}</option>)}</optgroup><optgroup label="Teams">{principals.filter(principal => principal.type === "team").map(principal => <option key={principal.id} value={principal.id}>{principal.name}</option>)}</optgroup></select></label><button onClick={() => setFiltersOpen(current => !current)} aria-expanded={filtersOpen} className={cn("h-9 rounded-xl border px-3 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />Filters</button>{hasFilters && <button onClick={() => onFiltersChange(EMPTY_ATTENTION_FILTERS)} className="h-9 rounded-xl px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button>}</div>{filtersOpen && <section className="mt-2 rounded-xl border border-border bg-card p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-[11px] font-semibold text-foreground">Refine Attention</p><p className="mt-0.5 text-[10px] text-muted-foreground">{selectedOrganization?.name || "All organizations"}{selectedPrincipal ? ` · ${selectedPrincipal.name}` : ""}</p></div>{hasFilters && <button onClick={() => onFiltersChange(EMPTY_ATTENTION_FILTERS)} className="text-[10px] font-medium text-primary hover:text-primary/80">Clear all</button>}</div>{tab === "waiting" ? <div className="mt-3 grid gap-1.5 sm:grid-cols-2"><p className="sm:col-span-2 text-[10px] font-medium text-muted-foreground">Waiting context</p>{waitingFilterOptions.map(option => <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[11px] text-foreground hover:bg-muted/55"><input type="checkbox" checked={filters.waitingKinds.includes(option.id)} onChange={() => toggleWaitingKind(option.id)} className="accent-primary" /><span className="flex-1">{option.label}</span><span className="text-muted-foreground">{option.count}</span></label>)}<label className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[11px] text-foreground hover:bg-muted/55"><input type="checkbox" checked={filters.followUpDueOnly} onChange={event => onFiltersChange({ followUpDueOnly: event.target.checked })} className="accent-primary" /><span>Follow-up due</span></label></div> : <p className="mt-3 text-[10px] text-muted-foreground">Organization, people, teams, and search already narrow this Attention view.</p>}</section>}</div>{tab === "all" && <AttentionAllView onTaskClick={onTaskClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "followup" && <FollowUpView embedded onTaskClick={onTaskClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "waiting" && <WaitingView embedded onTaskClick={onTaskClick} tasks={scopedTasks} attentionFilters={filters} principalId={attentionActorId} />}{tab === "delegated" && <DelegatedView embedded onTaskClick={onTaskClick} onFollowUp={() => onTabChange("followup")} onPrincipalClick={onPrincipalClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "review" && <ReviewView embedded onTaskClick={onTaskClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "overdue" && <OverdueView embedded onTaskClick={onTaskClick} tasks={scopedTasks} />}</div>;
 }
 
 // ─── THIS WEEK VIEW ───────────────────────────────────────────────────────────
@@ -4064,8 +4244,8 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
     setOrDelete("organization", filterOrg || undefined);
     setOrDelete("area", filterArea || undefined);
     setOrDelete("project", filterProject || undefined);
-    setOrDelete("assignedTo", filterAssignee || undefined);
-    setOrDelete("assignedTeam", filterTeam || undefined);
+    setOrDelete("assignedTo", scope === "team" ? filterAssignee || undefined : undefined);
+    setOrDelete("assignedTeam", scope === "team" ? filterTeam || undefined : undefined);
     setOrDelete("assignedBy", filterAssignedBy || undefined);
     setOrDelete("priority", filterPriority || undefined);
     setOrDelete("status", filterStatus || undefined);
@@ -4093,7 +4273,8 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
     const applySavedView = (event: Event) => {
       const filters = (event as CustomEvent<{ filters?: Record<string, unknown> }>).detail?.filters;
       if (!filters) return;
-      if (filters.scope === "my" || filters.scope === "team" || filters.scope === "people") setScope(filters.scope);
+      const savedScope = filters.scope === "my" || filters.scope === "team" || filters.scope === "people" ? filters.scope : "my";
+      setScope(savedScope);
       if (filters.mode === "list" || filters.mode === "board") setMode(filters.mode);
       setSelectedPersonId(typeof filters.personId === "string" ? filters.personId : "");
       setSelectedTeamId(typeof filters.teamId === "string" ? filters.teamId : "");
@@ -4101,8 +4282,8 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
       setFilterOrg(typeof filters.organization === "string" ? filters.organization : "");
       setFilterArea(typeof filters.area === "string" ? filters.area : "");
       setFilterProject(typeof filters.project === "string" ? filters.project : "");
-      setFilterAssignee(typeof filters.assignedTo === "string" ? filters.assignedTo : "");
-      setFilterTeam(typeof filters.assignedTeam === "string" ? filters.assignedTeam : "");
+      setFilterAssignee(savedScope === "team" && typeof filters.assignedTo === "string" ? filters.assignedTo : "");
+      setFilterTeam(savedScope === "team" && typeof filters.assignedTeam === "string" ? filters.assignedTeam : "");
       setFilterAssignedBy(typeof filters.assignedBy === "string" ? filters.assignedBy : "");
       setFilterPriority(filters.priority === "low" || filters.priority === "medium" || filters.priority === "high" || filters.priority === "urgent" ? filters.priority : "");
       setFilterStatus(BOARD_STATUSES.some((item) => item.id === filters.status) ? filters.status as TaskStatus : "");
@@ -4121,8 +4302,8 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
         organization: filterOrg || undefined,
         area: filterArea || undefined,
         project: filterProject || undefined,
-        assignedTo: filterAssignee || undefined,
-        assignedTeam: filterTeam || undefined,
+        assignedTo: scope === "team" ? filterAssignee || undefined : undefined,
+        assignedTeam: scope === "team" ? filterTeam || undefined : undefined,
         assignedBy: filterAssignedBy || undefined,
         priority: filterPriority || undefined,
         status: filterStatus || undefined,
@@ -4149,21 +4330,51 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
     ? (scopeData?.scope === scope ? scopeData.tasks.map((task) => canonicalById.get(task.id) || canonicalTaskToLegacy(task)) : [])
     : fallbackTasks;
   const scopeLoading = taskStoreUsesServer && (!scopeData || scopeData.scope !== scope);
-  const organizations = Array.from(new Set(sourceTasks.map((task) => task.org).filter(Boolean))).sort();
-  const areas = Array.from(new Set(sourceTasks.flatMap((task) => getTaskAreas(task)).filter(Boolean))).sort();
-  const projects = Array.from(new Set(sourceTasks.map((task) => task.project).filter((item): item is string => Boolean(item)))).sort();
-  const assignees = Array.from(new Set(sourceTasks.flatMap((task) => task.assignments?.filter((assignment) => assignment.type === "person").map((assignment) => assignment.name) || task.assignee ? [task.assignee] : []))).sort();
-  const assignedBy = Array.from(new Set(sourceTasks.flatMap((task) => task.assignments?.map((assignment) => assignment.assignedBy).filter((name): name is string => Boolean(name)) || []))).sort();
+  const scopedTaskDtos = taskStoreUsesServer && scopeData?.scope === scope ? scopeData.tasks : [];
+  const uniqueFilterOptions = (options: Array<{ id?: string; name?: string }>) => Array.from(new Map(options
+    .filter((option): option is { id: string; name: string } => Boolean(option.id && option.name))
+    .map((option) => [option.id, option])).values()).sort((left, right) => left.name.localeCompare(right.name));
+  // These are labels for canonical IDs, not client-side identity keys. The
+  // server-authorized scope above remains the only source task universe.
+  const organizationOptions = uniqueFilterOptions([
+    ...profile.workspaces.map((workspace) => ({ id: workspace.organizationId, name: workspace.organization })),
+    ...scopedTaskDtos.map((task) => ({ id: task.organizationId, name: task.org })),
+  ]);
+  const areaOptions = uniqueFilterOptions(scopedTaskDtos.flatMap((task) => task.involvedDepartments.map((department) => ({ id: department.id, name: department.name }))));
+  const projectOptions = uniqueFilterOptions([
+    ...scopedTaskDtos.map((task) => ({ id: task.projectId, name: task.project })),
+    ...sourceTasks.map((task) => ({ id: task.projectId, name: task.project })),
+  ]);
+  const personOptions = uniqueFilterOptions((scopeData?.people || []).map((person) => ({ id: person.id, name: person.name })));
+  const teamOptions = uniqueFilterOptions((scopeData?.teams || []).map((team) => ({ id: team.id, name: team.name })));
+  const authorizedPrincipalIds = new Set([profile.directoryId, ...personOptions.map((person) => person.id), ...teamOptions.map((team) => team.id)].filter(Boolean));
+  const assignedByOptions = uniqueFilterOptions(sourceTasks.flatMap((task) => task.assignments?.flatMap((assignment) => assignment.assignedByPrincipalId && authorizedPrincipalIds.has(assignment.assignedByPrincipalId) ? [{ id: assignment.assignedByPrincipalId, name: assignment.assignedBy || getDirectoryPerson(assignment.assignedByPrincipalId)?.name || "Assigned by" }] : []) || []));
+  // Query strings from older Tasks links used labels. Canonicalize those once
+  // their authorized option is available, then retain only stable IDs.
+  useEffect(() => {
+    const canonicalize = (value: string, options: Array<{ id: string; name: string }>, setValue: (next: string) => void) => {
+      const match = options.find((option) => option.id === value || option.name === value);
+      if (match && match.id !== value) setValue(match.id);
+    };
+    canonicalize(filterOrg, organizationOptions, setFilterOrg);
+    canonicalize(filterArea, areaOptions, setFilterArea);
+    canonicalize(filterProject, projectOptions, setFilterProject);
+    if (scope === "team") {
+      canonicalize(filterAssignee, personOptions, setFilterAssignee);
+      canonicalize(filterTeam, teamOptions, setFilterTeam);
+    }
+    canonicalize(filterAssignedBy, assignedByOptions, setFilterAssignedBy);
+  }, [scope, filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, organizationOptions, areaOptions, projectOptions, personOptions, teamOptions, assignedByOptions]);
   const today = isoDate(getWorkspaceCalendarDate());
   const filteredTasks = sourceTasks.filter((task) => {
     const searchable = [task.title, task.description, task.notes, task.org, task.area, task.project, ...(task.assignments?.map((assignment) => assignment.name) || []), ...(task.assignments?.map((assignment) => assignment.assignedBy || "") || [])].filter(Boolean).join(" ").toLowerCase();
     if (search.trim() && !searchable.includes(search.trim().toLowerCase())) return false;
-    if (filterOrg && task.org !== filterOrg) return false;
-    if (filterArea && !getTaskAreas(task).includes(filterArea as AreaName)) return false;
-    if (filterProject && task.project !== filterProject) return false;
-    if (filterAssignee && !(task.assignments || []).some((assignment) => assignment.type === "person" && assignment.name === filterAssignee)) return false;
-    if (filterTeam && !(task.assignments || []).some((assignment) => assignment.type === "team" && assignment.principalId === filterTeam)) return false;
-    if (filterAssignedBy && !(task.assignments || []).some((assignment) => assignment.assignedBy === filterAssignedBy)) return false;
+    if (filterOrg && task.organizationId !== filterOrg) return false;
+    if (filterArea && ![task.leadDepartmentId, ...(task.involvedDepartmentIds || [])].includes(filterArea)) return false;
+    if (filterProject && task.projectId !== filterProject) return false;
+    if (scope === "team" && filterAssignee && !(task.assignments || []).some((assignment) => assignment.type === "person" && assignment.principalId === filterAssignee)) return false;
+    if (scope === "team" && filterTeam && !(task.assignments || []).some((assignment) => assignment.type === "team" && assignment.principalId === filterTeam)) return false;
+    if (filterAssignedBy && !(task.assignments || []).some((assignment) => assignment.assignedByPrincipalId === filterAssignedBy)) return false;
     if (filterPriority && task.priority !== filterPriority) return false;
     if (filterStatus && task.status !== filterStatus) return false;
     if (dateFilter === "target" && !task.targetDate) return false;
@@ -4191,14 +4402,15 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
   });
   const selectedPerson = scopeData?.people.find((person) => person.id === selectedPersonId);
   const selectedTeam = scopeData?.teams.find((team) => team.id === selectedTeamId);
-  const activeFilters = [filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, filterPriority, filterStatus, dateFilter].filter(Boolean).length + Number(hasFilesOnly);
+  // Organization is a deliberately separate, always-visible filter. The
+  // Filters button and its chips represent only the secondary refinements.
+  const activeFilters = [filterArea, filterProject, scope === "team" ? filterAssignee : "", scope === "team" ? filterTeam : "", filterAssignedBy, filterPriority, filterStatus, dateFilter].filter(Boolean).length + Number(hasFilesOnly);
   const activeFilterChips = [
-    filterOrg ? { id: "organization", label: filterOrg, clear: () => setFilterOrg("") } : null,
-    filterArea ? { id: "area", label: filterArea, clear: () => setFilterArea("") } : null,
-    filterProject ? { id: "project", label: filterProject, clear: () => setFilterProject("") } : null,
-    filterAssignee ? { id: "person", label: filterAssignee, clear: () => setFilterAssignee("") } : null,
-    filterTeam ? { id: "team", label: scopeData?.teams.find((team) => team.id === filterTeam)?.name || "Team", clear: () => setFilterTeam("") } : null,
-    filterAssignedBy ? { id: "assigned-by", label: `Assigned by ${filterAssignedBy}`, clear: () => setFilterAssignedBy("") } : null,
+    filterArea ? { id: "area", label: areaOptions.find((area) => area.id === filterArea)?.name || "Area", clear: () => setFilterArea("") } : null,
+    filterProject ? { id: "project", label: projectOptions.find((project) => project.id === filterProject)?.name || "Project", clear: () => setFilterProject("") } : null,
+    scope === "team" && filterAssignee ? { id: "person", label: personOptions.find((person) => person.id === filterAssignee)?.name || "Person", clear: () => setFilterAssignee("") } : null,
+    scope === "team" && filterTeam ? { id: "team", label: teamOptions.find((team) => team.id === filterTeam)?.name || "Team", clear: () => setFilterTeam("") } : null,
+    filterAssignedBy ? { id: "assigned-by", label: `Assigned by ${assignedByOptions.find((person) => person.id === filterAssignedBy)?.name || "Person"}`, clear: () => setFilterAssignedBy("") } : null,
     filterPriority ? { id: "priority", label: `${taskPriorityLabel(filterPriority)} priority`, clear: () => setFilterPriority("") } : null,
     filterStatus ? { id: "status", label: taskStatusLabel(filterStatus), clear: () => setFilterStatus("") } : null,
     dateFilter ? { id: "date", label: dateFilter === "target" ? "Has target date" : dateFilter === "deadline" ? "Has deadline" : "Overdue", clear: () => setDateFilter("") } : null,
@@ -4211,6 +4423,10 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
     overdue: filteredTasks.filter((task) => task.status !== "done" && task.deadlineDate && task.deadlineDate < today).length,
     review: filteredTasks.filter((task) => task.status === "review").length,
   } : null;
+  const visibleFilterControls = getTasksFilterControls(scope, mode);
+  const showsTeamFilter = visibleFilterControls.includes("team");
+  const showsPersonFilter = visibleFilterControls.includes("person");
+  const showsStatusFilter = visibleFilterControls.includes("status");
 
   const updateColumns = (next: TaskListColumnId[]) => {
     const normalized: TaskListColumnId[] = next.includes("task") ? next : ["task", ...next];
@@ -4222,6 +4438,7 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
     if (nextScope === "team" && !scopeData?.teams.length) { setScopeMessage("No team task list is available to you."); return; }
     if (nextScope === "people" && !selectedPersonId) setSelectedPersonId(scopeData!.people[0]!.id);
     if (nextScope === "team" && !selectedTeamId) setSelectedTeamId(scopeData!.teams[0]!.id);
+    if (nextScope !== "team") { setFilterAssignee(""); setFilterTeam(""); }
     setScope(nextScope);
   };
   const changeSort = (column: TaskListColumnId) => {
@@ -4297,19 +4514,28 @@ function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task:
       <div className="flex flex-wrap gap-2">
         <select value={filterOrg} onChange={(event) => setFilterOrg(event.target.value)} aria-label="Filter by organization" className="max-w-[12.5rem] rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground">
           <option value="">All organizations</option>
-          {organizations.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as TaskStatus | "")} aria-label="Filter by status" className="max-w-[10rem] rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground">
-          <option value="">All statuses</option>
-          {BOARD_STATUSES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          {organizationOptions.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
         </select>
         <button onClick={() => setFiltersOpen((open) => !open)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilters ? `Filters · ${activeFilters}` : "Filters"}</button>
         {(activeFilters > 0 || search) && <button onClick={() => { const name = window.prompt("Name this view"); if (name?.trim()) window.dispatchEvent(new CustomEvent("binnie:save-saved-view", { detail: { name } })); }} className="rounded-xl px-2.5 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Save view</button>}
         {mode === "list" && <div className="relative"><button onClick={() => setViewOptionsOpen((open) => !open)} aria-label="View options" aria-expanded={viewOptionsOpen} className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{viewOptionsOpen && <div className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-border bg-popover p-2 shadow-lg"><p className="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">View options</p><label className="mb-2 block px-2 text-[10px] font-medium text-muted-foreground">Sort<select value={sortColumn} onChange={(event) => { setSortColumn(event.target.value as TaskListColumnId); setSortDirection("asc"); }} className="mt-1.5 w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground">{TASK_LIST_COLUMNS.filter((column) => column.id !== "files" && column.id !== "notes" && column.id !== "blockedBy").map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label><button onClick={() => setSortDirection((direction) => direction === "asc" ? "desc" : "asc")} className="mb-2 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">{sortDirection === "asc" ? "Ascending" : "Descending"}</button><div className="border-t border-border pt-2"><p className="px-2 pb-1 text-[10px] font-medium text-muted-foreground">Customize columns</p>{TASK_LIST_COLUMNS.map((column) => <label key={column.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-foreground hover:bg-muted"><input type="checkbox" checked={columns.includes(column.id)} disabled={column.id === "task"} onChange={(event) => updateColumns(event.target.checked ? [...columns, column.id] : columns.filter((item) => item !== column.id))} className="h-3.5 w-3.5 accent-primary" />{column.label}</label>)}</div><button onClick={() => { updateColumns(DEFAULT_TASK_LIST_COLUMNS); setSortColumn("deadline"); setSortDirection("asc"); }} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">Reset list view</button></div>}</div>}
       </div>
     </div>
-    {activeFilterChips.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-1.5"><span className="text-[10px] text-muted-foreground">Filtered by</span>{activeFilterChips.map((chip) => <button key={chip.id} onClick={chip.clear} className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.055] px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">{chip.label}<X className="h-3 w-3" /></button>)}</div>}
-    {filtersOpen && <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[10px] font-medium text-muted-foreground">Area / Department<select value={filterArea} onChange={(event) => setFilterArea(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All areas</option>{areas.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject} onChange={(event) => setFilterProject(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projects.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Person<select value={filterAssignee} onChange={(event) => setFilterAssignee(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any person</option>{assignees.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Team<select value={filterTeam} onChange={(event) => setFilterTeam(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any team</option>{scopeData?.teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assigned by<select value={filterAssignedBy} onChange={(event) => setFilterAssignedBy(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{assignedBy.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={(event) => setFilterPriority(event.target.value as Priority | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Normal</option><option value="low">Low</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any date</option><option value="target">Has target date</option><option value="deadline">Has deadline</option><option value="overdue">Overdue</option></select></label><label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={(event) => setHasFilesOnly(event.target.checked)} className="h-4 w-4 accent-primary" />Has files</label><div className="flex items-end"><button onClick={clearFilters} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button></div></div>}
+    {!filtersOpen && activeFilterChips.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-1.5"><span className="text-[10px] text-muted-foreground">Filtered by</span>{activeFilterChips.map((chip) => <button key={chip.id} onClick={chip.clear} className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.055] px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">{chip.label}<X className="h-3 w-3" /></button>)}<button onClick={clearFilters} className="rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear all</button></div>}
+    {filtersOpen && <div className="mb-4 rounded-2xl border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Refine this view</p><p className="mt-0.5 text-[10px] text-muted-foreground">Only filters that add meaning to {scope === "my" ? "your personal work" : scope === "team" ? "this team’s work" : "this person’s work"} are shown.</p></div>{activeFilters > 0 && <button onClick={clearFilters} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear all</button>}</div>
+      <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-4">
+        {showsTeamFilter && <label className="text-[10px] font-medium text-muted-foreground">Team<select value={filterTeam} onChange={(event) => setFilterTeam(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any team</option>{teamOptions.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>}
+        <label className="text-[10px] font-medium text-muted-foreground">Area / Department<select value={filterArea} onChange={(event) => setFilterArea(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All areas</option>{areaOptions.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
+        <label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject} onChange={(event) => setFilterProject(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projectOptions.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+        {showsPersonFilter && <label className="text-[10px] font-medium text-muted-foreground">Person<select value={filterAssignee} onChange={(event) => setFilterAssignee(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any person</option>{personOptions.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>}
+        <label className="text-[10px] font-medium text-muted-foreground">Assigned by<select value={filterAssignedBy} onChange={(event) => setFilterAssignedBy(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{assignedByOptions.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+        <label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={(event) => setFilterPriority(event.target.value as Priority | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Normal</option><option value="low">Low</option></select></label>
+        {showsStatusFilter && <label className="text-[10px] font-medium text-muted-foreground">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as TaskStatus | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All statuses</option>{BOARD_STATUSES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
+        <label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any date</option><option value="target">Has target date</option><option value="deadline">Has deadline</option><option value="overdue">Overdue</option></select></label>
+        <label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={(event) => setHasFilesOnly(event.target.checked)} className="h-4 w-4 accent-primary" />Has files</label>
+      </div>
+    </div>}
     {scopeMessage && <p className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{scopeMessage}</p>}
     {mode === "list" ? (
       <div className="overflow-x-auto rounded-[1.2rem] border border-border bg-card">
@@ -4630,7 +4856,7 @@ function PeopleView({ onPersonClick, entityType = "person" }: { onPersonClick: (
   </div>;
 }
 
-function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp, onViewTasks }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void; onFollowUp: () => void; onViewTasks: (personId: string) => void }) {
+function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp, onViewTasks, onOpenAttention }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void; onFollowUp: () => void; onViewTasks: (personId: string) => void; onOpenAttention?: (principalId: string) => void }) {
   const [revision, setRevision] = useState(0);
   const [workFilter, setWorkFilter] = useState<PersonWorkFilter>("all");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -4668,7 +4894,7 @@ function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp, onViewT
   // Compatibility JSX below is intentionally kept in place while the People
   // view is migrated in focused slices.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar name={person.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="binnie-heading text-2xl font-bold text-foreground">{person.name}</h1><span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{person.type === "team" ? "Team" : "Person"}</span>{person.type === "person" && <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{person.accountStatus.replace(/_/g, " ")}</span>}{!person.active && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Inactive</span>}</div><p className="mt-1 text-sm text-muted-foreground">{personRole(person)}</p><div className="mt-3"><MembershipPills person={person} /></div>{person.email && <p className="mt-3 text-[11px] text-muted-foreground">{person.email}{person.phone ? ` · ${person.phone}` : ""}</p>}</div><div className="flex flex-wrap gap-2"><button onClick={() => onViewTasks(person.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><ListTodo className="h-3.5 w-3.5" />View Tasks</button><button onClick={() => setAssignOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Assign Task</button><button onClick={onFollowUp} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><Send className="h-3.5 w-3.5" />Follow Up</button><div className="relative"><button onClick={() => setMoreOpen(current => !moreOpen)} aria-label="Person actions" className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{moreOpen && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-20 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg"><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit Person</button><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Manage Organizations</button>{person.active && <button onClick={deactivate} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Deactivate Person</button>}</div>}</div></div></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">{[{ label: "Active", value: summary.active }, { label: "Ready", value: summary.ready }, { label: "In Progress", value: summary.inProgress }, { label: "Waiting on them", value: summary.waitingOnThem }, { label: "Waiting on me", value: summary.waitingOnMe }, { label: "Blocked", value: summary.blocked }, { label: "Overdue", value: summary.overdue }, { label: "Review", value: summary.review }].map(item => <div key={item.label} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-semibold", item.label === "Blocked" || item.label === "Overdue" ? "text-overdue" : item.label.startsWith("Waiting") ? "text-warning" : "text-foreground")}>{item.value}</p><p className="mt-0.5 text-[9px] leading-3 text-muted-foreground">{item.label}</p></div>)}</div></div>
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar name={person.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="binnie-heading text-2xl font-bold text-foreground">{person.name}</h1><span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{person.type === "team" ? "Team" : "Person"}</span>{person.type === "person" && <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{person.accountStatus.replace(/_/g, " ")}</span>}{!person.active && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Inactive</span>}</div><p className="mt-1 text-sm text-muted-foreground">{personRole(person)}</p><div className="mt-3"><MembershipPills person={person} /></div>{person.email && <p className="mt-3 text-[11px] text-muted-foreground">{person.email}{person.phone ? ` · ${person.phone}` : ""}</p>}</div><div className="flex flex-wrap gap-2"><button onClick={() => onViewTasks(person.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><ListTodo className="h-3.5 w-3.5" />View Tasks</button>{onOpenAttention && <button onClick={() => onOpenAttention(person.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><AlertTriangle className="h-3.5 w-3.5" />Attention</button>}<button onClick={() => setAssignOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Assign Task</button><button onClick={onFollowUp} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><Send className="h-3.5 w-3.5" />Follow Up</button><div className="relative"><button onClick={() => setMoreOpen(current => !moreOpen)} aria-label="Person actions" className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{moreOpen && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-20 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg"><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit Person</button><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Manage Organizations</button>{person.active && <button onClick={deactivate} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Deactivate Person</button>}</div>}</div></div></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">{[{ label: "Active", value: summary.active }, { label: "Ready", value: summary.ready }, { label: "In Progress", value: summary.inProgress }, { label: "Waiting on them", value: summary.waitingOnThem }, { label: "Waiting on me", value: summary.waitingOnMe }, { label: "Blocked", value: summary.blocked }, { label: "Overdue", value: summary.overdue }, { label: "Review", value: summary.review }].map(item => <div key={item.label} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-semibold", item.label === "Blocked" || item.label === "Overdue" ? "text-overdue" : item.label.startsWith("Waiting") ? "text-warning" : "text-foreground")}>{item.value}</p><p className="mt-0.5 text-[9px] leading-3 text-muted-foreground">{item.label}</p></div>)}</div></div>
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(15rem,.8fr)]"><section><div className="mb-3 flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Open Work</p><p className="mt-0.5 text-[11px] text-muted-foreground">Work involving {person.name}.</p></div>{([{ id: "all", label: "All" }, { id: "assigned", label: "Assigned to them" }, { id: "waiting-on-them", label: "Waiting on them" }, { id: "waiting-on-me", label: "Waiting on me" }, { id: "overdue", label: "Overdue" }] as { id: PersonWorkFilter; label: string }[]).map(filter => <button key={filter.id} onClick={() => setWorkFilter(filter.id)} className={cn("rounded-full border px-2 py-1 text-[10px]", workFilter === filter.id ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{filter.label}</button>)}</div><div className="space-y-2">{visibleTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}{!visibleTasks.length && <div className="rounded-2xl border border-border bg-card px-4 py-10 text-center text-[12px] text-muted-foreground">No work matches this view.</div>}</div></section><aside className="space-y-6"><section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Organizations</p><button onClick={() => setEditOpen(true)} className="text-[11px] font-medium text-primary">+ Add Organization</button></div><div className="space-y-2">{person.memberships.map(membership => <div key={membership.organization} className="rounded-xl border border-border bg-card p-3"><p className="text-[12px] font-medium text-foreground">{membership.organization}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{[membership.role, membership.area].filter(Boolean).join(" · ") || "No role or department set"}</p><button onClick={() => setRemoveMembership(membership)} className="mt-2 text-[10px] font-medium text-muted-foreground hover:text-overdue">Remove from organization</button></div>)}{!person.memberships.length && <div className="rounded-xl border border-dashed border-border px-3 py-5 text-center text-[11px] text-muted-foreground">No organization memberships yet.</div>}</div></section><section><p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><div className="space-y-2">{personTasks.flatMap(task => (task.activity || []).map(activity => ({ activity, task }))).slice(0, 4).map(({ activity, task }, index) => <button key={`${task.id}-${index}`} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-border bg-card p-3 text-left hover:border-primary/25"><p className="truncate text-[11px] text-foreground">{activity.text}</p><p className="mt-1 text-[10px] text-muted-foreground">{activity.time} · {task.title}</p></button>)}{!personTasks.length && <p className="rounded-xl border border-border bg-card px-3 py-5 text-center text-[11px] text-muted-foreground">Activity will appear as work moves.</p>}</div></section></aside></div>
     {assignOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label={`Assign a task to ${person.name}`} className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="mb-4 flex items-start justify-between"><div><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Assign task</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{person.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">No Binnie account is needed to own work.</p></div><button onClick={() => setAssignOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="block text-[11px] font-medium text-muted-foreground">Task name<input autoFocus value={taskTitle} onChange={event => setTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveAssignedTask()} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><p className="mt-3 rounded-xl bg-muted/45 px-3 py-2 text-[11px] text-muted-foreground">{defaultMembership?.organization} · {defaultMembership?.area || "No department"}</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setAssignOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={saveAssignedTask} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Assign Task</button></div></div></div>}
     {removeMembership && <div className="fixed inset-0 z-[85] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label={`Remove ${person.name} from ${removeMembership.organization}`} className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><h2 className="binnie-heading text-xl font-bold text-foreground">Remove from {removeMembership.organization}?</h2><p className="mt-2 text-[12px] leading-5 text-muted-foreground">This only removes the organization membership. {person.name} and their work history stay in Binnie.</p>{removeActiveTasks.length > 0 && <div className="mt-4 rounded-xl border border-warning/20 bg-warning/[0.06] p-3"><p className="text-[12px] font-medium text-foreground">{person.name} still owns {removeActiveTasks.length} active {removeActiveTasks.length === 1 ? "task" : "tasks"} here.</p><p className="mt-1 text-[10px] text-muted-foreground">Choose whether to reassign that work or keep its historical ownership.</p></div>}<div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setRemoveMembership(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button>{removeActiveTasks.length > 0 && <button onClick={() => completeMembershipRemoval(true)} className="rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground">Reassign Tasks</button>}<button onClick={() => completeMembershipRemoval(false)} className="rounded-xl bg-overdue px-3.5 py-2 text-[12px] font-medium text-white">Keep Tasks Assigned</button></div></div></div>}
@@ -4689,8 +4915,8 @@ type ResourceDraft = { label: string; type: ResourceType; url: string; area: str
 
 const EMPTY_RESOURCE_DRAFT: ResourceDraft = { label: "", type: "website", url: "", area: "", project: "", description: "" };
 
-function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigate, onPersonClick }: {
-  orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void; onNavigate: (view: NavView) => void; onPersonClick: (person: string) => void;
+function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigate, onPersonClick, onOpenAttention }: {
+  orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void; onNavigate: (view: NavView) => void; onPersonClick: (person: string) => void; onOpenAttention?: (organizationId: string) => void;
 }) {
   useTaskStoreVersion();
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
@@ -5080,7 +5306,7 @@ function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigat
 
           <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Resources</p><button onClick={() => openResourceForm()} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Resource</button></div>{resources.length ? <div className="space-y-1.5">{resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{resource.label}</span>{(resource.area || resource.project) && <span className="block truncate text-[10px] text-muted-foreground">{resource.project || resource.area}</span>}</span>{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Open ↗</a> : <button onClick={() => openResourceForm(index)} className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Add link</button>}</div>)}</div> : <div className="binnie-card px-5 py-10 text-center"><Link2 className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">Keep important links close.</p><p className="mt-1 text-[11px] text-muted-foreground">Add your Drive, website, dashboards, or project tools here.</p></div>}</section>
 
-          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-warning">Needs Attention</p><span className="text-[10px] text-muted-foreground">{attentionTasks.length} items</span></div>{attentionTasks.length ? <div className="space-y-1.5">{attentionTasks.slice(0, 4).map(task => { const isReview = task.status === "review"; const reason = isReview ? "Needs Review" : task.isOverdue ? "Overdue" : `${readableTaskNextAction(task)} · ${humanizeWaitingSince(task.waitingSince)}`; return <div key={task.id} className="rounded-xl border border-warning/15 bg-warning/[0.04] p-3"><p className="truncate text-[12px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{reason}</p><div className="mt-2 flex gap-2"><button onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{isReview ? "Review" : "Open"}</button>{!isReview && task.isWaiting && <button onClick={() => onNavigate("followup")} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary">Follow Up</button>}</div></div>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-success/45" /><p className="text-sm font-medium text-foreground">Nothing needs attention right now.</p></div>}</section>
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-warning">Needs Attention</p><span className="flex items-center gap-2"><span className="text-[10px] text-muted-foreground">{attentionTasks.length} items</span>{onOpenAttention && <button onClick={() => onOpenAttention(orgMeta.id)} className="text-[10px] font-medium text-primary hover:text-primary/80">View attention</button>}</span></div>{attentionTasks.length ? <div className="space-y-1.5">{attentionTasks.slice(0, 4).map(task => { const isReview = task.status === "review"; const reason = isReview ? "Needs Review" : task.isOverdue ? "Overdue" : `${readableTaskNextAction(task)} · ${humanizeWaitingSince(task.waitingSince)}`; return <div key={task.id} className="rounded-xl border border-warning/15 bg-warning/[0.04] p-3"><p className="truncate text-[12px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{reason}</p><div className="mt-2 flex gap-2"><button onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{isReview ? "Review" : "Open"}</button>{!isReview && task.isWaiting && <button onClick={() => onNavigate("followup")} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary">Follow Up</button>}</div></div>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-success/45" /><p className="text-sm font-medium text-foreground">Nothing needs attention right now.</p></div>}</section>
         </div>
       </div>
 
@@ -5907,8 +6133,8 @@ function LegacyFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void
   );
 }
 
-function FollowUpView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
-  return taskStoreUsesServer ? <CanonicalFollowUpView onTaskClick={onTaskClick} embedded={embedded} /> : <LegacyFollowUpView onTaskClick={onTaskClick} />;
+function FollowUpView({ onTaskClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
+  return taskStoreUsesServer ? <CanonicalFollowUpView onTaskClick={onTaskClick} embedded={embedded} tasks={tasks} principalId={principalId} /> : <LegacyFollowUpView onTaskClick={onTaskClick} />;
 }
 
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
@@ -6329,12 +6555,12 @@ function PeopleHub({ tab, onTabChange, onPersonClick, onTaskClick, profile }: { 
   return <div><div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><section aria-label="People workspace" className="border-b border-border/70 pb-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">People workspace</p><p className="mt-1 text-[11px] text-muted-foreground">Directory, team queues, and workload in one place.</p></div><div role="tablist" aria-label="People workspace views" className="flex w-fit rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={activeTab === item.id} onClick={() => onTabChange(item.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", activeTab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div></section></div>{activeTab === "people" && <PeopleView entityType="person" onPersonClick={onPersonClick} />}{activeTab === "teams" && <PeopleView entityType="team" onPersonClick={onPersonClick} />}{activeTab === "workload" && workloadAvailable && <WorkloadView onTaskClick={onTaskClick} />}</div>;
 }
 
-function CanonicalFollowUpView({ onTaskClick, embedded = false }: { onTaskClick: (task: Task) => void; embedded?: boolean }) {
+function CanonicalFollowUpView({ onTaskClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
   const router = useRouter();
   useTaskStoreVersion();
   const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
   const [draftFor, setDraftFor] = useState<string | null>(null);
-  const { allTasks, candidates: nudgeCandidates, today } = getFollowUpNudgeCandidates(TASKS, currentUserId);
+  const { allTasks, candidates: nudgeCandidates, today } = getFollowUpNudgeCandidates(tasks || TASKS, principalId || currentUserId);
   // Follow Up is intentional reminder work only. Overdue, blocked, and review
   // records stay in their own Attention categories instead of being relabeled.
   const candidates = nudgeCandidates.filter(candidate => candidate.kind === "follow_up");
@@ -6685,8 +6911,19 @@ function peopleHubTabFromValue(value: string | null): PeopleHubTab {
   return value === "teams" || value === "workload" ? value : "people";
 }
 
+function attentionFiltersFromParams(params: URLSearchParams): AttentionFilterState {
+  const waitingKinds = (params.get("attentionWaiting") || "").split(",").filter((value): value is WaitingFilterKey => value === "others" || value === "me" || value === "blocked" || value === "external");
+  return {
+    search: params.get("attentionSearch") || "",
+    organizationId: params.get("attentionOrg") || "",
+    principalId: params.get("attentionPrincipal") || "",
+    waitingKinds: Array.from(new Set(waitingKinds)),
+    followUpDueOnly: params.get("attentionFollowUp") === "1",
+  };
+}
+
 function readNavigationLocation() {
-  if (typeof window === "undefined") return { view: "home" as NavView, attentionTab: "all" as AttentionTab, peopleTab: "people" as PeopleHubTab, projectsMode: "projects" as ProjectsHubMode };
+  if (typeof window === "undefined") return { view: "home" as NavView, attentionTab: "all" as AttentionTab, attentionFilters: EMPTY_ATTENTION_FILTERS, peopleTab: "people" as PeopleHubTab, projectsMode: "projects" as ProjectsHubMode };
   const params = new URLSearchParams(window.location.search);
   const page = params.get("page");
   const legacyAttentionTab = attentionTabFromValue(page);
@@ -6708,6 +6945,7 @@ function readNavigationLocation() {
   return {
     view,
     attentionTab: legacyAttentionTab !== "all" ? legacyAttentionTab : attentionTabFromValue(params.get("attention")),
+    attentionFilters: attentionFiltersFromParams(params),
     peopleTab: page === "workload" ? "workload" : peopleHubTabFromValue(params.get("peopleTab")),
     projectsMode: page === "templates" || params.get("projectsMode") === "templates" ? "templates" as const : "projects" as const,
   };
@@ -6718,6 +6956,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
   const taskStoreRevision = useTaskStoreVersion();
   const [view, setView] = useState<NavView>(() => readNavigationLocation().view);
   const [attentionTab, setAttentionTab] = useState<AttentionTab>(() => readNavigationLocation().attentionTab);
+  const [attentionFilters, setAttentionFilters] = useState<AttentionFilterState>(() => readNavigationLocation().attentionFilters);
   const [peopleHubTab, setPeopleHubTab] = useState<PeopleHubTab>(() => readNavigationLocation().peopleTab);
   const [projectsHubMode, setProjectsHubMode] = useState<ProjectsHubMode>(() => readNavigationLocation().projectsMode);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -6798,6 +7037,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
       const location = readNavigationLocation();
       setView(location.view);
       setAttentionTab(location.attentionTab);
+      setAttentionFilters(location.attentionFilters);
       setPeopleHubTab(location.peopleTab);
       setProjectsHubMode(location.projectsMode);
       setSelectedTask(null);
@@ -6914,22 +7154,38 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
     router.refresh();
   }
 
-  function writeNavigationLocation(nextView: NavView, nextAttentionTab = attentionTab, nextPeopleTab = peopleHubTab, nextProjectsMode = projectsHubMode) {
+  function writeNavigationLocation(nextView: NavView, nextAttentionTab = attentionTab, nextPeopleTab = peopleHubTab, nextProjectsMode = projectsHubMode, nextAttentionFilters = attentionFilters, historyMode: "push" | "replace" = "push") {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const page = nextView === "all-tasks" ? "tasks" : nextView === "inbox" ? "smart-inbox" : nextView;
     url.searchParams.set("page", page);
-    if (nextView === "attention") url.searchParams.set("attention", nextAttentionTab); else url.searchParams.delete("attention");
+    if (nextView === "attention") {
+      url.searchParams.set("attention", nextAttentionTab);
+      if (nextAttentionFilters.search) url.searchParams.set("attentionSearch", nextAttentionFilters.search); else url.searchParams.delete("attentionSearch");
+      if (nextAttentionFilters.organizationId) url.searchParams.set("attentionOrg", nextAttentionFilters.organizationId); else url.searchParams.delete("attentionOrg");
+      if (nextAttentionFilters.principalId) url.searchParams.set("attentionPrincipal", nextAttentionFilters.principalId); else url.searchParams.delete("attentionPrincipal");
+      if (nextAttentionFilters.waitingKinds.length) url.searchParams.set("attentionWaiting", nextAttentionFilters.waitingKinds.join(",")); else url.searchParams.delete("attentionWaiting");
+      if (nextAttentionFilters.followUpDueOnly) url.searchParams.set("attentionFollowUp", "1"); else url.searchParams.delete("attentionFollowUp");
+    } else {
+      ["attention", "attentionSearch", "attentionOrg", "attentionPrincipal", "attentionWaiting", "attentionFollowUp"].forEach(param => url.searchParams.delete(param));
+    }
     if (nextView === "people") url.searchParams.set("peopleTab", nextPeopleTab); else url.searchParams.delete("peopleTab");
     if (nextView === "projects" && nextProjectsMode === "templates") url.searchParams.set("projectsMode", "templates"); else url.searchParams.delete("projectsMode");
-    window.history.pushState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history[historyMode === "replace" ? "replaceState" : "pushState"](window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
-  function setAttentionLocation(tab: AttentionTab) {
+  function setAttentionLocation(tab: AttentionTab, nextAttentionFilters = attentionFilters) {
     setView("attention");
     setAttentionTab(tab);
+    setAttentionFilters(nextAttentionFilters);
     setProjectsHubMode("projects");
-    writeNavigationLocation("attention", tab, peopleHubTab, "projects");
+    writeNavigationLocation("attention", tab, peopleHubTab, "projects", nextAttentionFilters);
+  }
+
+  function updateAttentionFilters(patch: Partial<AttentionFilterState>) {
+    const nextAttentionFilters = { ...attentionFilters, ...patch };
+    setAttentionFilters(nextAttentionFilters);
+    writeNavigationLocation("attention", attentionTab, peopleHubTab, "projects", nextAttentionFilters, "replace");
   }
 
   function setPeopleLocation(tab: PeopleHubTab) {
@@ -7007,7 +7263,7 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
       case "review": return <><>{profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 lg:px-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Needs My Review</span> · {profile.pendingAccessRequestCount} member access request{profile.pendingAccessRequestCount === 1 ? "" : "s"}</span><span className="font-medium text-primary">Review access →</span></a></div>}</><ReviewView onTaskClick={setSelectedTask} /></>;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
-      case "attention": return <>{attentionTab === "review" && profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Access requests</span> · {profile.pendingAccessRequestCount} awaiting review</span><span className="font-medium text-primary">Review access →</span></a></div>}<AttentionView tab={attentionTab} onTabChange={setAttentionLocation} onTaskClick={setSelectedTask} onPrincipalClick={principal => principal.type === "team" ? openTeamTaskList(principal.id) : openPersonTaskList(principal.id)} /></>;
+      case "attention": return <>{attentionTab === "review" && profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Access requests</span> · {profile.pendingAccessRequestCount} awaiting review</span><span className="font-medium text-primary">Review access →</span></a></div>}<AttentionView tab={attentionTab} filters={attentionFilters} profile={profile} onTabChange={setAttentionLocation} onFiltersChange={updateAttentionFilters} onTaskClick={setSelectedTask} onPrincipalClick={principal => principal.type === "team" ? openTeamTaskList(principal.id) : openPersonTaskList(principal.id)} /></>;
       case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} profile={profile} />;
       case "people": return <PeopleHub tab={peopleHubTab} onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
       case "workload": return <PeopleHub tab="workload" onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
@@ -7016,12 +7272,12 @@ export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: Works
           const principal = PEOPLE_DIRECTORY.find(candidate => candidate.id === principalId);
           if (principal?.type === "team") openTeamTaskList(principalId);
           else openPersonTaskList(principalId);
-        }} />
+        }} onOpenAttention={principalId => setAttentionLocation("all", { ...attentionFilters, principalId })} />
         : <PeopleHub tab={peopleHubTab} onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
       case "followup": return <FollowUpView onTaskClick={setSelectedTask} />;
       case "organizations": return <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
       case "org-detail": return selectedOrg
-        ? <OrgDetailView orgName={selectedOrg} onBack={() => navTo("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} />
+        ? <OrgDetailView orgName={selectedOrg} onBack={() => navTo("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} onOpenAttention={organizationId => setAttentionLocation("all", { ...attentionFilters, organizationId })} />
         : <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
       case "projects": return projectsHubMode === "templates"
         ? <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} onBack={() => setProjectsLocation("projects")} />

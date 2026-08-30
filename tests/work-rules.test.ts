@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, getAttentionWork, getDelegatedTasks, getOrganizationActiveTasks, getOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks, getOrganizationTasks, getOrganizationTodayTasks, getOrganizationWaitingTasks, getOrganizationWeekTasks, getOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getProjectTasks, getReviewTasks, getTaskPlannerDate, getTodayTasks, getWaitingWork, getWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, filterAttentionTasks, getAttentionWork, getDelegatedTasks, getOrganizationActiveTasks, getOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks, getOrganizationTasks, getOrganizationTodayTasks, getOrganizationWaitingTasks, getOrganizationWeekTasks, getOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getProjectTasks, getReviewTasks, getTaskAttentionPrincipalIds, getTaskPlannerDate, getTodayTasks, getWaitingWork, getWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
 
 test("a completion dependency permits parallel work but not final completion", () => {
   assert.equal(taskTransitionBlockReason({ targetStatus: "in_progress", unresolvedStartBlockers: 0, unresolvedCompletionBlockers: 1 }), undefined);
@@ -230,6 +230,18 @@ test("Attention uses one canonical task set and does not double-count overlappin
   assert.deepEqual(attention.overdue.map(task => task.id), ["overlapping"]);
   assert.equal(attention.allNow.some(task => task.id === "waiting-on-other"), false, "passive waiting work remains visible in Waiting without inflating the current-user Attention badge");
   assert.equal(attention.allNow.some(task => task.id === "delegated"), false, "delegated tracking remains available without treating delegation as the delegator's immediate action");
+});
+
+test("Attention scopes intersect canonical organization and principal relationships", () => {
+  const tasks = [
+    { id: "finance-villa", organizationId: "villa", status: "waiting" as const, assigneeIds: ["team-finance"], assignments: [{ principalId: "team-finance", assignedByPrincipalId: "person-charlotte" }] },
+    { id: "finance-apotik", organizationId: "apotik", status: "blocked" as const, nextActionPrincipalId: "team-finance" },
+    { id: "marketing-villa", organizationId: "villa", status: "review" as const, reviewerPrincipalId: "person-bu-desti", assigneeIds: ["team-marketing"] },
+  ];
+  assert.deepEqual(filterAttentionTasks(tasks, { organizationId: "villa", principalId: "team-finance" }).map(task => task.id), ["finance-villa"]);
+  assert.deepEqual(filterAttentionTasks(tasks, { principalId: "person-charlotte" }).map(task => task.id), ["finance-villa"]);
+  assert.deepEqual(filterAttentionTasks(tasks, { organizationId: "villa" }).map(task => task.id), ["finance-villa", "marketing-villa"]);
+  assert.deepEqual(getTaskAttentionPrincipalIds(tasks[0]).sort(), ["person-charlotte", "team-finance"]);
 });
 
 test("review, planner, and overdue slices retain the same canonical task ID", () => {
