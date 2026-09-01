@@ -13,8 +13,8 @@
 
   ## Multi-user access setup
 
-  Copy `.env.example` to `.env`, configure PostgreSQL and Better Auth, then run
-  `npx prisma migrate deploy`. Migrations are additive; do not run
+Create an untracked `.env` file, configure PostgreSQL and Better Auth, then run
+`npx prisma migrate deploy`. Migrations are additive; do not run
   `prisma migrate reset` or reseed an existing Binnie workspace.
 
   For the first Owner, set `BINNIE_OWNER_PERSON_ID` to the stable existing
