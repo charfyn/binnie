@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, filterAttentionTasks, getAttentionWork, getDelegatedTasks, getOrganizationActiveTasks, getOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks, getOrganizationTasks, getOrganizationTodayTasks, getOrganizationWaitingTasks, getOrganizationWeekTasks, getOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getProjectTasks, getReviewTasks, getTaskAttentionPrincipalIds, getTaskPlannerDate, getTodayTasks, getWaitingWork, getWeekTasks, isTaskPersonallyActionableForPerson, isTaskTrackedByPerson, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, filterAttentionTasks, getAttentionWork, getDelegatedTasks, getOrganizationActiveTasks, getOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks, getOrganizationTasks, getOrganizationTodayTasks, getOrganizationWaitingTasks, getOrganizationWeekTasks, getOverdueTasks, getPersonallyActionableTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getProjectTasks, getReviewTasks, getTaskAttentionPrincipalIds, getTaskPlannerDate, getTodayTasks, getWaitingWork, getWeekTasks, isTaskPersonallyActionableForPerson, isTaskScheduledForDate, isTaskTrackedByPerson, matchesNaturalTaskSearch, needsAttention, nextOccurrenceDate, parseNaturalTaskSearch, taskTransitionBlockReason } from "../src/lib/work-rules.ts";
 
 test("a completion dependency permits parallel work but not final completion", () => {
   assert.equal(taskTransitionBlockReason({ targetStatus: "in_progress", unresolvedStartBlockers: 0, unresolvedCompletionBlockers: 1 }), undefined);
@@ -34,6 +34,24 @@ test("getTaskPlannerDate uses Plan for, then target, then deadline", () => {
   assert.equal(getTaskPlannerDate({}, today), undefined);
 });
 
+test("legacy contradictory Plan For and Deadline surfaces on the deadline", () => {
+  assert.equal(getTaskPlannerDate({ startDate: "2026-09-01", deadlineDate: "2026-08-31" }), "2026-08-31");
+});
+
+test("urgent work carries forward by projection without a duplicate task", () => {
+  const urgent = { id: "urgent-pricing", status: "ready" as const, priority: "urgent" as const, startDate: "2026-08-31", currentResponsibilityId: "person-charlotte", assigneeIds: ["person-charlotte"] };
+  assert.deepEqual(getTodayTasks([urgent], "person-charlotte", "2026-08-31").map(task => task.id), ["urgent-pricing"]);
+  assert.deepEqual(getTodayTasks([urgent], "person-charlotte", "2026-09-01").map(task => task.id), ["urgent-pricing"]);
+  assert.equal(isTaskScheduledForDate({ ...urgent, status: "done" }, "2026-09-01"), false);
+});
+
+test("overdue work carries only for the current responsible person and keeps its canonical ID", () => {
+  const overdue = { id: "overdue-pricing", status: "in_progress" as const, priority: "high" as const, startDate: "2026-09-02", deadlineDate: "2026-08-31", currentResponsibilityId: "person-charlotte", assigneeIds: ["person-charlotte"] };
+  assert.deepEqual(getTodayTasks([overdue], "person-charlotte", "2026-09-03").map(task => task.id), ["overdue-pricing"]);
+  assert.deepEqual(getTodayTasks([overdue], "person-bu-desti", "2026-09-03").map(task => task.id), []);
+  assert.deepEqual(getWeekTasks([overdue], "person-charlotte", "2026-08-31", "2026-09-06").filter(task => task.id === overdue.id).map(task => task.id), ["overdue-pricing"]);
+});
+
 test("Today IDs equal this week's selected-day IDs for the same personal work", () => {
   const tasks = [
     { id: "task-a", status: "in_progress" as const, startDate: "2026-08-27", assigneeIds: ["person-charlotte"] },
@@ -44,11 +62,11 @@ test("Today IDs equal this week's selected-day IDs for the same personal work", 
   assert.deepEqual(week.filter(task => getTaskPlannerDate(task) === "2026-08-27").map(task => task.id), today.map(task => task.id));
 });
 
-test("personal planners include only explicit personal action, never team membership or delegation", () => {
+test("personal planners follow current responsibility or active review, never Owner, creator, collaborators, or generic next action", () => {
   const tasks = [
-    { id: "direct", status: "ready" as const, targetDate: "2026-08-27", assigneeIds: ["person-charlotte"] },
+    { id: "direct", status: "ready" as const, targetDate: "2026-08-27", currentResponsibilityId: "person-charlotte", assigneeIds: ["person-charlotte"] },
     { id: "team", status: "ready" as const, targetDate: "2026-08-27", assigneeIds: ["team-marketing"] },
-    { id: "owned", status: "in_progress" as const, targetDate: "2026-08-27", createdByPrincipalId: "person-charlotte" },
+    { id: "owned", status: "in_progress" as const, targetDate: "2026-08-27", ownerPrincipalId: "person-charlotte", createdByPrincipalId: "person-charlotte", currentResponsibilityId: "team-marketing" },
     { id: "review", status: "review" as const, targetDate: "2026-08-27", reviewerPrincipalId: "person-charlotte" },
     { id: "dependency", status: "waiting" as const, targetDate: "2026-08-27", assigneeIds: ["team-finance"], dependencyActionOwnerIds: ["person-charlotte"] },
     { id: "other", status: "ready" as const, targetDate: "2026-08-27", assigneeIds: ["person-bu-desti"] },
@@ -59,9 +77,9 @@ test("personal planners include only explicit personal action, never team member
   ];
   const today = getTodayTasks(tasks, "person-charlotte", "2026-08-27");
   const week = getWeekTasks(tasks, "person-charlotte", "2026-08-24", "2026-08-30");
-  assert.deepEqual(today.map(task => task.id), ["direct", "owned", "review", "dependency"]);
-  assert.deepEqual(week.filter(task => getTaskPlannerDate(task) === "2026-08-27" && task.status !== "done").map(task => task.id), today.map(task => task.id));
-  assert.equal(week.some(task => task.id === "done"), true, "This Week keeps completed work as history while Today excludes remaining workload");
+  assert.deepEqual(today.map(task => task.id), ["direct", "review"]);
+  assert.deepEqual(week.filter(task => getTaskPlannerDate(task) === "2026-08-27").map(task => task.id), today.map(task => task.id));
+  assert.equal(week.some(task => task.id === "done"), false, "completed work belongs in Completed, not the active personal week");
   assert.equal(today.some(task => task.id === "team"), false, "a Team queue does not become every member's personal planner work");
   assert.equal(today.some(task => task.id === "other"), false);
   assert.equal(week.some(task => task.id === "other"), false);
@@ -70,17 +88,86 @@ test("personal planners include only explicit personal action, never team member
   assert.equal(today.some(task => task.id === "reviewed-by-other"), false, "review work belongs only to the active reviewer");
 });
 
-test("the personal-action helper gives People the exact same definition as My Work", () => {
+test("the personal-action helper gives People the exact same current-responsibility definition as My Work", () => {
   const teamOnly = { id: "team-only", status: "ready" as const, assigneeIds: ["team-marketing"] };
-  const personAndTeam = { id: "person-and-team", status: "ready" as const, assigneeIds: ["team-marketing", "person-bu-desti"] };
+  const personAndTeam = { id: "person-and-team", status: "ready" as const, assigneeIds: ["team-marketing", "person-bu-desti"], currentResponsibilityId: "person-bu-desti" };
   const nextActionForCharlotte = { id: "next-action", status: "ready" as const, assigneeIds: ["team-finance"], nextActionPrincipalId: "person-charlotte" };
   const movedNextAction = { ...nextActionForCharlotte, nextActionPrincipalId: "person-bu-desti" };
   assert.equal(isTaskPersonallyActionableForPerson(teamOnly, "person-charlotte"), false);
   assert.equal(isTaskPersonallyActionableForPerson(personAndTeam, "person-bu-desti"), true);
   assert.equal(isTaskPersonallyActionableForPerson(personAndTeam, "person-charlotte"), false);
-  assert.equal(isTaskPersonallyActionableForPerson(nextActionForCharlotte, "person-charlotte"), true);
+  assert.equal(isTaskPersonallyActionableForPerson(nextActionForCharlotte, "person-charlotte"), false);
   assert.equal(isTaskPersonallyActionableForPerson(movedNextAction, "person-charlotte"), false);
-  assert.equal(isTaskPersonallyActionableForPerson(movedNextAction, "person-bu-desti"), true);
+  assert.equal(isTaskPersonallyActionableForPerson(movedNextAction, "person-bu-desti"), false);
+});
+
+test("My Work, Today, and This Week begin with exactly the same explicit personal responsibility base", () => {
+  const tasks = [
+    {
+      id: "current-person-with-team-context",
+      status: "ready" as const,
+      startDate: "2026-08-31",
+      currentResponsibilityId: "person-charlotte",
+      assignments: [
+        { principalId: "team-finance", role: "collaborator" as const },
+        { principalId: "person-charlotte", role: "primary_owner" as const },
+      ],
+      assigneeIds: ["team-finance", "person-charlotte"],
+    },
+    {
+      id: "active-review",
+      status: "review" as const,
+      deadlineDate: "2026-08-31",
+      reviewerPrincipalId: "person-charlotte",
+      assignments: [{ principalId: "team-design", role: "primary_owner" as const }],
+    },
+    {
+      id: "team-only",
+      status: "ready" as const,
+      startDate: "2026-08-31",
+      assignments: [{ principalId: "team-finance", role: "primary_owner" as const }],
+      ownerPrincipalId: "person-charlotte",
+    },
+    {
+      id: "delegated-owner-only",
+      status: "ready" as const,
+      startDate: "2026-08-31",
+      ownerPrincipalId: "person-charlotte",
+      createdByPrincipalId: "person-charlotte",
+      assignments: [{ principalId: "team-design", role: "primary_owner" as const, assignedByPrincipalId: "person-charlotte" }],
+    },
+    {
+      id: "done",
+      status: "done" as const,
+      startDate: "2026-08-31",
+      currentResponsibilityId: "person-charlotte",
+      assignments: [{ principalId: "person-charlotte", role: "primary_owner" as const }],
+    },
+  ];
+  const myWork = getPersonallyActionableTasks(tasks, "person-charlotte");
+  const today = getTodayTasks(tasks, "person-charlotte", "2026-08-31");
+  const week = getWeekTasks(tasks, "person-charlotte", "2026-08-31", "2026-09-06");
+
+  assert.deepEqual(myWork.map((task) => task.id), ["current-person-with-team-context", "active-review"]);
+  assert.deepEqual(today.map((task) => task.id), myWork.map((task) => task.id));
+  assert.deepEqual(week.map((task) => task.id), myWork.map((task) => task.id));
+  assert.ok(today.every((task) => myWork.some((candidate) => candidate.id === task.id)));
+  assert.ok(week.every((task) => myWork.some((candidate) => candidate.id === task.id)));
+});
+
+test("a canonical TaskAssignment collaborator cannot become My Work through assignee ordering", () => {
+  const teamIsCurrent = {
+    id: "team-current",
+    status: "ready" as const,
+    startDate: "2026-08-31",
+    assignments: [
+      { principalId: "person-charlotte", role: "collaborator" as const },
+      { principalId: "team-finance", role: "primary_owner" as const },
+    ],
+    assigneeIds: ["person-charlotte", "team-finance"],
+  };
+  assert.equal(isTaskPersonallyActionableForPerson(teamIsCurrent, "person-charlotte"), false);
+  assert.deepEqual(getTodayTasks([teamIsCurrent], "person-charlotte", "2026-08-31"), []);
 });
 
 test("a canonical date move updates Today and the weekly column without creating another task", () => {
@@ -144,18 +231,18 @@ test("natural search recognizes a department, waiting owner, and month without A
   assert.equal(matchesNaturalTaskSearch({ title: "Draft campaign", status: "ready", areas: ["Marketing"], targetDate: "2026-09-01" }, marketingThisMonth), false);
 });
 
-test("workload counts Team queues for Teams, not every Team member", () => {
+test("workload counts only the one current responsibility and never multiplies shared context", () => {
   const workload = deriveWorkload([
-    { id: "shared", status: "in_progress", assigneeIds: ["marketing", "sarah"], primaryOwnerId: "marketing" },
-    { id: "team-only", status: "ready", assigneeIds: ["marketing"], primaryOwnerId: "marketing" },
-    { id: "review", status: "review", assigneeIds: ["sarah"], primaryOwnerId: "sarah", isOverdue: true },
+    { id: "shared", status: "in_progress", assigneeIds: ["marketing", "sarah"], currentResponsibilityId: "marketing" },
+    { id: "team-only", status: "ready", assigneeIds: ["marketing"], currentResponsibilityId: "marketing" },
+    { id: "review", status: "review", assigneeIds: ["sarah"], currentResponsibilityId: "sarah", isOverdue: true },
   ], [
     { id: "marketing", name: "Marketing Team", type: "team", active: true },
     { id: "sarah", name: "Sarah", type: "person", active: true },
   ]);
   assert.equal(workload.find(item => item.principalId === "marketing")?.inProgress, 1);
   assert.equal(workload.find(item => item.principalId === "marketing")?.ready, 1);
-  assert.equal(workload.find(item => item.principalId === "sarah")?.inProgress, 1);
+  assert.equal(workload.find(item => item.principalId === "sarah")?.inProgress, 0);
   assert.equal(workload.find(item => item.principalId === "sarah")?.ready, 0);
   assert.equal(workload.find(item => item.principalId === "sarah")?.review, 1);
   assert.equal(workload.find(item => item.principalId === "sarah")?.overdue, 1);
@@ -190,12 +277,29 @@ test("delegation is assigned-by, not the delegator's personal work", () => {
     id: "delegated",
     status: "ready" as const,
     assigneeIds: ["person-bu-desti"],
-    assignments: [{ principalId: "person-bu-desti", assignedByPrincipalId: "person-charlotte" }],
+    currentResponsibilityId: "person-bu-desti",
+    assignments: [{ principalId: "person-bu-desti", role: "primary_owner" as const, assignedByPrincipalId: "person-charlotte" }],
   };
   assert.deepEqual(getDelegatedTasks([delegated], "person-charlotte").map(task => task.id), ["delegated"]);
   assert.equal(isTaskPersonallyActionableForPerson(delegated, "person-charlotte"), false);
   assert.equal(isTaskPersonallyActionableForPerson(delegated, "person-bu-desti"), true);
   assert.equal(isTaskTrackedByPerson(delegated, "person-charlotte"), true);
+});
+
+test("delegation tracking survives a later handoff without returning work to My Work", () => {
+  const sentOn = {
+    id: "sent-on",
+    status: "in_progress" as const,
+    assigneeIds: ["person-bu-desti", "team-design"],
+    currentResponsibilityId: "person-bu-desti",
+    assignments: [
+      { principalId: "person-bu-desti", role: "primary_owner" as const, assignedByPrincipalId: "person-design-lead" },
+      { principalId: "team-design", role: "collaborator" as const, assignedByPrincipalId: "person-charlotte" },
+    ],
+  };
+  assert.deepEqual(getDelegatedTasks([sentOn], "person-charlotte").map(task => task.id), ["sent-on"]);
+  assert.equal(isTaskPersonallyActionableForPerson(sentOn, "person-charlotte"), false);
+  assert.equal(isTaskPersonallyActionableForPerson(sentOn, "person-bu-desti"), true);
 });
 
 test("Waiting separates explicit next actions from a bare waiting status", () => {

@@ -17,17 +17,17 @@ test("Task Detail promotes the action that fits the authenticated person's actua
   assert.equal(getTaskDetailPrimaryAction({ ...mine, status: "in_progress" }), "complete");
   assert.equal(getTaskDetailPrimaryAction({ ...mine, status: "waiting", isWaiting: true }), "update_waiting");
   assert.equal(getTaskDetailPrimaryAction({ ...mine, status: "blocked", isWaiting: true }), "update_waiting");
-  assert.equal(getTaskDetailPrimaryAction({ ...mine, status: "done" }), "reopen");
+  assert.equal(getTaskDetailPrimaryAction({ ...mine, status: "done" }), undefined);
 });
 
-test("Task Detail only promotes Continue when the authenticated person has the waiting next action", () => {
+test("Task Detail never turns a legacy next-action label into personal responsibility", () => {
   assert.equal(getTaskDetailPrimaryAction({
     ...mine,
     status: "waiting",
     isWaiting: true,
     currentUserIsAssignee: false,
     currentUserHasNextAction: true,
-  }), "continue");
+  }), undefined);
   assert.equal(getTaskDetailPrimaryAction({
     ...mine,
     status: "waiting",

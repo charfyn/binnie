@@ -18,6 +18,7 @@ import {
   PrismaClient,
 } from "../src/generated/prisma/client";
 import { createPostgresAdapter } from "../src/lib/database-adapter";
+import { findCaptureTaskMatches } from "../src/lib/capture-intelligence";
 
 async function main() {
   const connectionString = process.env.TEST_DATABASE_URL
@@ -48,23 +49,116 @@ async function main() {
       db.department.create({ data: { organizationId: organization.id, name: "Marketing" } }),
       db.department.create({ data: { organizationId: organization.id, name: "Finance" } }),
     ]);
-    const [owner, marketingTeam, financeTeam] = await Promise.all([
+    const [owner, worker, marketingTeam, financeTeam] = await Promise.all([
       db.principal.create({ data: { workspaceId, type: PrincipalType.PERSON, name: "Acceptance Owner", memberships: { create: { organizationId: organization.id, role: WorkspaceRole.OWNER } } } }),
+      db.principal.create({ data: { workspaceId, type: PrincipalType.PERSON, name: "Acceptance Worker", memberships: { create: { organizationId: organization.id, role: WorkspaceRole.EMPLOYEE } } } }),
       db.principal.create({ data: { workspaceId, type: PrincipalType.TEAM, name: "Marketing Team", memberships: { create: { organizationId: organization.id, departmentId: marketing.id } } } }),
       db.principal.create({ data: { workspaceId, type: PrincipalType.TEAM, name: "Finance Team", memberships: { create: { organizationId: organization.id, departmentId: finance.id } } } }),
     ]);
 
     const pricing = await db.task.create({
       data: {
-        workspaceId, organizationId: organization.id, leadDepartmentId: finance.id, createdByPrincipalId: owner.id,
+        workspaceId, organizationId: organization.id, leadDepartmentId: finance.id, createdByPrincipalId: owner.id, ownerPrincipalId: owner.id,
         title: "Confirm pricing", status: TaskStatus.IN_PROGRESS, priority: TaskPriority.HIGH, estimatedMinutes: 30, nextActionKind: NextActionKind.PRINCIPAL, nextActionPrincipalId: financeTeam.id,
         involvedDepartments: { create: [{ departmentId: finance.id }, { departmentId: marketing.id }] },
         assignments: { create: [{ principalId: financeTeam.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id }, { principalId: marketingTeam.id, role: AssignmentRole.COLLABORATOR, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id }] },
       }, include: { assignments: true, involvedDepartments: true },
     });
     assert.equal(pricing.assignments.length, 2, "one task has multiple assignees");
+    assert.equal(pricing.ownerPrincipalId, owner.id, "Task Owner is stored separately from the current responsibility");
+    assert.equal(pricing.assignments.find((assignment) => assignment.role === AssignmentRole.PRIMARY_OWNER)?.principalId, financeTeam.id, "one current responsibility can be a Team without changing Task Owner");
     assert.equal(pricing.involvedDepartments.length, 2, "one task is visible across departments");
     assert.equal(pricing.estimatedMinutes, 30, "optional task effort persists as canonical minutes");
+
+    const captureCandidate = await db.task.findUniqueOrThrow({
+      where: { id: pricing.id },
+      select: {
+        id: true, version: true, title: true, status: true, organizationId: true, createdAt: true, updatedAt: true,
+        organization: { select: { name: true } },
+        assignments: { where: { role: AssignmentRole.PRIMARY_OWNER }, select: { principalId: true, principal: { select: { name: true } } }, take: 1 },
+      },
+    });
+    const captureMatches = findCaptureTaskMatches({ title: "confirm pricing", organizationId: organization.id, currentResponsibilityPrincipalId: financeTeam.id }, [{
+      id: captureCandidate.id, version: captureCandidate.version, title: captureCandidate.title, status: "in_progress", organizationId: captureCandidate.organizationId || undefined,
+      organization: captureCandidate.organization?.name, currentResponsibilityPrincipalId: captureCandidate.assignments[0]?.principalId,
+      currentResponsibilityName: captureCandidate.assignments[0]?.principal.name, createdAt: captureCandidate.createdAt.toISOString(), updatedAt: captureCandidate.updatedAt.toISOString(),
+    }]);
+    assert.equal(captureMatches[0]?.kind, "likely_duplicate", "the capture classifier compares structured canonical task data before a duplicate is created");
+
+    const [personalWithTeamContext, activeReview, teamOnly, donePersonal] = await Promise.all([
+      db.task.create({ data: {
+        workspaceId, organizationId: organization.id, leadDepartmentId: finance.id, createdByPrincipalId: owner.id, ownerPrincipalId: worker.id,
+        title: "Worker confirms pricing", status: TaskStatus.READY, priority: TaskPriority.HIGH, startDate: new Date("2026-08-31"),
+        assignments: { create: [
+          { principalId: worker.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id },
+          { principalId: financeTeam.id, role: AssignmentRole.COLLABORATOR, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id },
+        ] },
+      } }),
+      db.task.create({ data: {
+        workspaceId, organizationId: organization.id, leadDepartmentId: marketing.id, createdByPrincipalId: owner.id, ownerPrincipalId: owner.id,
+        title: "Worker reviews artwork", status: TaskStatus.REVIEW, priority: TaskPriority.MEDIUM, deadline: new Date("2026-08-31"),
+        assignments: { create: { principalId: marketingTeam.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id } },
+        reviewCycles: { create: { submittedByPrincipalId: owner.id, reviewerPrincipalId: worker.id } },
+      } }),
+      db.task.create({ data: {
+        workspaceId, organizationId: organization.id, leadDepartmentId: finance.id, createdByPrincipalId: owner.id, ownerPrincipalId: worker.id,
+        title: "Finance team only", status: TaskStatus.READY, priority: TaskPriority.MEDIUM, startDate: new Date("2026-08-31"),
+        assignments: { create: { principalId: financeTeam.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id } },
+      } }),
+      db.task.create({ data: {
+        workspaceId, organizationId: organization.id, leadDepartmentId: finance.id, createdByPrincipalId: owner.id, ownerPrincipalId: worker.id,
+        title: "Completed worker task", status: TaskStatus.DONE, priority: TaskPriority.MEDIUM, startDate: new Date("2026-08-31"),
+        assignments: { create: { principalId: worker.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id } },
+      } }),
+    ]);
+    const personallyActionable = await db.task.findMany({
+      where: {
+        workspaceId,
+        archivedAt: null,
+        status: { not: TaskStatus.DONE },
+        OR: [
+          { assignments: { some: { principalId: worker.id, role: AssignmentRole.PRIMARY_OWNER } } },
+          { status: TaskStatus.REVIEW, reviewCycles: { some: { reviewerPrincipalId: worker.id, reviewedAt: null } } },
+        ],
+      },
+      select: { id: true },
+    });
+    const personalIds = personallyActionable.map((task) => task.id).sort();
+    assert.deepEqual(personalIds, [personalWithTeamContext.id, activeReview.id].sort(), "the PostgreSQL personal-action selector includes current responsibility and active review only");
+    assert.equal(personalIds.includes(teamOnly.id), false, "team-only responsibility does not become a person's My Work");
+    assert.equal(personalIds.includes(donePersonal.id), false, "Done work is not in the active personal selector");
+    const ownedPersonallyActionable = await db.task.findMany({
+      where: {
+        AND: [
+          {
+            workspaceId,
+            archivedAt: null,
+            status: { not: TaskStatus.DONE },
+            OR: [
+              { assignments: { some: { principalId: worker.id, role: AssignmentRole.PRIMARY_OWNER } } },
+              { status: TaskStatus.REVIEW, reviewCycles: { some: { reviewerPrincipalId: worker.id, reviewedAt: null } } },
+            ],
+          },
+          { ownerPrincipalId: worker.id },
+        ],
+      },
+      select: { id: true },
+    });
+    assert.deepEqual(ownedPersonallyActionable.map((task) => task.id), [personalWithTeamContext.id], "Owned by me narrows the personal-action base instead of broadening it with team-only work");
+
+    const waitingResponsibility = await db.task.create({
+      data: {
+        workspaceId, organizationId: organization.id, leadDepartmentId: marketing.id, createdByPrincipalId: owner.id, ownerPrincipalId: owner.id,
+        title: "Prepare supplier payment", status: TaskStatus.WAITING, priority: TaskPriority.MEDIUM,
+        nextActionKind: NextActionKind.PRINCIPAL, nextActionPrincipalId: financeTeam.id,
+        assignments: { create: { principalId: owner.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.MANUAL, assignedByPrincipalId: owner.id } },
+      },
+      include: { assignments: true },
+    });
+    assert.equal(waitingResponsibility.ownerPrincipalId, owner.id, "the overall owner remains accountable while another response is awaited");
+    assert.equal(waitingResponsibility.assignments[0]?.principalId, owner.id, "current responsibility remains distinct from a waiting response");
+    assert.equal(waitingResponsibility.nextActionPrincipalId, financeTeam.id, "Waiting on stores the current responder using the canonical principal ID");
+    assert.notEqual(waitingResponsibility.assignments[0]?.principalId, waitingResponsibility.nextActionPrincipalId, "ownership and waiting responsibility remain distinct canonical relationships");
 
     const publication = await db.task.create({ data: { workspaceId, organizationId: organization.id, leadDepartmentId: marketing.id, createdByPrincipalId: owner.id, title: "Publish pricing", status: TaskStatus.READY, priority: TaskPriority.MEDIUM, dependencies: { create: { prerequisiteTaskId: pricing.id, type: DependencyType.COMPLETION_BLOCKER, label: "Final pricing required" } } } });
     const dependency = await db.taskDependency.findFirstOrThrow({ where: { taskId: publication.id } });
@@ -74,7 +168,7 @@ async function main() {
 
     const lifecycle = await db.task.create({
       data: {
-        workspaceId, organizationId: organization.id, leadDepartmentId: marketing.id, projectId: undefined, createdByPrincipalId: owner.id,
+        workspaceId, organizationId: organization.id, leadDepartmentId: marketing.id, projectId: undefined, createdByPrincipalId: owner.id, ownerPrincipalId: owner.id,
         title: "Prepare launch pack", status: TaskStatus.IN_PROGRESS, priority: TaskPriority.MEDIUM,
         startDate: new Date("2026-08-17"), targetDate: new Date("2026-08-20"), deadline: new Date("2026-08-21"), followUpDate: new Date("2026-08-19"),
         nextActionKind: NextActionKind.PRINCIPAL, nextActionPrincipalId: marketingTeam.id,

@@ -49,8 +49,11 @@ export type TaskMinAggregateOutputType = {
   recurrenceId: string | null
   mergedIntoTaskId: string | null
   createdByPrincipalId: string | null
+  ownerPrincipalId: string | null
+  ownerInferredFromCreator: boolean | null
   title: string | null
   description: string | null
+  currentStep: string | null
   status: $Enums.TaskStatus | null
   priority: $Enums.TaskPriority | null
   startDate: Date | null
@@ -84,8 +87,11 @@ export type TaskMaxAggregateOutputType = {
   recurrenceId: string | null
   mergedIntoTaskId: string | null
   createdByPrincipalId: string | null
+  ownerPrincipalId: string | null
+  ownerInferredFromCreator: boolean | null
   title: string | null
   description: string | null
+  currentStep: string | null
   status: $Enums.TaskStatus | null
   priority: $Enums.TaskPriority | null
   startDate: Date | null
@@ -119,8 +125,11 @@ export type TaskCountAggregateOutputType = {
   recurrenceId: number
   mergedIntoTaskId: number
   createdByPrincipalId: number
+  ownerPrincipalId: number
+  ownerInferredFromCreator: number
   title: number
   description: number
+  currentStep: number
   status: number
   priority: number
   startDate: number
@@ -168,8 +177,11 @@ export type TaskMinAggregateInputType = {
   recurrenceId?: true
   mergedIntoTaskId?: true
   createdByPrincipalId?: true
+  ownerPrincipalId?: true
+  ownerInferredFromCreator?: true
   title?: true
   description?: true
+  currentStep?: true
   status?: true
   priority?: true
   startDate?: true
@@ -203,8 +215,11 @@ export type TaskMaxAggregateInputType = {
   recurrenceId?: true
   mergedIntoTaskId?: true
   createdByPrincipalId?: true
+  ownerPrincipalId?: true
+  ownerInferredFromCreator?: true
   title?: true
   description?: true
+  currentStep?: true
   status?: true
   priority?: true
   startDate?: true
@@ -238,8 +253,11 @@ export type TaskCountAggregateInputType = {
   recurrenceId?: true
   mergedIntoTaskId?: true
   createdByPrincipalId?: true
+  ownerPrincipalId?: true
+  ownerInferredFromCreator?: true
   title?: true
   description?: true
+  currentStep?: true
   status?: true
   priority?: true
   startDate?: true
@@ -360,8 +378,11 @@ export type TaskGroupByOutputType = {
   recurrenceId: string | null
   mergedIntoTaskId: string | null
   createdByPrincipalId: string | null
+  ownerPrincipalId: string | null
+  ownerInferredFromCreator: boolean
   title: string
   description: string | null
+  currentStep: string | null
   status: $Enums.TaskStatus
   priority: $Enums.TaskPriority
   startDate: Date | null
@@ -418,8 +439,11 @@ export type TaskWhereInput = {
   recurrenceId?: Prisma.StringNullableFilter<"Task"> | string | null
   mergedIntoTaskId?: Prisma.StringNullableFilter<"Task"> | string | null
   createdByPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
+  ownerPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
+  ownerInferredFromCreator?: Prisma.BoolFilter<"Task"> | boolean
   title?: Prisma.StringFilter<"Task"> | string
   description?: Prisma.StringNullableFilter<"Task"> | string | null
+  currentStep?: Prisma.StringNullableFilter<"Task"> | string | null
   status?: Prisma.EnumTaskStatusFilter<"Task"> | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFilter<"Task"> | $Enums.TaskPriority
   startDate?: Prisma.DateTimeNullableFilter<"Task"> | Date | string | null
@@ -450,6 +474,7 @@ export type TaskWhereInput = {
   splitTasks?: Prisma.TaskListRelationFilter
   recurrence?: Prisma.XOR<Prisma.TaskRecurrenceNullableScalarRelationFilter, Prisma.TaskRecurrenceWhereInput> | null
   createdBy?: Prisma.XOR<Prisma.PrincipalNullableScalarRelationFilter, Prisma.PrincipalWhereInput> | null
+  owner?: Prisma.XOR<Prisma.PrincipalNullableScalarRelationFilter, Prisma.PrincipalWhereInput> | null
   nextActionPrincipal?: Prisma.XOR<Prisma.PrincipalNullableScalarRelationFilter, Prisma.PrincipalWhereInput> | null
   nextActionDepartment?: Prisma.XOR<Prisma.DepartmentNullableScalarRelationFilter, Prisma.DepartmentWhereInput> | null
   involvedDepartments?: Prisma.TaskInvolvedDepartmentListRelationFilter
@@ -476,8 +501,11 @@ export type TaskOrderByWithRelationInput = {
   recurrenceId?: Prisma.SortOrderInput | Prisma.SortOrder
   mergedIntoTaskId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdByPrincipalId?: Prisma.SortOrderInput | Prisma.SortOrder
+  ownerPrincipalId?: Prisma.SortOrderInput | Prisma.SortOrder
+  ownerInferredFromCreator?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrderInput | Prisma.SortOrder
+  currentStep?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   priority?: Prisma.SortOrder
   startDate?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -508,6 +536,7 @@ export type TaskOrderByWithRelationInput = {
   splitTasks?: Prisma.TaskOrderByRelationAggregateInput
   recurrence?: Prisma.TaskRecurrenceOrderByWithRelationInput
   createdBy?: Prisma.PrincipalOrderByWithRelationInput
+  owner?: Prisma.PrincipalOrderByWithRelationInput
   nextActionPrincipal?: Prisma.PrincipalOrderByWithRelationInput
   nextActionDepartment?: Prisma.DepartmentOrderByWithRelationInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentOrderByRelationAggregateInput
@@ -538,8 +567,11 @@ export type TaskWhereUniqueInput = Prisma.AtLeast<{
   recurrenceId?: Prisma.StringNullableFilter<"Task"> | string | null
   mergedIntoTaskId?: Prisma.StringNullableFilter<"Task"> | string | null
   createdByPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
+  ownerPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
+  ownerInferredFromCreator?: Prisma.BoolFilter<"Task"> | boolean
   title?: Prisma.StringFilter<"Task"> | string
   description?: Prisma.StringNullableFilter<"Task"> | string | null
+  currentStep?: Prisma.StringNullableFilter<"Task"> | string | null
   status?: Prisma.EnumTaskStatusFilter<"Task"> | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFilter<"Task"> | $Enums.TaskPriority
   startDate?: Prisma.DateTimeNullableFilter<"Task"> | Date | string | null
@@ -570,6 +602,7 @@ export type TaskWhereUniqueInput = Prisma.AtLeast<{
   splitTasks?: Prisma.TaskListRelationFilter
   recurrence?: Prisma.XOR<Prisma.TaskRecurrenceNullableScalarRelationFilter, Prisma.TaskRecurrenceWhereInput> | null
   createdBy?: Prisma.XOR<Prisma.PrincipalNullableScalarRelationFilter, Prisma.PrincipalWhereInput> | null
+  owner?: Prisma.XOR<Prisma.PrincipalNullableScalarRelationFilter, Prisma.PrincipalWhereInput> | null
   nextActionPrincipal?: Prisma.XOR<Prisma.PrincipalNullableScalarRelationFilter, Prisma.PrincipalWhereInput> | null
   nextActionDepartment?: Prisma.XOR<Prisma.DepartmentNullableScalarRelationFilter, Prisma.DepartmentWhereInput> | null
   involvedDepartments?: Prisma.TaskInvolvedDepartmentListRelationFilter
@@ -596,8 +629,11 @@ export type TaskOrderByWithAggregationInput = {
   recurrenceId?: Prisma.SortOrderInput | Prisma.SortOrder
   mergedIntoTaskId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdByPrincipalId?: Prisma.SortOrderInput | Prisma.SortOrder
+  ownerPrincipalId?: Prisma.SortOrderInput | Prisma.SortOrder
+  ownerInferredFromCreator?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrderInput | Prisma.SortOrder
+  currentStep?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   priority?: Prisma.SortOrder
   startDate?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -639,8 +675,11 @@ export type TaskScalarWhereWithAggregatesInput = {
   recurrenceId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
   mergedIntoTaskId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
   createdByPrincipalId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
+  ownerPrincipalId?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
+  ownerInferredFromCreator?: Prisma.BoolWithAggregatesFilter<"Task"> | boolean
   title?: Prisma.StringWithAggregatesFilter<"Task"> | string
   description?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
+  currentStep?: Prisma.StringNullableWithAggregatesFilter<"Task"> | string | null
   status?: Prisma.EnumTaskStatusWithAggregatesFilter<"Task"> | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityWithAggregatesFilter<"Task"> | $Enums.TaskPriority
   startDate?: Prisma.DateTimeNullableWithAggregatesFilter<"Task"> | Date | string | null
@@ -666,8 +705,10 @@ export type TaskScalarWhereWithAggregatesInput = {
 export type TaskCreateInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -696,6 +737,7 @@ export type TaskCreateInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -722,8 +764,11 @@ export type TaskUncheckedCreateInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -762,8 +807,10 @@ export type TaskUncheckedCreateInput = {
 export type TaskUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -792,6 +839,7 @@ export type TaskUpdateInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -818,8 +866,11 @@ export type TaskUncheckedUpdateInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -866,8 +917,11 @@ export type TaskCreateManyInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -893,8 +947,10 @@ export type TaskCreateManyInput = {
 export type TaskUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -926,8 +982,11 @@ export type TaskUncheckedUpdateManyInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -981,8 +1040,11 @@ export type TaskCountOrderByAggregateInput = {
   recurrenceId?: Prisma.SortOrder
   mergedIntoTaskId?: Prisma.SortOrder
   createdByPrincipalId?: Prisma.SortOrder
+  ownerPrincipalId?: Prisma.SortOrder
+  ownerInferredFromCreator?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  currentStep?: Prisma.SortOrder
   status?: Prisma.SortOrder
   priority?: Prisma.SortOrder
   startDate?: Prisma.SortOrder
@@ -1022,8 +1084,11 @@ export type TaskMaxOrderByAggregateInput = {
   recurrenceId?: Prisma.SortOrder
   mergedIntoTaskId?: Prisma.SortOrder
   createdByPrincipalId?: Prisma.SortOrder
+  ownerPrincipalId?: Prisma.SortOrder
+  ownerInferredFromCreator?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  currentStep?: Prisma.SortOrder
   status?: Prisma.SortOrder
   priority?: Prisma.SortOrder
   startDate?: Prisma.SortOrder
@@ -1057,8 +1122,11 @@ export type TaskMinOrderByAggregateInput = {
   recurrenceId?: Prisma.SortOrder
   mergedIntoTaskId?: Prisma.SortOrder
   createdByPrincipalId?: Prisma.SortOrder
+  ownerPrincipalId?: Prisma.SortOrder
+  ownerInferredFromCreator?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  currentStep?: Prisma.SortOrder
   status?: Prisma.SortOrder
   priority?: Prisma.SortOrder
   startDate?: Prisma.SortOrder
@@ -1309,6 +1377,13 @@ export type TaskCreateNestedManyWithoutCreatedByInput = {
   connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
 }
 
+export type TaskCreateNestedManyWithoutOwnerInput = {
+  create?: Prisma.XOR<Prisma.TaskCreateWithoutOwnerInput, Prisma.TaskUncheckedCreateWithoutOwnerInput> | Prisma.TaskCreateWithoutOwnerInput[] | Prisma.TaskUncheckedCreateWithoutOwnerInput[]
+  connectOrCreate?: Prisma.TaskCreateOrConnectWithoutOwnerInput | Prisma.TaskCreateOrConnectWithoutOwnerInput[]
+  createMany?: Prisma.TaskCreateManyOwnerInputEnvelope
+  connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+}
+
 export type TaskCreateNestedManyWithoutNextActionPrincipalInput = {
   create?: Prisma.XOR<Prisma.TaskCreateWithoutNextActionPrincipalInput, Prisma.TaskUncheckedCreateWithoutNextActionPrincipalInput> | Prisma.TaskCreateWithoutNextActionPrincipalInput[] | Prisma.TaskUncheckedCreateWithoutNextActionPrincipalInput[]
   connectOrCreate?: Prisma.TaskCreateOrConnectWithoutNextActionPrincipalInput | Prisma.TaskCreateOrConnectWithoutNextActionPrincipalInput[]
@@ -1320,6 +1395,13 @@ export type TaskUncheckedCreateNestedManyWithoutCreatedByInput = {
   create?: Prisma.XOR<Prisma.TaskCreateWithoutCreatedByInput, Prisma.TaskUncheckedCreateWithoutCreatedByInput> | Prisma.TaskCreateWithoutCreatedByInput[] | Prisma.TaskUncheckedCreateWithoutCreatedByInput[]
   connectOrCreate?: Prisma.TaskCreateOrConnectWithoutCreatedByInput | Prisma.TaskCreateOrConnectWithoutCreatedByInput[]
   createMany?: Prisma.TaskCreateManyCreatedByInputEnvelope
+  connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+}
+
+export type TaskUncheckedCreateNestedManyWithoutOwnerInput = {
+  create?: Prisma.XOR<Prisma.TaskCreateWithoutOwnerInput, Prisma.TaskUncheckedCreateWithoutOwnerInput> | Prisma.TaskCreateWithoutOwnerInput[] | Prisma.TaskUncheckedCreateWithoutOwnerInput[]
+  connectOrCreate?: Prisma.TaskCreateOrConnectWithoutOwnerInput | Prisma.TaskCreateOrConnectWithoutOwnerInput[]
+  createMany?: Prisma.TaskCreateManyOwnerInputEnvelope
   connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
 }
 
@@ -1341,6 +1423,20 @@ export type TaskUpdateManyWithoutCreatedByNestedInput = {
   connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
   update?: Prisma.TaskUpdateWithWhereUniqueWithoutCreatedByInput | Prisma.TaskUpdateWithWhereUniqueWithoutCreatedByInput[]
   updateMany?: Prisma.TaskUpdateManyWithWhereWithoutCreatedByInput | Prisma.TaskUpdateManyWithWhereWithoutCreatedByInput[]
+  deleteMany?: Prisma.TaskScalarWhereInput | Prisma.TaskScalarWhereInput[]
+}
+
+export type TaskUpdateManyWithoutOwnerNestedInput = {
+  create?: Prisma.XOR<Prisma.TaskCreateWithoutOwnerInput, Prisma.TaskUncheckedCreateWithoutOwnerInput> | Prisma.TaskCreateWithoutOwnerInput[] | Prisma.TaskUncheckedCreateWithoutOwnerInput[]
+  connectOrCreate?: Prisma.TaskCreateOrConnectWithoutOwnerInput | Prisma.TaskCreateOrConnectWithoutOwnerInput[]
+  upsert?: Prisma.TaskUpsertWithWhereUniqueWithoutOwnerInput | Prisma.TaskUpsertWithWhereUniqueWithoutOwnerInput[]
+  createMany?: Prisma.TaskCreateManyOwnerInputEnvelope
+  set?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  disconnect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  delete?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  update?: Prisma.TaskUpdateWithWhereUniqueWithoutOwnerInput | Prisma.TaskUpdateWithWhereUniqueWithoutOwnerInput[]
+  updateMany?: Prisma.TaskUpdateManyWithWhereWithoutOwnerInput | Prisma.TaskUpdateManyWithWhereWithoutOwnerInput[]
   deleteMany?: Prisma.TaskScalarWhereInput | Prisma.TaskScalarWhereInput[]
 }
 
@@ -1369,6 +1465,20 @@ export type TaskUncheckedUpdateManyWithoutCreatedByNestedInput = {
   connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
   update?: Prisma.TaskUpdateWithWhereUniqueWithoutCreatedByInput | Prisma.TaskUpdateWithWhereUniqueWithoutCreatedByInput[]
   updateMany?: Prisma.TaskUpdateManyWithWhereWithoutCreatedByInput | Prisma.TaskUpdateManyWithWhereWithoutCreatedByInput[]
+  deleteMany?: Prisma.TaskScalarWhereInput | Prisma.TaskScalarWhereInput[]
+}
+
+export type TaskUncheckedUpdateManyWithoutOwnerNestedInput = {
+  create?: Prisma.XOR<Prisma.TaskCreateWithoutOwnerInput, Prisma.TaskUncheckedCreateWithoutOwnerInput> | Prisma.TaskCreateWithoutOwnerInput[] | Prisma.TaskUncheckedCreateWithoutOwnerInput[]
+  connectOrCreate?: Prisma.TaskCreateOrConnectWithoutOwnerInput | Prisma.TaskCreateOrConnectWithoutOwnerInput[]
+  upsert?: Prisma.TaskUpsertWithWhereUniqueWithoutOwnerInput | Prisma.TaskUpsertWithWhereUniqueWithoutOwnerInput[]
+  createMany?: Prisma.TaskCreateManyOwnerInputEnvelope
+  set?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  disconnect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  delete?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  connect?: Prisma.TaskWhereUniqueInput | Prisma.TaskWhereUniqueInput[]
+  update?: Prisma.TaskUpdateWithWhereUniqueWithoutOwnerInput | Prisma.TaskUpdateWithWhereUniqueWithoutOwnerInput[]
+  updateMany?: Prisma.TaskUpdateManyWithWhereWithoutOwnerInput | Prisma.TaskUpdateManyWithWhereWithoutOwnerInput[]
   deleteMany?: Prisma.TaskScalarWhereInput | Prisma.TaskScalarWhereInput[]
 }
 
@@ -1727,8 +1837,10 @@ export type TaskUpdateOneWithoutNudgeStatesNestedInput = {
 export type TaskCreateWithoutWorkspaceInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -1756,6 +1868,7 @@ export type TaskCreateWithoutWorkspaceInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -1781,8 +1894,11 @@ export type TaskUncheckedCreateWithoutWorkspaceInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -1858,8 +1974,11 @@ export type TaskScalarWhereInput = {
   recurrenceId?: Prisma.StringNullableFilter<"Task"> | string | null
   mergedIntoTaskId?: Prisma.StringNullableFilter<"Task"> | string | null
   createdByPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
+  ownerPrincipalId?: Prisma.StringNullableFilter<"Task"> | string | null
+  ownerInferredFromCreator?: Prisma.BoolFilter<"Task"> | boolean
   title?: Prisma.StringFilter<"Task"> | string
   description?: Prisma.StringNullableFilter<"Task"> | string | null
+  currentStep?: Prisma.StringNullableFilter<"Task"> | string | null
   status?: Prisma.EnumTaskStatusFilter<"Task"> | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFilter<"Task"> | $Enums.TaskPriority
   startDate?: Prisma.DateTimeNullableFilter<"Task"> | Date | string | null
@@ -1885,8 +2004,10 @@ export type TaskScalarWhereInput = {
 export type TaskCreateWithoutOrganizationInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -1914,6 +2035,7 @@ export type TaskCreateWithoutOrganizationInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -1939,8 +2061,11 @@ export type TaskUncheckedCreateWithoutOrganizationInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2005,8 +2130,10 @@ export type TaskUpdateManyWithWhereWithoutOrganizationInput = {
 export type TaskCreateWithoutLeadDepartmentInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2034,6 +2161,7 @@ export type TaskCreateWithoutLeadDepartmentInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2059,8 +2187,11 @@ export type TaskUncheckedCreateWithoutLeadDepartmentInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2109,8 +2240,10 @@ export type TaskCreateManyLeadDepartmentInputEnvelope = {
 export type TaskCreateWithoutNextActionDepartmentInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2139,6 +2272,7 @@ export type TaskCreateWithoutNextActionDepartmentInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutTaskInput
@@ -2164,8 +2298,11 @@ export type TaskUncheckedCreateWithoutNextActionDepartmentInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2245,8 +2382,10 @@ export type TaskUpdateManyWithWhereWithoutNextActionDepartmentInput = {
 export type TaskCreateWithoutProjectInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2274,6 +2413,7 @@ export type TaskCreateWithoutProjectInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2299,8 +2439,11 @@ export type TaskUncheckedCreateWithoutProjectInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2365,8 +2508,10 @@ export type TaskUpdateManyWithWhereWithoutProjectInput = {
 export type TaskCreateWithoutCreatedByInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2394,6 +2539,7 @@ export type TaskCreateWithoutCreatedByInput = {
   sourceTask?: Prisma.TaskCreateNestedOneWithoutSplitTasksInput
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2419,8 +2565,11 @@ export type TaskUncheckedCreateWithoutCreatedByInput = {
   sourceTaskId?: string | null
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2466,11 +2615,13 @@ export type TaskCreateManyCreatedByInputEnvelope = {
   skipDuplicates?: boolean
 }
 
-export type TaskCreateWithoutNextActionPrincipalInput = {
+export type TaskCreateWithoutOwnerInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2499,6 +2650,117 @@ export type TaskCreateWithoutNextActionPrincipalInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
+  nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
+  involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutTaskInput
+  dependencies?: Prisma.TaskDependencyCreateNestedManyWithoutTaskInput
+  prerequisiteFor?: Prisma.TaskDependencyCreateNestedManyWithoutPrerequisiteTaskInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutTaskInput
+  resources?: Prisma.TaskResourceCreateNestedManyWithoutTaskInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutTaskInput
+  reviewCycles?: Prisma.TaskReviewCycleCreateNestedManyWithoutTaskInput
+  checklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutTaskInput
+  captureLinks?: Prisma.CaptureTaskCreateNestedManyWithoutTaskInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutTaskInput
+}
+
+export type TaskUncheckedCreateWithoutOwnerInput = {
+  id?: string
+  workspaceId: string
+  organizationId?: string | null
+  leadDepartmentId?: string | null
+  projectId?: string | null
+  parentTaskId?: string | null
+  sourceTaskId?: string | null
+  recurrenceId?: string | null
+  mergedIntoTaskId?: string | null
+  createdByPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
+  title: string
+  description?: string | null
+  currentStep?: string | null
+  status?: $Enums.TaskStatus
+  priority?: $Enums.TaskPriority
+  startDate?: Date | string | null
+  targetDate?: Date | string | null
+  deadline?: Date | string | null
+  followUpDate?: Date | string | null
+  waitingSince?: Date | string | null
+  nextActionKind?: $Enums.NextActionKind
+  nextActionPrincipalId?: string | null
+  nextActionDepartmentId?: string | null
+  nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
+  version?: number
+  legacyLocalId?: string | null
+  archivedAt?: Date | string | null
+  deletedAt?: Date | string | null
+  completedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  subtasks?: Prisma.TaskUncheckedCreateNestedManyWithoutParentTaskInput
+  splitTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutSourceTaskInput
+  involvedDepartments?: Prisma.TaskInvolvedDepartmentUncheckedCreateNestedManyWithoutTaskInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutTaskInput
+  dependencies?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutTaskInput
+  prerequisiteFor?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutPrerequisiteTaskInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutTaskInput
+  resources?: Prisma.TaskResourceUncheckedCreateNestedManyWithoutTaskInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutTaskInput
+  reviewCycles?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutTaskInput
+  checklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutTaskInput
+  captureLinks?: Prisma.CaptureTaskUncheckedCreateNestedManyWithoutTaskInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutTaskInput
+}
+
+export type TaskCreateOrConnectWithoutOwnerInput = {
+  where: Prisma.TaskWhereUniqueInput
+  create: Prisma.XOR<Prisma.TaskCreateWithoutOwnerInput, Prisma.TaskUncheckedCreateWithoutOwnerInput>
+}
+
+export type TaskCreateManyOwnerInputEnvelope = {
+  data: Prisma.TaskCreateManyOwnerInput | Prisma.TaskCreateManyOwnerInput[]
+  skipDuplicates?: boolean
+}
+
+export type TaskCreateWithoutNextActionPrincipalInput = {
+  id?: string
+  mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
+  title: string
+  description?: string | null
+  currentStep?: string | null
+  status?: $Enums.TaskStatus
+  priority?: $Enums.TaskPriority
+  startDate?: Date | string | null
+  targetDate?: Date | string | null
+  deadline?: Date | string | null
+  followUpDate?: Date | string | null
+  waitingSince?: Date | string | null
+  nextActionKind?: $Enums.NextActionKind
+  nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
+  version?: number
+  legacyLocalId?: string | null
+  archivedAt?: Date | string | null
+  deletedAt?: Date | string | null
+  completedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutTasksInput
+  organization?: Prisma.OrganizationCreateNestedOneWithoutTasksInput
+  leadDepartment?: Prisma.DepartmentCreateNestedOneWithoutLeadTasksInput
+  project?: Prisma.ProjectCreateNestedOneWithoutTasksInput
+  parentTask?: Prisma.TaskCreateNestedOneWithoutSubtasksInput
+  subtasks?: Prisma.TaskCreateNestedManyWithoutParentTaskInput
+  sourceTask?: Prisma.TaskCreateNestedOneWithoutSplitTasksInput
+  splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
+  recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
+  createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutTaskInput
@@ -2524,8 +2786,11 @@ export type TaskUncheckedCreateWithoutNextActionPrincipalInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2586,6 +2851,22 @@ export type TaskUpdateManyWithWhereWithoutCreatedByInput = {
   data: Prisma.XOR<Prisma.TaskUpdateManyMutationInput, Prisma.TaskUncheckedUpdateManyWithoutCreatedByInput>
 }
 
+export type TaskUpsertWithWhereUniqueWithoutOwnerInput = {
+  where: Prisma.TaskWhereUniqueInput
+  update: Prisma.XOR<Prisma.TaskUpdateWithoutOwnerInput, Prisma.TaskUncheckedUpdateWithoutOwnerInput>
+  create: Prisma.XOR<Prisma.TaskCreateWithoutOwnerInput, Prisma.TaskUncheckedCreateWithoutOwnerInput>
+}
+
+export type TaskUpdateWithWhereUniqueWithoutOwnerInput = {
+  where: Prisma.TaskWhereUniqueInput
+  data: Prisma.XOR<Prisma.TaskUpdateWithoutOwnerInput, Prisma.TaskUncheckedUpdateWithoutOwnerInput>
+}
+
+export type TaskUpdateManyWithWhereWithoutOwnerInput = {
+  where: Prisma.TaskScalarWhereInput
+  data: Prisma.XOR<Prisma.TaskUpdateManyMutationInput, Prisma.TaskUncheckedUpdateManyWithoutOwnerInput>
+}
+
 export type TaskUpsertWithWhereUniqueWithoutNextActionPrincipalInput = {
   where: Prisma.TaskWhereUniqueInput
   update: Prisma.XOR<Prisma.TaskUpdateWithoutNextActionPrincipalInput, Prisma.TaskUncheckedUpdateWithoutNextActionPrincipalInput>
@@ -2605,8 +2886,10 @@ export type TaskUpdateManyWithWhereWithoutNextActionPrincipalInput = {
 export type TaskCreateWithoutSubtasksInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2634,6 +2917,7 @@ export type TaskCreateWithoutSubtasksInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2660,8 +2944,11 @@ export type TaskUncheckedCreateWithoutSubtasksInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2704,8 +2991,10 @@ export type TaskCreateOrConnectWithoutSubtasksInput = {
 export type TaskCreateWithoutParentTaskInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2733,6 +3022,7 @@ export type TaskCreateWithoutParentTaskInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2758,8 +3048,11 @@ export type TaskUncheckedCreateWithoutParentTaskInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2808,8 +3101,10 @@ export type TaskCreateManyParentTaskInputEnvelope = {
 export type TaskCreateWithoutSplitTasksInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2837,6 +3132,7 @@ export type TaskCreateWithoutSplitTasksInput = {
   sourceTask?: Prisma.TaskCreateNestedOneWithoutSplitTasksInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2863,8 +3159,11 @@ export type TaskUncheckedCreateWithoutSplitTasksInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2907,8 +3206,10 @@ export type TaskCreateOrConnectWithoutSplitTasksInput = {
 export type TaskCreateWithoutSourceTaskInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -2936,6 +3237,7 @@ export type TaskCreateWithoutSourceTaskInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -2961,8 +3263,11 @@ export type TaskUncheckedCreateWithoutSourceTaskInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3022,8 +3327,10 @@ export type TaskUpdateToOneWithWhereWithoutSubtasksInput = {
 export type TaskUpdateWithoutSubtasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3051,6 +3358,7 @@ export type TaskUpdateWithoutSubtasksInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -3077,8 +3385,11 @@ export type TaskUncheckedUpdateWithoutSubtasksInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3143,8 +3454,10 @@ export type TaskUpdateToOneWithWhereWithoutSplitTasksInput = {
 export type TaskUpdateWithoutSplitTasksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3172,6 +3485,7 @@ export type TaskUpdateWithoutSplitTasksInput = {
   sourceTask?: Prisma.TaskUpdateOneWithoutSplitTasksNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -3198,8 +3512,11 @@ export type TaskUncheckedUpdateWithoutSplitTasksInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3253,8 +3570,10 @@ export type TaskUpdateManyWithWhereWithoutSourceTaskInput = {
 export type TaskCreateWithoutChecklistItemsInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3283,6 +3602,7 @@ export type TaskCreateWithoutChecklistItemsInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -3308,8 +3628,11 @@ export type TaskUncheckedCreateWithoutChecklistItemsInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3363,8 +3686,10 @@ export type TaskUpdateToOneWithWhereWithoutChecklistItemsInput = {
 export type TaskUpdateWithoutChecklistItemsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3393,6 +3718,7 @@ export type TaskUpdateWithoutChecklistItemsInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -3418,8 +3744,11 @@ export type TaskUncheckedUpdateWithoutChecklistItemsInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3457,8 +3786,10 @@ export type TaskUncheckedUpdateWithoutChecklistItemsInput = {
 export type TaskCreateWithoutRecurrenceInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3486,6 +3817,7 @@ export type TaskCreateWithoutRecurrenceInput = {
   sourceTask?: Prisma.TaskCreateNestedOneWithoutSplitTasksInput
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -3511,8 +3843,11 @@ export type TaskUncheckedCreateWithoutRecurrenceInput = {
   sourceTaskId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3577,8 +3912,10 @@ export type TaskUpdateManyWithWhereWithoutRecurrenceInput = {
 export type TaskCreateWithoutInvolvedDepartmentsInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3607,6 +3944,7 @@ export type TaskCreateWithoutInvolvedDepartmentsInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutTaskInput
@@ -3632,8 +3970,11 @@ export type TaskUncheckedCreateWithoutInvolvedDepartmentsInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3687,8 +4028,10 @@ export type TaskUpdateToOneWithWhereWithoutInvolvedDepartmentsInput = {
 export type TaskUpdateWithoutInvolvedDepartmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3717,6 +4060,7 @@ export type TaskUpdateWithoutInvolvedDepartmentsInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutTaskNestedInput
@@ -3742,8 +4086,11 @@ export type TaskUncheckedUpdateWithoutInvolvedDepartmentsInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3781,8 +4128,10 @@ export type TaskUncheckedUpdateWithoutInvolvedDepartmentsInput = {
 export type TaskCreateWithoutAssignmentsInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3811,6 +4160,7 @@ export type TaskCreateWithoutAssignmentsInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -3836,8 +4186,11 @@ export type TaskUncheckedCreateWithoutAssignmentsInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -3891,8 +4244,10 @@ export type TaskUpdateToOneWithWhereWithoutAssignmentsInput = {
 export type TaskUpdateWithoutAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3921,6 +4276,7 @@ export type TaskUpdateWithoutAssignmentsInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -3946,8 +4302,11 @@ export type TaskUncheckedUpdateWithoutAssignmentsInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3985,8 +4344,10 @@ export type TaskUncheckedUpdateWithoutAssignmentsInput = {
 export type TaskCreateWithoutDependenciesInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4015,6 +4376,7 @@ export type TaskCreateWithoutDependenciesInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -4040,8 +4402,11 @@ export type TaskUncheckedCreateWithoutDependenciesInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4084,8 +4449,10 @@ export type TaskCreateOrConnectWithoutDependenciesInput = {
 export type TaskCreateWithoutPrerequisiteForInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4114,6 +4481,7 @@ export type TaskCreateWithoutPrerequisiteForInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -4139,8 +4507,11 @@ export type TaskUncheckedCreateWithoutPrerequisiteForInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4194,8 +4565,10 @@ export type TaskUpdateToOneWithWhereWithoutDependenciesInput = {
 export type TaskUpdateWithoutDependenciesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4224,6 +4597,7 @@ export type TaskUpdateWithoutDependenciesInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -4249,8 +4623,11 @@ export type TaskUncheckedUpdateWithoutDependenciesInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4299,8 +4676,10 @@ export type TaskUpdateToOneWithWhereWithoutPrerequisiteForInput = {
 export type TaskUpdateWithoutPrerequisiteForInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4329,6 +4708,7 @@ export type TaskUpdateWithoutPrerequisiteForInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -4354,8 +4734,11 @@ export type TaskUncheckedUpdateWithoutPrerequisiteForInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4393,8 +4776,10 @@ export type TaskUncheckedUpdateWithoutPrerequisiteForInput = {
 export type TaskCreateWithoutReviewCyclesInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4423,6 +4808,7 @@ export type TaskCreateWithoutReviewCyclesInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -4448,8 +4834,11 @@ export type TaskUncheckedCreateWithoutReviewCyclesInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4503,8 +4892,10 @@ export type TaskUpdateToOneWithWhereWithoutReviewCyclesInput = {
 export type TaskUpdateWithoutReviewCyclesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4533,6 +4924,7 @@ export type TaskUpdateWithoutReviewCyclesInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -4558,8 +4950,11 @@ export type TaskUncheckedUpdateWithoutReviewCyclesInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4597,8 +4992,10 @@ export type TaskUncheckedUpdateWithoutReviewCyclesInput = {
 export type TaskCreateWithoutUpdatesInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4627,6 +5024,7 @@ export type TaskCreateWithoutUpdatesInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -4652,8 +5050,11 @@ export type TaskUncheckedCreateWithoutUpdatesInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4707,8 +5108,10 @@ export type TaskUpdateToOneWithWhereWithoutUpdatesInput = {
 export type TaskUpdateWithoutUpdatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4737,6 +5140,7 @@ export type TaskUpdateWithoutUpdatesInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -4762,8 +5166,11 @@ export type TaskUncheckedUpdateWithoutUpdatesInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4801,8 +5208,10 @@ export type TaskUncheckedUpdateWithoutUpdatesInput = {
 export type TaskCreateWithoutResourcesInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4831,6 +5240,7 @@ export type TaskCreateWithoutResourcesInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -4856,8 +5266,11 @@ export type TaskUncheckedCreateWithoutResourcesInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -4911,8 +5324,10 @@ export type TaskUpdateToOneWithWhereWithoutResourcesInput = {
 export type TaskUpdateWithoutResourcesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4941,6 +5356,7 @@ export type TaskUpdateWithoutResourcesInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -4966,8 +5382,11 @@ export type TaskUncheckedUpdateWithoutResourcesInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5005,8 +5424,10 @@ export type TaskUncheckedUpdateWithoutResourcesInput = {
 export type TaskCreateWithoutEventsInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5035,6 +5456,7 @@ export type TaskCreateWithoutEventsInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -5060,8 +5482,11 @@ export type TaskUncheckedCreateWithoutEventsInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5115,8 +5540,10 @@ export type TaskUpdateToOneWithWhereWithoutEventsInput = {
 export type TaskUpdateWithoutEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5145,6 +5572,7 @@ export type TaskUpdateWithoutEventsInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -5170,8 +5598,11 @@ export type TaskUncheckedUpdateWithoutEventsInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5209,8 +5640,10 @@ export type TaskUncheckedUpdateWithoutEventsInput = {
 export type TaskCreateWithoutCaptureLinksInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5239,6 +5672,7 @@ export type TaskCreateWithoutCaptureLinksInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -5264,8 +5698,11 @@ export type TaskUncheckedCreateWithoutCaptureLinksInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5319,8 +5756,10 @@ export type TaskUpdateToOneWithWhereWithoutCaptureLinksInput = {
 export type TaskUpdateWithoutCaptureLinksInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5349,6 +5788,7 @@ export type TaskUpdateWithoutCaptureLinksInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -5374,8 +5814,11 @@ export type TaskUncheckedUpdateWithoutCaptureLinksInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5413,8 +5856,10 @@ export type TaskUncheckedUpdateWithoutCaptureLinksInput = {
 export type TaskCreateWithoutNudgeStatesInput = {
   id?: string
   mergedIntoTaskId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5443,6 +5888,7 @@ export type TaskCreateWithoutNudgeStatesInput = {
   splitTasks?: Prisma.TaskCreateNestedManyWithoutSourceTaskInput
   recurrence?: Prisma.TaskRecurrenceCreateNestedOneWithoutTasksInput
   createdBy?: Prisma.PrincipalCreateNestedOneWithoutCreatedTasksInput
+  owner?: Prisma.PrincipalCreateNestedOneWithoutOwnedTasksInput
   nextActionPrincipal?: Prisma.PrincipalCreateNestedOneWithoutNextActionTasksInput
   nextActionDepartment?: Prisma.DepartmentCreateNestedOneWithoutNextActionTasksInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentCreateNestedManyWithoutTaskInput
@@ -5468,8 +5914,11 @@ export type TaskUncheckedCreateWithoutNudgeStatesInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5523,8 +5972,10 @@ export type TaskUpdateToOneWithWhereWithoutNudgeStatesInput = {
 export type TaskUpdateWithoutNudgeStatesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5553,6 +6004,7 @@ export type TaskUpdateWithoutNudgeStatesInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -5578,8 +6030,11 @@ export type TaskUncheckedUpdateWithoutNudgeStatesInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5624,8 +6079,11 @@ export type TaskCreateManyWorkspaceInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5651,8 +6109,10 @@ export type TaskCreateManyWorkspaceInput = {
 export type TaskUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5680,6 +6140,7 @@ export type TaskUpdateWithoutWorkspaceInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -5705,8 +6166,11 @@ export type TaskUncheckedUpdateWithoutWorkspaceInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5752,8 +6216,11 @@ export type TaskUncheckedUpdateManyWithoutWorkspaceInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5786,8 +6253,11 @@ export type TaskCreateManyOrganizationInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5813,8 +6283,10 @@ export type TaskCreateManyOrganizationInput = {
 export type TaskUpdateWithoutOrganizationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5842,6 +6314,7 @@ export type TaskUpdateWithoutOrganizationInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -5867,8 +6340,11 @@ export type TaskUncheckedUpdateWithoutOrganizationInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5914,8 +6390,11 @@ export type TaskUncheckedUpdateManyWithoutOrganizationInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5948,8 +6427,11 @@ export type TaskCreateManyLeadDepartmentInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -5983,8 +6465,11 @@ export type TaskCreateManyNextActionDepartmentInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -6009,8 +6494,10 @@ export type TaskCreateManyNextActionDepartmentInput = {
 export type TaskUpdateWithoutLeadDepartmentInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6038,6 +6525,7 @@ export type TaskUpdateWithoutLeadDepartmentInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -6063,8 +6551,11 @@ export type TaskUncheckedUpdateWithoutLeadDepartmentInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6110,8 +6601,11 @@ export type TaskUncheckedUpdateManyWithoutLeadDepartmentInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6137,8 +6631,10 @@ export type TaskUncheckedUpdateManyWithoutLeadDepartmentInput = {
 export type TaskUpdateWithoutNextActionDepartmentInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6167,6 +6663,7 @@ export type TaskUpdateWithoutNextActionDepartmentInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutTaskNestedInput
@@ -6192,8 +6689,11 @@ export type TaskUncheckedUpdateWithoutNextActionDepartmentInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6239,8 +6739,11 @@ export type TaskUncheckedUpdateManyWithoutNextActionDepartmentInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6272,8 +6775,11 @@ export type TaskCreateManyProjectInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -6299,8 +6805,10 @@ export type TaskCreateManyProjectInput = {
 export type TaskUpdateWithoutProjectInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6328,6 +6836,7 @@ export type TaskUpdateWithoutProjectInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -6353,8 +6862,11 @@ export type TaskUncheckedUpdateWithoutProjectInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6400,8 +6912,11 @@ export type TaskUncheckedUpdateManyWithoutProjectInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6434,8 +6949,48 @@ export type TaskCreateManyCreatedByInput = {
   sourceTaskId?: string | null
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
+  status?: $Enums.TaskStatus
+  priority?: $Enums.TaskPriority
+  startDate?: Date | string | null
+  targetDate?: Date | string | null
+  deadline?: Date | string | null
+  followUpDate?: Date | string | null
+  waitingSince?: Date | string | null
+  nextActionKind?: $Enums.NextActionKind
+  nextActionPrincipalId?: string | null
+  nextActionDepartmentId?: string | null
+  nextActionExternalLabel?: string | null
+  estimatedMinutes?: number | null
+  actualMinutes?: number | null
+  version?: number
+  legacyLocalId?: string | null
+  archivedAt?: Date | string | null
+  deletedAt?: Date | string | null
+  completedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type TaskCreateManyOwnerInput = {
+  id?: string
+  workspaceId: string
+  organizationId?: string | null
+  leadDepartmentId?: string | null
+  projectId?: string | null
+  parentTaskId?: string | null
+  sourceTaskId?: string | null
+  recurrenceId?: string | null
+  mergedIntoTaskId?: string | null
+  createdByPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
+  title: string
+  description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -6469,8 +7024,11 @@ export type TaskCreateManyNextActionPrincipalInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -6495,8 +7053,10 @@ export type TaskCreateManyNextActionPrincipalInput = {
 export type TaskUpdateWithoutCreatedByInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6524,6 +7084,7 @@ export type TaskUpdateWithoutCreatedByInput = {
   sourceTask?: Prisma.TaskUpdateOneWithoutSplitTasksNestedInput
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -6549,8 +7110,11 @@ export type TaskUncheckedUpdateWithoutCreatedByInput = {
   sourceTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6596,8 +7160,11 @@ export type TaskUncheckedUpdateManyWithoutCreatedByInput = {
   sourceTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6620,11 +7187,13 @@ export type TaskUncheckedUpdateManyWithoutCreatedByInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
-export type TaskUpdateWithoutNextActionPrincipalInput = {
+export type TaskUpdateWithoutOwnerInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6653,6 +7222,144 @@ export type TaskUpdateWithoutNextActionPrincipalInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
+  nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
+  involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutTaskNestedInput
+  dependencies?: Prisma.TaskDependencyUpdateManyWithoutTaskNestedInput
+  prerequisiteFor?: Prisma.TaskDependencyUpdateManyWithoutPrerequisiteTaskNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutTaskNestedInput
+  resources?: Prisma.TaskResourceUpdateManyWithoutTaskNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutTaskNestedInput
+  reviewCycles?: Prisma.TaskReviewCycleUpdateManyWithoutTaskNestedInput
+  checklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutTaskNestedInput
+  captureLinks?: Prisma.CaptureTaskUpdateManyWithoutTaskNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutTaskNestedInput
+}
+
+export type TaskUncheckedUpdateWithoutOwnerInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  leadDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  projectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  parentTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sourceTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
+  priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
+  startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  targetDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deadline?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  followUpDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
+  nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  version?: Prisma.IntFieldUpdateOperationsInput | number
+  legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  subtasks?: Prisma.TaskUncheckedUpdateManyWithoutParentTaskNestedInput
+  splitTasks?: Prisma.TaskUncheckedUpdateManyWithoutSourceTaskNestedInput
+  involvedDepartments?: Prisma.TaskInvolvedDepartmentUncheckedUpdateManyWithoutTaskNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutTaskNestedInput
+  dependencies?: Prisma.TaskDependencyUncheckedUpdateManyWithoutTaskNestedInput
+  prerequisiteFor?: Prisma.TaskDependencyUncheckedUpdateManyWithoutPrerequisiteTaskNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutTaskNestedInput
+  resources?: Prisma.TaskResourceUncheckedUpdateManyWithoutTaskNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutTaskNestedInput
+  reviewCycles?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutTaskNestedInput
+  checklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutTaskNestedInput
+  captureLinks?: Prisma.CaptureTaskUncheckedUpdateManyWithoutTaskNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutTaskNestedInput
+}
+
+export type TaskUncheckedUpdateManyWithoutOwnerInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  leadDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  projectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  parentTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sourceTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
+  priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
+  startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  targetDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deadline?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  followUpDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
+  nextActionPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nextActionDepartmentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  version?: Prisma.IntFieldUpdateOperationsInput | number
+  legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type TaskUpdateWithoutNextActionPrincipalInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
+  priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
+  startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  targetDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deadline?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  followUpDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  waitingSince?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  nextActionKind?: Prisma.EnumNextActionKindFieldUpdateOperationsInput | $Enums.NextActionKind
+  nextActionExternalLabel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  estimatedMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  actualMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  version?: Prisma.IntFieldUpdateOperationsInput | number
+  legacyLocalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archivedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutTasksNestedInput
+  organization?: Prisma.OrganizationUpdateOneWithoutTasksNestedInput
+  leadDepartment?: Prisma.DepartmentUpdateOneWithoutLeadTasksNestedInput
+  project?: Prisma.ProjectUpdateOneWithoutTasksNestedInput
+  parentTask?: Prisma.TaskUpdateOneWithoutSubtasksNestedInput
+  subtasks?: Prisma.TaskUpdateManyWithoutParentTaskNestedInput
+  sourceTask?: Prisma.TaskUpdateOneWithoutSplitTasksNestedInput
+  splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
+  recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
+  createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutTaskNestedInput
@@ -6678,8 +7385,11 @@ export type TaskUncheckedUpdateWithoutNextActionPrincipalInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6725,8 +7435,11 @@ export type TaskUncheckedUpdateManyWithoutNextActionPrincipalInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6758,8 +7471,11 @@ export type TaskCreateManyParentTaskInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -6792,8 +7508,11 @@ export type TaskCreateManySourceTaskInput = {
   recurrenceId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -6819,8 +7538,10 @@ export type TaskCreateManySourceTaskInput = {
 export type TaskUpdateWithoutParentTaskInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6848,6 +7569,7 @@ export type TaskUpdateWithoutParentTaskInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -6873,8 +7595,11 @@ export type TaskUncheckedUpdateWithoutParentTaskInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6920,8 +7645,11 @@ export type TaskUncheckedUpdateManyWithoutParentTaskInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6947,8 +7675,10 @@ export type TaskUncheckedUpdateManyWithoutParentTaskInput = {
 export type TaskUpdateWithoutSourceTaskInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -6976,6 +7706,7 @@ export type TaskUpdateWithoutSourceTaskInput = {
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   recurrence?: Prisma.TaskRecurrenceUpdateOneWithoutTasksNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -7001,8 +7732,11 @@ export type TaskUncheckedUpdateWithoutSourceTaskInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -7048,8 +7782,11 @@ export type TaskUncheckedUpdateManyWithoutSourceTaskInput = {
   recurrenceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -7082,8 +7819,11 @@ export type TaskCreateManyRecurrenceInput = {
   sourceTaskId?: string | null
   mergedIntoTaskId?: string | null
   createdByPrincipalId?: string | null
+  ownerPrincipalId?: string | null
+  ownerInferredFromCreator?: boolean
   title: string
   description?: string | null
+  currentStep?: string | null
   status?: $Enums.TaskStatus
   priority?: $Enums.TaskPriority
   startDate?: Date | string | null
@@ -7109,8 +7849,10 @@ export type TaskCreateManyRecurrenceInput = {
 export type TaskUpdateWithoutRecurrenceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -7138,6 +7880,7 @@ export type TaskUpdateWithoutRecurrenceInput = {
   sourceTask?: Prisma.TaskUpdateOneWithoutSplitTasksNestedInput
   splitTasks?: Prisma.TaskUpdateManyWithoutSourceTaskNestedInput
   createdBy?: Prisma.PrincipalUpdateOneWithoutCreatedTasksNestedInput
+  owner?: Prisma.PrincipalUpdateOneWithoutOwnedTasksNestedInput
   nextActionPrincipal?: Prisma.PrincipalUpdateOneWithoutNextActionTasksNestedInput
   nextActionDepartment?: Prisma.DepartmentUpdateOneWithoutNextActionTasksNestedInput
   involvedDepartments?: Prisma.TaskInvolvedDepartmentUpdateManyWithoutTaskNestedInput
@@ -7163,8 +7906,11 @@ export type TaskUncheckedUpdateWithoutRecurrenceInput = {
   sourceTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -7210,8 +7956,11 @@ export type TaskUncheckedUpdateManyWithoutRecurrenceInput = {
   sourceTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mergedIntoTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdByPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerPrincipalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ownerInferredFromCreator?: Prisma.BoolFieldUpdateOperationsInput | boolean
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus
   priority?: Prisma.EnumTaskPriorityFieldUpdateOperationsInput | $Enums.TaskPriority
   startDate?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -7384,8 +8133,11 @@ export type TaskSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   recurrenceId?: boolean
   mergedIntoTaskId?: boolean
   createdByPrincipalId?: boolean
+  ownerPrincipalId?: boolean
+  ownerInferredFromCreator?: boolean
   title?: boolean
   description?: boolean
+  currentStep?: boolean
   status?: boolean
   priority?: boolean
   startDate?: boolean
@@ -7416,6 +8168,7 @@ export type TaskSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   splitTasks?: boolean | Prisma.Task$splitTasksArgs<ExtArgs>
   recurrence?: boolean | Prisma.Task$recurrenceArgs<ExtArgs>
   createdBy?: boolean | Prisma.Task$createdByArgs<ExtArgs>
+  owner?: boolean | Prisma.Task$ownerArgs<ExtArgs>
   nextActionPrincipal?: boolean | Prisma.Task$nextActionPrincipalArgs<ExtArgs>
   nextActionDepartment?: boolean | Prisma.Task$nextActionDepartmentArgs<ExtArgs>
   involvedDepartments?: boolean | Prisma.Task$involvedDepartmentsArgs<ExtArgs>
@@ -7443,8 +8196,11 @@ export type TaskSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   recurrenceId?: boolean
   mergedIntoTaskId?: boolean
   createdByPrincipalId?: boolean
+  ownerPrincipalId?: boolean
+  ownerInferredFromCreator?: boolean
   title?: boolean
   description?: boolean
+  currentStep?: boolean
   status?: boolean
   priority?: boolean
   startDate?: boolean
@@ -7473,6 +8229,7 @@ export type TaskSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   sourceTask?: boolean | Prisma.Task$sourceTaskArgs<ExtArgs>
   recurrence?: boolean | Prisma.Task$recurrenceArgs<ExtArgs>
   createdBy?: boolean | Prisma.Task$createdByArgs<ExtArgs>
+  owner?: boolean | Prisma.Task$ownerArgs<ExtArgs>
   nextActionPrincipal?: boolean | Prisma.Task$nextActionPrincipalArgs<ExtArgs>
   nextActionDepartment?: boolean | Prisma.Task$nextActionDepartmentArgs<ExtArgs>
 }, ExtArgs["result"]["task"]>
@@ -7488,8 +8245,11 @@ export type TaskSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   recurrenceId?: boolean
   mergedIntoTaskId?: boolean
   createdByPrincipalId?: boolean
+  ownerPrincipalId?: boolean
+  ownerInferredFromCreator?: boolean
   title?: boolean
   description?: boolean
+  currentStep?: boolean
   status?: boolean
   priority?: boolean
   startDate?: boolean
@@ -7518,6 +8278,7 @@ export type TaskSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   sourceTask?: boolean | Prisma.Task$sourceTaskArgs<ExtArgs>
   recurrence?: boolean | Prisma.Task$recurrenceArgs<ExtArgs>
   createdBy?: boolean | Prisma.Task$createdByArgs<ExtArgs>
+  owner?: boolean | Prisma.Task$ownerArgs<ExtArgs>
   nextActionPrincipal?: boolean | Prisma.Task$nextActionPrincipalArgs<ExtArgs>
   nextActionDepartment?: boolean | Prisma.Task$nextActionDepartmentArgs<ExtArgs>
 }, ExtArgs["result"]["task"]>
@@ -7533,8 +8294,11 @@ export type TaskSelectScalar = {
   recurrenceId?: boolean
   mergedIntoTaskId?: boolean
   createdByPrincipalId?: boolean
+  ownerPrincipalId?: boolean
+  ownerInferredFromCreator?: boolean
   title?: boolean
   description?: boolean
+  currentStep?: boolean
   status?: boolean
   priority?: boolean
   startDate?: boolean
@@ -7557,7 +8321,7 @@ export type TaskSelectScalar = {
   updatedAt?: boolean
 }
 
-export type TaskOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "organizationId" | "leadDepartmentId" | "projectId" | "parentTaskId" | "sourceTaskId" | "recurrenceId" | "mergedIntoTaskId" | "createdByPrincipalId" | "title" | "description" | "status" | "priority" | "startDate" | "targetDate" | "deadline" | "followUpDate" | "waitingSince" | "nextActionKind" | "nextActionPrincipalId" | "nextActionDepartmentId" | "nextActionExternalLabel" | "estimatedMinutes" | "actualMinutes" | "version" | "legacyLocalId" | "archivedAt" | "deletedAt" | "completedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["task"]>
+export type TaskOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "organizationId" | "leadDepartmentId" | "projectId" | "parentTaskId" | "sourceTaskId" | "recurrenceId" | "mergedIntoTaskId" | "createdByPrincipalId" | "ownerPrincipalId" | "ownerInferredFromCreator" | "title" | "description" | "currentStep" | "status" | "priority" | "startDate" | "targetDate" | "deadline" | "followUpDate" | "waitingSince" | "nextActionKind" | "nextActionPrincipalId" | "nextActionDepartmentId" | "nextActionExternalLabel" | "estimatedMinutes" | "actualMinutes" | "version" | "legacyLocalId" | "archivedAt" | "deletedAt" | "completedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["task"]>
 export type TaskInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   organization?: boolean | Prisma.Task$organizationArgs<ExtArgs>
@@ -7569,6 +8333,7 @@ export type TaskInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   splitTasks?: boolean | Prisma.Task$splitTasksArgs<ExtArgs>
   recurrence?: boolean | Prisma.Task$recurrenceArgs<ExtArgs>
   createdBy?: boolean | Prisma.Task$createdByArgs<ExtArgs>
+  owner?: boolean | Prisma.Task$ownerArgs<ExtArgs>
   nextActionPrincipal?: boolean | Prisma.Task$nextActionPrincipalArgs<ExtArgs>
   nextActionDepartment?: boolean | Prisma.Task$nextActionDepartmentArgs<ExtArgs>
   involvedDepartments?: boolean | Prisma.Task$involvedDepartmentsArgs<ExtArgs>
@@ -7593,6 +8358,7 @@ export type TaskIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   sourceTask?: boolean | Prisma.Task$sourceTaskArgs<ExtArgs>
   recurrence?: boolean | Prisma.Task$recurrenceArgs<ExtArgs>
   createdBy?: boolean | Prisma.Task$createdByArgs<ExtArgs>
+  owner?: boolean | Prisma.Task$ownerArgs<ExtArgs>
   nextActionPrincipal?: boolean | Prisma.Task$nextActionPrincipalArgs<ExtArgs>
   nextActionDepartment?: boolean | Prisma.Task$nextActionDepartmentArgs<ExtArgs>
 }
@@ -7605,6 +8371,7 @@ export type TaskIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   sourceTask?: boolean | Prisma.Task$sourceTaskArgs<ExtArgs>
   recurrence?: boolean | Prisma.Task$recurrenceArgs<ExtArgs>
   createdBy?: boolean | Prisma.Task$createdByArgs<ExtArgs>
+  owner?: boolean | Prisma.Task$ownerArgs<ExtArgs>
   nextActionPrincipal?: boolean | Prisma.Task$nextActionPrincipalArgs<ExtArgs>
   nextActionDepartment?: boolean | Prisma.Task$nextActionDepartmentArgs<ExtArgs>
 }
@@ -7622,6 +8389,7 @@ export type $TaskPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     splitTasks: Prisma.$TaskPayload<ExtArgs>[]
     recurrence: Prisma.$TaskRecurrencePayload<ExtArgs> | null
     createdBy: Prisma.$PrincipalPayload<ExtArgs> | null
+    owner: Prisma.$PrincipalPayload<ExtArgs> | null
     nextActionPrincipal: Prisma.$PrincipalPayload<ExtArgs> | null
     nextActionDepartment: Prisma.$DepartmentPayload<ExtArgs> | null
     involvedDepartments: Prisma.$TaskInvolvedDepartmentPayload<ExtArgs>[]
@@ -7647,8 +8415,23 @@ export type $TaskPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     recurrenceId: string | null
     mergedIntoTaskId: string | null
     createdByPrincipalId: string | null
+    /**
+     * The accountable Person for the overall deliverable. This is separate
+     * from the single assignment currently responsible for the next move.
+     */
+    ownerPrincipalId: string | null
+    /**
+     * Marks the conservative migration default from createdByPrincipalId so
+     * authorized users can review ambiguous legacy ownership.
+     */
+    ownerInferredFromCreator: boolean
     title: string
     description: string | null
+    /**
+     * Optional human workflow step. A task title remains the implicit step
+     * when this is intentionally unset on simple work.
+     */
+    currentStep: string | null
     status: $Enums.TaskStatus
     priority: $Enums.TaskPriority
     startDate: Date | null
@@ -8073,6 +8856,7 @@ export interface Prisma__TaskClient<T, Null = never, ExtArgs extends runtime.Typ
   splitTasks<T extends Prisma.Task$splitTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$splitTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   recurrence<T extends Prisma.Task$recurrenceArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$recurrenceArgs<ExtArgs>>): Prisma.Prisma__TaskRecurrenceClient<runtime.Types.Result.GetResult<Prisma.$TaskRecurrencePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   createdBy<T extends Prisma.Task$createdByArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$createdByArgs<ExtArgs>>): Prisma.Prisma__PrincipalClient<runtime.Types.Result.GetResult<Prisma.$PrincipalPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  owner<T extends Prisma.Task$ownerArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$ownerArgs<ExtArgs>>): Prisma.Prisma__PrincipalClient<runtime.Types.Result.GetResult<Prisma.$PrincipalPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   nextActionPrincipal<T extends Prisma.Task$nextActionPrincipalArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$nextActionPrincipalArgs<ExtArgs>>): Prisma.Prisma__PrincipalClient<runtime.Types.Result.GetResult<Prisma.$PrincipalPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   nextActionDepartment<T extends Prisma.Task$nextActionDepartmentArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$nextActionDepartmentArgs<ExtArgs>>): Prisma.Prisma__DepartmentClient<runtime.Types.Result.GetResult<Prisma.$DepartmentPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   involvedDepartments<T extends Prisma.Task$involvedDepartmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Task$involvedDepartmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskInvolvedDepartmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -8125,8 +8909,11 @@ export interface TaskFieldRefs {
   readonly recurrenceId: Prisma.FieldRef<"Task", 'String'>
   readonly mergedIntoTaskId: Prisma.FieldRef<"Task", 'String'>
   readonly createdByPrincipalId: Prisma.FieldRef<"Task", 'String'>
+  readonly ownerPrincipalId: Prisma.FieldRef<"Task", 'String'>
+  readonly ownerInferredFromCreator: Prisma.FieldRef<"Task", 'Boolean'>
   readonly title: Prisma.FieldRef<"Task", 'String'>
   readonly description: Prisma.FieldRef<"Task", 'String'>
+  readonly currentStep: Prisma.FieldRef<"Task", 'String'>
   readonly status: Prisma.FieldRef<"Task", 'TaskStatus'>
   readonly priority: Prisma.FieldRef<"Task", 'TaskPriority'>
   readonly startDate: Prisma.FieldRef<"Task", 'DateTime'>
@@ -8713,6 +9500,25 @@ export type Task$recurrenceArgs<ExtArgs extends runtime.Types.Extensions.Interna
  * Task.createdBy
  */
 export type Task$createdByArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Principal
+   */
+  select?: Prisma.PrincipalSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Principal
+   */
+  omit?: Prisma.PrincipalOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PrincipalInclude<ExtArgs> | null
+  where?: Prisma.PrincipalWhereInput
+}
+
+/**
+ * Task.owner
+ */
+export type Task$ownerArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   /**
    * Select specific fields to fetch from the Principal
    */

@@ -371,6 +371,7 @@ model Principal {
   assignments                TaskAssignment[]            @relation("AssignedPrincipal")
   assignedBy                 TaskAssignment[]            @relation("AssignedByPrincipal")
   createdTasks               Task[]                      @relation("TaskCreator")
+  ownedTasks                 Task[]                      @relation("TaskOwner")
   createdProjects            Project[]                   @relation("ProjectCreator")
   projectMemberships         ProjectMember[]
   milestoneOwnership         ProjectMilestone[]
@@ -684,8 +685,17 @@ model Task {
   recurrenceId            String?
   mergedIntoTaskId        String?
   createdByPrincipalId    String?
+  /// The accountable Person for the overall deliverable. This is separate
+  /// from the single assignment currently responsible for the next move.
+  ownerPrincipalId        String?
+  /// Marks the conservative migration default from createdByPrincipalId so
+  /// authorized users can review ambiguous legacy ownership.
+  ownerInferredFromCreator Boolean                  @default(false)
   title                   String
   description             String?
+  /// Optional human workflow step. A task title remains the implicit step
+  /// when this is intentionally unset on simple work.
+  currentStep             String?
   status                  TaskStatus               @default(READY)
   priority                TaskPriority             @default(MEDIUM)
   startDate               DateTime?                @db.Date
@@ -719,6 +729,7 @@ model Task {
   splitTasks              Task[]                   @relation("TaskSplitSource")
   recurrence              TaskRecurrence?          @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
   createdBy               Principal?               @relation("TaskCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
+  owner                   Principal?               @relation("TaskOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
   nextActionPrincipal     Principal?               @relation("NextActionPrincipal", fields: [nextActionPrincipalId], references: [id], onDelete: SetNull)
   nextActionDepartment    Department?              @relation("NextActionDepartment", fields: [nextActionDepartmentId], references: [id], onDelete: SetNull)
   involvedDepartments     TaskInvolvedDepartment[]
@@ -740,6 +751,7 @@ model Task {
   @@index([parentTaskId])
   @@index([sourceTaskId])
   @@index([recurrenceId])
+  @@index([ownerPrincipalId])
 }
 
 model TaskChecklistItem {

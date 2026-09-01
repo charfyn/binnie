@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ORGANIZATION_COLOR_KEYS } from "@/lib/organization-colors";
 import { TASK_LIST_COLUMN_IDS } from "@/lib/task-list";
+import { isValidTaskIsoDate } from "@/lib/task-dates";
 import { TASK_WORKSPACE_SCOPES } from "@/lib/work-types";
 import {
   addCanonicalTaskFile,
@@ -28,11 +29,15 @@ import {
   applyCanonicalWorkflowTemplate,
   archiveCanonicalWorkflowTemplate,
   claimCanonicalTask,
+  completeCanonicalTaskStep,
   createCanonicalSubtask,
   createCanonicalTask,
   createCanonicalWorkflowTemplate,
   updateCanonicalWorkflowTemplate,
+  findCanonicalCaptureTaskMatches,
   createCanonicalProject,
+  getCanonicalTask,
+  getCanonicalTaskResponsibilityOptions,
   getCanonicalTaskScope,
   deleteCanonicalProject,
   archiveCanonicalProject,
@@ -54,9 +59,11 @@ import {
   saveCanonicalTaskListColumns,
   setCanonicalTaskRecurrence,
   setCanonicalAssignments,
+  setCanonicalTaskOwner,
   setCanonicalNudgeState,
   setCanonicalProjectMembers,
   submitCanonicalTaskForReview,
+  reassignCanonicalTask,
   transitionCanonicalTask,
   splitCanonicalTask,
   toggleCanonicalChecklistItem,
@@ -65,7 +72,10 @@ import {
 } from "@/data/tasks";
 
 const id = z.string().min(1).max(128);
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
+const calendarDate = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isValidTaskIsoDate, "Please enter a valid date in YYYY/MM/DD format.");
+const date = calendarDate.nullable().optional();
 const nextAction = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("principal"), principalId: id }),
   z.object({ kind: z.literal("department"), departmentId: id }),
@@ -73,6 +83,7 @@ const nextAction = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ready") }),
 ]);
 const assignment = z.object({ principalId: id, role: z.enum(["primary_owner", "collaborator"]) });
+const currentStep = z.string().trim().min(1).max(500);
 const estimatedMinutes = z.number().int().min(1).max(10_080);
 const dependency = z.object({
   type: z.enum(["start_blocker", "completion_blocker", "related"]),
@@ -86,7 +97,7 @@ const recurrence = z.object({
   interval: z.number().int().min(1).max(120).optional(),
   weekDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   monthDay: z.number().int().min(1).max(31).optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  startDate: calendarDate,
   endDate: date.transform(value => value ?? undefined),
 });
 const projectMember = z.object({ principalId: id, role: z.enum(["owner", "member", "collaborator"]) });
@@ -96,6 +107,7 @@ const taskScope = z.object({
   scope: z.enum(TASK_WORKSPACE_SCOPES),
   personId: id.optional(),
   teamId: id.optional(),
+  ownedByMe: z.boolean().optional(),
 });
 const templateTask = z.object({
   title: z.string().trim().min(1).max(500),
@@ -128,6 +140,7 @@ export async function createTaskAction(raw: unknown) {
     projectId: id.optional(),
     involvedDepartmentIds: z.array(id).max(30).optional(),
     assignments: z.array(assignment).max(30).optional(),
+    currentStep: currentStep.optional(),
     nextAction: nextAction.optional(),
     priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
     startDate: date.transform((value) => value ?? undefined),
@@ -147,6 +160,22 @@ export async function createTaskAction(raw: unknown) {
   const result = await createCanonicalTask(parsed.data);
   if (result.ok) refreshWorkspace();
   return result;
+}
+
+/** Quick Capture asks the canonical backend for permission-safe suggestions
+ * before a new task is persisted. The action has no write side effects. */
+export async function findCaptureTaskMatchesAction(raw: unknown) {
+  const parsed = z.object({
+    workspaceId: id.optional(),
+    title: z.string().trim().min(1).max(500),
+    originalText: z.string().trim().max(20_000).optional(),
+    organizationId: id.optional(),
+    organization: z.string().trim().max(500).optional(),
+    projectId: id.optional(),
+    currentResponsibilityPrincipalId: id.optional(),
+  }).safeParse(raw);
+  if (!parsed.success) return invalid("Binnie could not check similar work.");
+  return findCanonicalCaptureTaskMatches(parsed.data);
 }
 
 export async function createProjectAction(raw: unknown) {
@@ -433,6 +462,7 @@ export async function updateTaskAction(raw: unknown) {
     expectedVersion: z.number().int().positive(),
     title: z.string().trim().min(1).max(500).optional(),
     description: z.string().trim().max(10_000).nullable().optional(),
+    currentStep: currentStep.nullable().optional(),
     organizationId: id.nullable().optional(),
     leadDepartmentId: id.nullable().optional(),
     projectId: id.nullable().optional(),
@@ -449,6 +479,19 @@ export async function updateTaskAction(raw: unknown) {
   const result = await updateCanonicalTask(parsed.data);
   if (result.ok) refreshWorkspace();
   return result;
+}
+
+/** Fetches the latest authorized Task projection after a drawer-owned mutation. */
+export async function getTaskAction(raw: unknown) {
+  const parsed = z.object({ taskId: id }).safeParse(raw);
+  if (!parsed.success) return invalid("Choose a valid task.");
+  return getCanonicalTask(parsed.data.taskId);
+}
+
+export async function getTaskResponsibilityOptionsAction(raw: unknown) {
+  const parsed = z.object({ taskId: id, query: z.string().trim().max(240).optional() }).safeParse(raw);
+  if (!parsed.success) return invalid("Choose a valid task.");
+  return getCanonicalTaskResponsibilityOptions(parsed.data.taskId, parsed.data.query);
 }
 
 export async function archiveTaskAction(raw: unknown) {
@@ -522,7 +565,7 @@ export async function createSubtaskAction(raw: unknown) {
 }
 
 export async function mergeTasksAction(raw: unknown) {
-  const parsed = z.object({ survivorId: id, expectedVersion: z.number().int().positive(), sourceTaskIds: z.array(id).min(1).max(20), title: z.string().trim().min(1).max(500).optional(), dateResolution: z.object({ startDate: z.enum(["survivor", "source", "clear"]).optional(), targetDate: z.enum(["survivor", "source", "clear"]).optional(), deadlineDate: z.enum(["survivor", "source", "clear"]).optional(), followUpDate: z.enum(["survivor", "source", "clear"]).optional() }).optional() }).safeParse(raw);
+  const parsed = z.object({ survivorId: id, expectedVersion: z.number().int().positive(), sourceTaskIds: z.array(id).min(1).max(20), title: z.string().trim().min(1).max(500).optional(), dateResolution: z.object({ startDate: z.enum(["survivor", "source", "clear"]).optional(), targetDate: z.enum(["survivor", "source", "clear"]).optional(), deadlineDate: z.enum(["survivor", "source", "clear"]).optional(), followUpDate: z.enum(["survivor", "source", "clear"]).optional(), priority: z.enum(["survivor", "source"]).optional(), project: z.enum(["survivor", "source"]).optional(), leadDepartment: z.enum(["survivor", "source"]).optional(), currentStep: z.enum(["survivor", "source"]).optional() }).optional() }).safeParse(raw);
   if (!parsed.success) return invalid("Choose work to merge.");
   const result = await mergeCanonicalTasks(parsed.data.survivorId, parsed.data.expectedVersion, parsed.data.sourceTaskIds, parsed.data.title, parsed.data.dateResolution);
   if (result.ok) refreshWorkspace();
@@ -577,6 +620,44 @@ export async function setTaskAssignmentsAction(raw: unknown) {
   return result;
 }
 
+/** Changes the one operational recipient; shared collaborators use a separate action. */
+export async function setCurrentResponsibilityAction(raw: unknown) {
+  const parsed = z.object({
+    taskId: id,
+    expectedVersion: z.number().int().positive(),
+    recipientPrincipalId: id,
+    note: z.string().trim().max(10_000).optional(),
+    confirmReroute: z.boolean().optional(),
+  }).safeParse(raw);
+  if (!parsed.success) return invalid("Choose a valid person or team for the next move.");
+  const result = await reassignCanonicalTask(parsed.data.taskId, parsed.data.expectedVersion, parsed.data);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function setTaskOwnerAction(raw: unknown) {
+  const parsed = z.object({ taskId: id, expectedVersion: z.number().int().positive(), ownerPrincipalId: id.nullable().optional() }).safeParse(raw);
+  if (!parsed.success) return invalid("Choose a valid person as Task Owner.");
+  const result = await setCanonicalTaskOwner(parsed.data.taskId, parsed.data.expectedVersion, parsed.data.ownerPrincipalId || undefined);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
+export async function completeTaskStepAction(raw: unknown) {
+  const parsed = z.object({
+    taskId: id,
+    expectedVersion: z.number().int().positive(),
+    outcome: z.enum(["finish", "handoff", "review"]),
+    nextStep: currentStep.optional(),
+    recipientPrincipalId: id.optional(),
+    note: z.string().trim().max(10_000).optional(),
+  }).safeParse(raw);
+  if (!parsed.success) return invalid("Choose what happens after this step.");
+  const result = await completeCanonicalTaskStep(parsed.data.taskId, parsed.data.expectedVersion, parsed.data);
+  if (result.ok) refreshWorkspace();
+  return result;
+}
+
 export async function claimTaskAction(raw: unknown) {
   const parsed = z.object({ taskId: id, expectedVersion: z.number().int().positive(), teamId: id.optional() }).safeParse(raw);
   if (!parsed.success) return invalid("Choose a valid team queue to claim.");
@@ -601,7 +682,7 @@ export async function getTaskScopeAction(raw: unknown) {
 }
 
 export async function saveTaskListColumnsAction(raw: unknown) {
-  const parsed = z.object({ workspaceId: id.optional(), columns: z.array(z.enum(TASK_LIST_COLUMN_IDS)).min(1).max(15) }).safeParse(raw);
+  const parsed = z.object({ workspaceId: id.optional(), columns: z.array(z.enum(TASK_LIST_COLUMN_IDS)).min(1).max(TASK_LIST_COLUMN_IDS.length) }).safeParse(raw);
   if (!parsed.success || !parsed.data.columns.includes("task")) return invalid("Keep the Task column visible.");
   return saveCanonicalTaskListColumns(parsed.data.columns, parsed.data.workspaceId);
 }
@@ -646,17 +727,17 @@ export async function uploadTaskUpdateFileAction(formData: FormData) {
 }
 
 export async function submitTaskForReviewAction(raw: unknown) {
-  const parsed = z.object({ taskId: id, expectedVersion: z.number().int().positive(), reviewerId: id }).safeParse(raw);
+  const parsed = z.object({ taskId: id, expectedVersion: z.number().int().positive(), reviewerId: id, nextStep: currentStep.optional() }).safeParse(raw);
   if (!parsed.success) return invalid("Choose a valid reviewer.");
-  const result = await submitCanonicalTaskForReview(parsed.data.taskId, parsed.data.expectedVersion, parsed.data.reviewerId);
+  const result = await submitCanonicalTaskForReview(parsed.data.taskId, parsed.data.expectedVersion, parsed.data.reviewerId, parsed.data.nextStep);
   if (result.ok) refreshWorkspace();
   return result;
 }
 
 export async function decideTaskReviewAction(raw: unknown) {
-  const parsed = z.object({ taskId: id, expectedVersion: z.number().int().positive(), approve: z.boolean(), revisionNote: z.string().trim().max(10_000).optional() }).safeParse(raw);
+  const parsed = z.object({ taskId: id, expectedVersion: z.number().int().positive(), approve: z.boolean(), outcome: z.enum(["finish", "handoff"]).optional(), recipientPrincipalId: id.optional(), nextStep: currentStep.optional(), revisionNote: z.string().trim().max(10_000).optional() }).safeParse(raw);
   if (!parsed.success) return invalid("The review decision is invalid.");
-  const result = await decideCanonicalReview(parsed.data.taskId, parsed.data.expectedVersion, parsed.data.approve, parsed.data.revisionNote);
+  const result = await decideCanonicalReview(parsed.data.taskId, parsed.data.expectedVersion, { approve: parsed.data.approve, outcome: parsed.data.outcome, recipientPrincipalId: parsed.data.recipientPrincipalId, nextStep: parsed.data.nextStep, revisionNote: parsed.data.revisionNote });
   if (result.ok) refreshWorkspace();
   return result;
 }

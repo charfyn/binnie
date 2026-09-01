@@ -36,8 +36,11 @@ import {
 import { getDb, hasDatabaseConfiguration } from "@/lib/db";
 import { seedDemoWorkspace } from "../../prisma/seed";
 import { calendarDateKey, nextOccurrenceDate, taskTransitionBlockReason } from "@/lib/work-rules";
+import { isValidTaskIsoDate, taskPlanningDatesError } from "@/lib/task-dates";
+import { taskArchiveValidationMessage } from "@/lib/task-lifecycle";
 import { defaultOrganizationColorKey, isOrganizationColorKey, type OrganizationColorKey } from "@/lib/organization-colors";
 import { TASK_LIST_COLUMN_IDS } from "@/lib/task-list";
+import { captureSearchTerms, findCaptureTaskMatches, type CaptureIntent, type CaptureTaskMatch } from "@/lib/capture-intelligence";
 import type {
   ActionResult,
   DependencyTypeValue,
@@ -62,11 +65,20 @@ import type {
 
 const DEFAULT_WORKSPACE_ID = "workspace-binnie";
 const workspaceTimeZone = "Asia/Jakarta";
+// These structured events retain delegation visibility after the current
+// responsibility moves on. They are deliberately queried by actor ID, never
+// by the readable activity sentence.
+const responsibilityHistoryEventTypes: TaskEventType[] = [
+  TaskEventType.REASSIGNED,
+  TaskEventType.REVIEW_SUBMITTED,
+  TaskEventType.REVISION_REQUESTED,
+];
 
 const taskInclude = {
   organization: true,
   leadDepartment: true,
   project: true,
+  owner: true,
   nextActionPrincipal: true,
   nextActionDepartment: true,
   involvedDepartments: { include: { department: true } },
@@ -92,7 +104,23 @@ const taskInclude = {
     take: 1,
   },
   checklistItems: { include: { completedBy: true }, orderBy: { position: "asc" } },
-  subtasks: { select: { id: true, status: true, archivedAt: true, deletedAt: true } },
+  parentTask: { select: { id: true, title: true } },
+  subtasks: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      priority: true,
+      startDate: true,
+      deadline: true,
+      archivedAt: true,
+      deletedAt: true,
+      organization: { select: { name: true } },
+      leadDepartment: { select: { name: true } },
+      assignments: { include: { principal: { select: { name: true } } }, orderBy: [{ role: "asc" }, { assignedAt: "asc" }], take: 1 },
+    },
+    orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+  },
   recurrence: true,
   captureLinks: { include: { capture: { select: { rawText: true, status: true, undoExpiresAt: true } } }, take: 1 },
 } satisfies Prisma.TaskInclude;
@@ -203,6 +231,8 @@ export interface CreateTaskInput {
   projectId?: string;
   involvedDepartmentIds?: string[];
   assignments?: AssignmentInput[];
+  /** Optional first workflow instruction; omit for a simple task. */
+  currentStep?: string;
   nextAction?: NextActionInput;
   priority?: TaskPriorityValue;
   startDate?: string;
@@ -221,11 +251,16 @@ export interface CreateTaskInput {
   assignmentSource?: AssignmentSource;
 }
 
+export interface FindCaptureTaskMatchesInput extends CaptureIntent {
+  workspaceId?: string;
+}
+
 export interface UpdateTaskInput {
   taskId: string;
   expectedVersion: number;
   title?: string;
   description?: string | null;
+  currentStep?: string | null;
   organizationId?: string | null;
   leadDepartmentId?: string | null;
   projectId?: string | null;
@@ -237,6 +272,20 @@ export interface UpdateTaskInput {
   deadlineDate?: string | null;
   followUpDate?: string | null;
   estimatedMinutes?: number | null;
+}
+
+export interface CurrentResponsibilityInput {
+  recipientPrincipalId: string;
+  note?: string;
+  /** Required when an Owner or manager reroutes work held by someone else. */
+  confirmReroute?: boolean;
+}
+
+export interface CompleteTaskStepInput {
+  outcome: "finish" | "handoff" | "review";
+  nextStep?: string;
+  recipientPrincipalId?: string;
+  note?: string;
 }
 
 export interface LegacyTaskImportInput extends CreateTaskInput {
@@ -317,9 +366,15 @@ export interface ApplyWorkflowTemplateInput {
 
 function dateOnly(value?: string | null) {
   if (!value) return null;
+  if (!isValidTaskIsoDate(value)) throw new Error("Please enter a valid date in YYYY/MM/DD format.");
   const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) throw new Error("Invalid date");
+  if (Number.isNaN(date.getTime())) throw new Error("Please enter a valid date in YYYY/MM/DD format.");
   return date;
+}
+
+/** Plan For is when work happens; Deadline is the latest acceptable finish. */
+function planningDatesValidationMessage(planFor?: string | null, deadline?: string | null) {
+  return taskPlanningDatesError(planFor, deadline);
 }
 
 function recurrenceValidationMessage(recurrence?: RecurrenceInput) {
@@ -501,7 +556,7 @@ function toOrganizationDTO(organization: {
   };
 }
 
-export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
+export function toTaskDTO(task: TaskRecord, actorId: string, relationships: { mergedHistory?: TaskDTO["mergedHistory"]; mergedIntoTask?: TaskDTO["mergedIntoTask"] } = {}): TaskDTO {
   const dependencies = task.dependencies.map((dependency) => ({
     id: dependency.id,
     type: asDependencyType(dependency.type),
@@ -524,7 +579,10 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     assignedBy: assignment.assignedBy?.name || undefined,
     claimedFromAssignmentId: assignment.claimedFromAssignmentId || undefined,
   }));
-  const primaryOwner = assignments.find((assignment) => assignment.role === "primary_owner");
+  // PRIMARY_OWNER is retained as a database enum for compatibility only. From
+  // here forward it is always interpreted through this one helper as the
+  // single party currently responsible for the next move.
+  const currentResponsibility = currentResponsibilityAssignment(assignments);
   const deadlineDate = toDateString(task.deadline);
   const followUpDate = toDateString(task.followUpDate);
   const today = workspaceToday();
@@ -533,6 +591,9 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
   const completionBlockedBy = dependencies.filter((dependency) => dependency.type === "completion_blocker" && !dependency.resolvedAt);
   const latestReview = task.reviewCycles[0];
   const visibleSubtasks = task.subtasks.filter(subtask => !subtask.archivedAt && !subtask.deletedAt);
+  const completionEvent = task.events.find((event) =>
+    (event.type === TaskEventType.COMPLETED || event.type === TaskEventType.REVIEW_APPROVED) && event.actor,
+  );
 
   return {
     id: task.id,
@@ -551,9 +612,13 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     priority: asTaskPriority(task.priority),
     status: asTaskStatus(task.status),
     assignments,
+    ownerPrincipalId: task.ownerPrincipalId || undefined,
+    ownerInferredFromCreator: task.ownerInferredFromCreator,
+    owner: task.owner?.type === PrincipalType.PERSON ? { id: task.owner.id, name: task.owner.name } : undefined,
+    currentResponsibility,
+    currentStep: task.currentStep || undefined,
     assigneeIds: assignments.map((assignment) => assignment.principalId),
-    assignee: primaryOwner?.name || assignments[0]?.name,
-    primaryOwner,
+    assignee: currentResponsibility?.name || assignments[0]?.name,
     createdByPrincipalId: task.createdByPrincipalId || undefined,
     nextActionKind: asNextActionKind(task.nextActionKind),
     nextActionBy: readableNextAction(task, actorId),
@@ -568,6 +633,7 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
     actualMinutes: task.actualMinutes ?? undefined,
     waitingSince: task.waitingSince?.toISOString(),
     completedAt: task.completedAt?.toISOString(),
+    completedBy: completionEvent?.actor ? { id: completionEvent.actor.id, name: completionEvent.actor.name } : undefined,
     isOverdue: Boolean(isOpen && deadlineDate && deadlineDate < today),
     isFollowUpDue: Boolean(isOpen && followUpDate && followUpDate <= today),
     canStartNow: startBlockedBy.length === 0,
@@ -597,13 +663,27 @@ export function toTaskDTO(task: TaskRecord, actorId: string): TaskDTO {
       completedAt: item.completedAt?.toISOString(),
       completedBy: item.completedBy?.name || undefined,
     })),
+    subtasks: visibleSubtasks.map(subtask => ({
+      id: subtask.id,
+      title: subtask.title,
+      status: asTaskStatus(subtask.status),
+      priority: asTaskPriority(subtask.priority),
+      org: subtask.organization?.name || task.organization?.name || "Uncategorized",
+      area: subtask.leadDepartment?.name || task.leadDepartment?.name || "Unassigned",
+      assignee: subtask.assignments[0]?.principal.name,
+      startDate: toDateString(subtask.startDate),
+      deadlineDate: toDateString(subtask.deadline),
+    })),
     subtaskProgress: {
       total: visibleSubtasks.length,
       completed: visibleSubtasks.filter(subtask => subtask.status === TaskStatus.DONE).length,
     },
     parentTaskId: task.parentTaskId || undefined,
+    parentTask: task.parentTask ? { id: task.parentTask.id, title: task.parentTask.title } : undefined,
     sourceTaskId: task.sourceTaskId || undefined,
     mergedIntoTaskId: task.mergedIntoTaskId || undefined,
+    mergedIntoTask: relationships.mergedIntoTask,
+    mergedHistory: relationships.mergedHistory || [],
     recurrence: task.recurrence ? {
       id: task.recurrence.id,
       frequency: asRecurrenceFrequency(task.recurrence.frequency),
@@ -770,11 +850,16 @@ function actorDepartmentHeadIds(actor: ActorRecord) {
 
 function canViewTask(actor: ActorRecord, task: TaskRecord) {
   if (actorIsOwner(actor) || actorManagesOrganization(actor, task.organizationId)) return true;
+  if (task.ownerPrincipalId === actor.id) return true;
   if (task.organizationId && isViewer(actor.context, task.organizationId)) {
     return task.assignments.some((assignment) => assignment.principalId === actor.id || actor.teamIds.includes(assignment.principalId));
   }
   if (task.assignments.some((assignment) => assignment.principalId === actor.id || actor.teamIds.includes(assignment.principalId))) return true;
   if (task.createdByPrincipalId === actor.id || task.reviewCycles.some((review) => review.reviewerPrincipalId === actor.id)) return true;
+  // A past handoff is a durable monitoring relationship. It gives no edit
+  // authority and never makes the task personal work, but lets a delegator
+  // follow the work they sent on through its canonical history.
+  if (task.events.some((event) => event.actorId === actor.id && responsibilityHistoryEventTypes.includes(event.type))) return true;
   const memberDepartmentIds = actorDepartmentHeadIds(actor);
   return Boolean(
     (task.leadDepartmentId && memberDepartmentIds.has(task.leadDepartmentId)) ||
@@ -786,7 +871,35 @@ function canViewTask(actor: ActorRecord, task: TaskRecord) {
 function canManageTask(actor: ActorRecord, task: TaskRecord) {
   if (task.organizationId && isViewer(actor.context, task.organizationId)) return false;
   if (actorIsOwner(actor) || actorManagesOrganization(actor, task.organizationId) || actorManagesDepartment(actor, task.leadDepartmentId)) return true;
-  return task.assignments.some((assignment) => assignment.principalId === actor.id && assignment.role === AssignmentRole.PRIMARY_OWNER);
+  return task.ownerPrincipalId === actor.id
+    || currentResponsibilityAssignment(task.assignments)?.principalId === actor.id;
+}
+
+/** Execution permission is deliberately narrower than Owner oversight. */
+function canCompleteCurrentStep(actor: ActorRecord, task: TaskRecord) {
+  if (task.organizationId && isViewer(actor.context, task.organizationId)) return false;
+  if (actorIsOwner(actor) || actorManagesOrganization(actor, task.organizationId) || actorManagesDepartment(actor, task.leadDepartmentId)) return true;
+  const current = currentResponsibilityAssignment(task.assignments);
+  if (current?.principalId === actor.id) return true;
+  if (task.status === TaskStatus.REVIEW && task.reviewCycles.some((review) => review.reviewerPrincipalId === actor.id && !review.reviewedAt)) return true;
+  return false;
+}
+
+function actorCanRerouteTask(actor: ActorRecord, task: TaskRecord) {
+  return actorIsOwner(actor)
+    || actorManagesOrganization(actor, task.organizationId)
+    || actorManagesDepartment(actor, task.leadDepartmentId)
+    || task.ownerPrincipalId === actor.id;
+}
+
+function requiresRerouteConfirmation(actor: ActorRecord, task: TaskRecord, recipientId: string) {
+  const current = currentResponsibilityAssignment(task.assignments);
+  return Boolean(
+    current
+    && current.principalId !== recipientId
+    && current.principalId !== actor.id
+    && actorCanRerouteTask(actor, task),
+  );
 }
 
 function canViewProject(actor: ActorRecord, project: ProjectRecord) {
@@ -821,8 +934,10 @@ function taskVisibilityWhere(actor: ActorRecord, workspaceId: string): Prisma.Ta
   const visiblePrincipalIds = [actor.id, ...actor.teamIds];
   const branches: Prisma.TaskWhereInput[] = [
     { assignments: { some: { principalId: { in: visiblePrincipalIds } } } },
+    { ownerPrincipalId: actor.id },
     { createdByPrincipalId: actor.id },
     { reviewCycles: { some: { reviewerPrincipalId: actor.id } } },
+    { events: { some: { actorId: actor.id, type: { in: responsibilityHistoryEventTypes } } } },
   ];
   if (managedOrganizations.length) branches.push({ organizationId: { in: managedOrganizations } });
   if (departmentIds.length) branches.push(
@@ -843,34 +958,15 @@ function canBrowseTaskPeople(actor: ActorRecord) {
  */
 function personallyActionableTaskWhere(personId: string): Prisma.TaskWhereInput {
   return {
-    OR: [
-      { assignments: { some: { principalId: personId } } },
-      { nextActionPrincipalId: personId },
+    AND: [
+      { archivedAt: null },
+      { status: { not: TaskStatus.DONE } },
       {
-        status: TaskStatus.REVIEW,
-        reviewCycles: { some: { reviewerPrincipalId: personId, reviewedAt: null } },
-      },
-      {
-        dependencies: {
-          some: {
-            ownerPrincipalId: personId,
-            resolvedAt: null,
-            type: { in: [DependencyType.START_BLOCKER, DependencyType.COMPLETION_BLOCKER] },
-          },
-        },
-      },
-      // Captures without any assignment remain with their creator until work
-      // is assigned or explicitly moved to another person's next action.
-      {
-        AND: [
-          { createdByPrincipalId: personId },
-          { assignments: { none: {} } },
-          { OR: [{ nextActionPrincipalId: null }, { nextActionPrincipalId: personId }] },
+        OR: [
+          { assignments: { some: { principalId: personId, role: AssignmentRole.PRIMARY_OWNER } } },
           {
-            OR: [
-              { status: { not: TaskStatus.REVIEW } },
-              { reviewCycles: { some: { reviewerPrincipalId: personId, reviewedAt: null } } },
-            ],
+            status: TaskStatus.REVIEW,
+            reviewCycles: { some: { reviewerPrincipalId: personId, reviewedAt: null } },
           },
         ],
       },
@@ -880,14 +976,26 @@ function personallyActionableTaskWhere(personId: string): Prisma.TaskWhereInput 
 
 /** A Team is selected by its stable Principal ID, never by display text. */
 function teamTaskWhere(teamId: string): Prisma.TaskWhereInput {
-  const departmentTeamScope = { some: { teamId, status: MembershipStatus.ACTIVE } };
+  // A Team scope is its active queue, not every task where the Team merely
+  // remains informed. After a person claims work, the Team is retained as a
+  // collaborator relationship for context but no longer receives workload.
+  return {
+    AND: [
+      { archivedAt: null },
+      { status: { not: TaskStatus.DONE } },
+      { assignments: { some: { principalId: teamId, role: AssignmentRole.PRIMARY_OWNER } } },
+    ],
+  };
+}
+
+/** Tasks this person once deliberately sent onward, regardless of later handoffs. */
+function assignedByActorTaskWhere(actorId: string): Prisma.TaskWhereInput {
   return {
     OR: [
-      { assignments: { some: { principalId: teamId } } },
-      { nextActionPrincipalId: teamId },
-      { dependencies: { some: { ownerPrincipalId: teamId, resolvedAt: null } } },
-      { leadDepartment: { teamScopes: departmentTeamScope } },
-      { involvedDepartments: { some: { department: { teamScopes: departmentTeamScope } } } },
+      { events: { some: { actorId, type: { in: responsibilityHistoryEventTypes } } } },
+      // Compatibility for pre-handoff-history work. This is a structured
+      // TaskAssignment relationship, never a display-name/activity-text guess.
+      { assignments: { some: { assignedByPrincipalId: actorId, principalId: { not: actorId } } } },
     ],
   };
 }
@@ -967,6 +1075,7 @@ export async function getCanonicalTaskScope(input: {
   scope: TaskWorkspaceScope;
   personId?: string;
   teamId?: string;
+  ownedByMe?: boolean;
 }): Promise<ActionResult<TaskScopeResultDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
@@ -974,7 +1083,7 @@ export async function getCanonicalTaskScope(input: {
     const db = getDb();
     const actor = await resolveActor(workspaceId);
     const options = await taskScopeOptions(actor);
-    const allowedScopes: TaskWorkspaceScope[] = ["my"];
+    const allowedScopes: TaskWorkspaceScope[] = ["my", "assigned_by_me", "completed", "archive"];
     if (options.teams.length) allowedScopes.push("team");
     if (canBrowseTaskPeople(actor)) allowedScopes.push("people");
     if (!allowedScopes.includes(input.scope)) return forbidden("You do not have permission to view that task scope.");
@@ -995,24 +1104,40 @@ export async function getCanonicalTaskScope(input: {
       targetTeamId = selectedScope.id;
     }
 
-    const scopeWhere = input.scope === "my"
-      ? personallyActionableTaskWhere(actor.id)
-      : targetPersonId
-        ? personallyActionableTaskWhere(targetPersonId)
-        : targetTeamId
-          ? teamTaskWhere(targetTeamId)
-          : {};
+    // “Owned by me” is a refinement of personal work, never a second meaning
+    // for My Work. A person can monitor a task they own elsewhere, but it only
+    // belongs here while they are the current worker or active reviewer.
+    const scopeWhere: Prisma.TaskWhereInput = input.scope === "my"
+      ? input.ownedByMe
+        ? { AND: [personallyActionableTaskWhere(actor.id), { ownerPrincipalId: actor.id }] }
+        : personallyActionableTaskWhere(actor.id)
+      : input.scope === "assigned_by_me"
+        ? { archivedAt: null, status: { not: TaskStatus.DONE }, ...assignedByActorTaskWhere(actor.id) }
+        : input.scope === "completed"
+          ? { archivedAt: null, status: TaskStatus.DONE }
+          : input.scope === "archive"
+            ? { archivedAt: { not: null }, status: TaskStatus.DONE }
+            : targetPersonId
+              ? personallyActionableTaskWhere(targetPersonId)
+              : targetTeamId
+                ? teamTaskWhere(targetTeamId)
+                : {};
 
     const records = await db.task.findMany({
       where: { AND: [taskVisibilityWhere(actor, workspaceId), scopeWhere] },
       include: taskInclude,
       orderBy: { updatedAt: "desc" },
     });
-    const visible = records.filter((task) => !task.archivedAt && canViewTask(actor, task));
+    // taskVisibilityWhere is the server authorization predicate for this
+    // query. Do not re-decide a former delegator's access from the latest 100
+    // activity rows included for the drawer: their original handoff can be
+    // older than that display window.
+    const visible = records.filter((task) => input.scope === "archive" ? Boolean(task.archivedAt) : !task.archivedAt);
     return {
       ok: true,
       data: {
         scope: input.scope,
+        ownedByMe: input.scope === "my" && Boolean(input.ownedByMe),
         tasks: visible.map((task) => toTaskDTO(task, actor.id)),
         people: options.people,
         teams: options.teams,
@@ -1024,6 +1149,57 @@ export async function getCanonicalTaskScope(input: {
     if (error instanceof AuthorizationError) return forbidden("You do not have permission to view that task scope.");
     return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Could not load tasks." };
   }
+}
+
+/**
+ * A compact, permission-scoped picker for a Task's next responsible party.
+ * It deliberately returns IDs and labels only; the browser never receives the
+ * whole workspace directory merely to populate a Task Detail selector.
+ */
+export async function getCanonicalTaskResponsibilityOptions(taskId: string, query = ""): Promise<ActionResult<TaskScopeOptionDTO[]>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const db = getDb();
+  const task = await taskById(taskId);
+  if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
+  const actor = await resolveActor(task.workspaceId);
+  if (!canManageTask(actor, task)) return forbidden("You do not have permission to route this task.");
+  const normalizedQuery = query.trim();
+  const scope: Prisma.PrincipalWhereInput = task.organizationId
+    ? {
+      OR: [
+        { type: PrincipalType.PERSON, organizationMemberships: { some: { organizationId: task.organizationId, status: MembershipStatus.ACTIVE } } },
+        { type: PrincipalType.TEAM, teamScopes: { some: { organizationId: task.organizationId, status: MembershipStatus.ACTIVE } } },
+      ],
+    }
+    : { id: { in: [actor.id, ...actor.teamIds] } };
+  const principals = await db.principal.findMany({
+    where: {
+      workspaceId: task.workspaceId,
+      active: true,
+      status: PrincipalStatus.ACTIVE,
+      AND: [scope, ...(normalizedQuery ? [{ name: { contains: normalizedQuery, mode: "insensitive" as const } }] : [])],
+    },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      departmentMemberships: { where: { status: MembershipStatus.ACTIVE, ...(task.organizationId ? { department: { organizationId: task.organizationId } } : {}) }, select: { department: { select: { name: true } } }, take: 1 },
+      teamScopes: { where: { status: MembershipStatus.ACTIVE, ...(task.organizationId ? { organizationId: task.organizationId } : {}) }, select: { organization: { select: { name: true } }, department: { select: { name: true } } }, take: 1 },
+    } as const,
+    orderBy: { name: "asc" },
+    take: 12,
+  });
+  return {
+    ok: true,
+    data: principals.map((principal) => ({
+      id: principal.id,
+      name: principal.name,
+      kind: principal.type === PrincipalType.TEAM ? "team" as const : undefined,
+      subtitle: principal.type === PrincipalType.TEAM
+        ? principal.teamScopes[0] ? `${principal.teamScopes[0].organization.name}${principal.teamScopes[0].department ? ` · ${principal.teamScopes[0].department.name}` : ""}` : undefined
+        : principal.departmentMemberships[0]?.department.name,
+    })),
+  };
 }
 
 function projectVisibilityWhere(actor: ActorRecord, workspaceId: string): Prisma.ProjectWhereInput {
@@ -1112,7 +1288,15 @@ async function validateTaskReferences(
     input.organizationId ? db.organization.findFirst({ where: { id: input.organizationId, workspaceId: input.workspaceId } }) : Promise.resolve(undefined),
     input.projectId ? db.project.findFirst({ where: { id: input.projectId, organization: { workspaceId: input.workspaceId } } }) : Promise.resolve(undefined),
     allDepartmentIds.length ? db.department.findMany({ where: { id: { in: allDepartmentIds }, organization: { workspaceId: input.workspaceId } }, select: { id: true, organizationId: true } }) : Promise.resolve([]),
-    principalIds.length ? db.principal.findMany({ where: { id: { in: principalIds }, workspaceId: input.workspaceId, active: true }, select: { id: true } }) : Promise.resolve([]),
+    principalIds.length ? db.principal.findMany({
+      where: { id: { in: principalIds }, workspaceId: input.workspaceId, active: true },
+      select: {
+        id: true,
+        type: true,
+        organizationMemberships: { where: { status: MembershipStatus.ACTIVE }, select: { organizationId: true } },
+        teamScopes: { where: { status: MembershipStatus.ACTIVE }, select: { organizationId: true } },
+      },
+    }) : Promise.resolve([]),
     (input.dependencies || []).some(dependency => dependency.prerequisiteTaskId) ? db.task.findMany({ where: { id: { in: (input.dependencies || []).flatMap(dependency => dependency.prerequisiteTaskId ? [dependency.prerequisiteTaskId] : []) }, workspaceId: input.workspaceId, deletedAt: null }, select: { id: true } }) : Promise.resolve([]),
   ]);
   if (input.organizationId && !organization) return "Choose an organization in this workspace.";
@@ -1121,6 +1305,9 @@ async function validateTaskReferences(
   if (departments.length !== allDepartmentIds.length) return "Choose departments in this workspace.";
   if (input.organizationId && departments.some(department => department.organizationId !== input.organizationId)) return "Every involved department must belong to the selected organization.";
   if (principals.length !== principalIds.length) return "Choose active people or teams in this workspace.";
+  if (input.organizationId && principals.some(principal => principal.type === PrincipalType.TEAM
+    ? !principal.teamScopes.some(scope => scope.organizationId === input.organizationId)
+    : !principal.organizationMemberships.some(membership => membership.organizationId === input.organizationId))) return "Choose people or teams who belong to this task’s organization.";
   if (prerequisites.length !== (input.dependencies || []).filter(dependency => dependency.prerequisiteTaskId).length) return "A dependency must be an active task in this workspace.";
   if (input.taskId && (input.dependencies || []).some(dependency => dependency.prerequisiteTaskId === input.taskId)) return "A task cannot depend on itself.";
   return undefined;
@@ -1138,6 +1325,22 @@ async function defaultTeamAssignmentForDepartments(db: ReturnType<typeof getDb>,
   return teams.map(principalId => ({ principalId, role: principalId === leadTeam?.teamId ? "primary_owner" as const : "collaborator" as const }));
 }
 
+/**
+ * The compatibility enum name must not leak business meaning. This is the
+ * sole interpretation of it: one current operational responsibility.
+ */
+function currentResponsibilityAssignment<T extends { role: AssignmentRole | "primary_owner" | "collaborator" }>(assignments: T[]) {
+  return assignments.find((assignment) => assignment.role === AssignmentRole.PRIMARY_OWNER || assignment.role === "primary_owner");
+}
+
+/** Every new task gets one clear current responsibility by default. */
+function withCurrentResponsibility(assignments: AssignmentInput[], fallbackPrincipalId: string): AssignmentInput[] {
+  const unique = assignments.filter((assignment, index, values) => values.findIndex((candidate) => candidate.principalId === assignment.principalId) === index);
+  if (!unique.length) return [{ principalId: fallbackPrincipalId, role: "primary_owner" }];
+  if (unique.some((assignment) => assignment.role === "primary_owner")) return unique;
+  return unique.map((assignment, index) => index === 0 ? { ...assignment, role: "primary_owner" } : assignment);
+}
+
 async function taskById(taskId: string) {
   return getDb().task.findUnique({ where: { id: taskId }, include: taskInclude });
 }
@@ -1152,7 +1355,128 @@ async function workflowTemplateById(templateId: string) {
 
 async function taskDtoById(taskId: string, actorId: string) {
   const task = await taskById(taskId);
-  return task ? toTaskDTO(task, actorId) : undefined;
+  if (!task) return undefined;
+  const actor = await resolveActor(task.workspaceId);
+  const [mergedSources, mergedTarget] = await Promise.all([
+    getDb().task.findMany({
+      where: { workspaceId: task.workspaceId, mergedIntoTaskId: task.id, deletedAt: null },
+      include: taskInclude,
+      orderBy: { updatedAt: "desc" },
+    }),
+    task.mergedIntoTaskId ? getDb().task.findUnique({ where: { id: task.mergedIntoTaskId }, include: taskInclude }) : Promise.resolve(null),
+  ]);
+  const mergedHistory = mergedSources.filter(source => canViewTask(actor, source)).map(source => ({ id: source.id, title: source.title }));
+  const mergedIntoTask = mergedTarget && canViewTask(actor, mergedTarget)
+    ? { id: mergedTarget.id, title: mergedTarget.title }
+    : undefined;
+  return toTaskDTO(task, actorId, { mergedHistory, mergedIntoTask });
+}
+
+/** Returns one permission-checked canonical task for in-drawer revalidation. */
+export async function getCanonicalTask(taskId: string): Promise<ActionResult<TaskDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const task = await taskById(taskId);
+  if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
+  const actor = await resolveActor(task.workspaceId);
+  const canViewFromHistory = canViewTask(actor, task) || Boolean(await getDb().taskEvent.findFirst({
+    where: { taskId, actorId: actor.id, type: { in: responsibilityHistoryEventTypes } },
+    select: { id: true },
+  }));
+  if (!canViewFromHistory) return forbidden();
+  const dto = await taskDtoById(taskId, actor.id);
+  return dto ? { ok: true, data: dto } : { ok: false, code: "NOT_FOUND", message: "Task not found." };
+}
+
+/**
+ * A narrow, permission-scoped first pass for Quick Capture. It intentionally
+ * returns suggestions only: no task is merged, changed, or hidden here.
+ */
+export async function findCanonicalCaptureTaskMatches(input: FindCaptureTaskMatchesInput): Promise<ActionResult<CaptureTaskMatch[]>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
+  const title = input.title.trim();
+  if (!title) return { ok: true, data: [] };
+  try {
+    const db = getDb();
+    const actor = await resolveActor(workspaceId);
+    const terms = captureSearchTerms(`${title} ${input.originalText || ""}`);
+    const explicitContinuation = /\b(?:they|it|this|that)\b/i.test(input.originalText || "");
+    const relevance: Prisma.TaskWhereInput[] = [
+      ...terms.flatMap(term => [
+        { title: { contains: term, mode: "insensitive" as const } },
+        { currentStep: { contains: term, mode: "insensitive" as const } },
+      ]),
+      // A pronoun can intentionally continue the one piece of work already
+      // held by a person or team. Responsibility alone is never a duplicate
+      // search key for ordinary captures.
+      ...(explicitContinuation && input.currentResponsibilityPrincipalId
+        ? [{ assignments: { some: { principalId: input.currentResponsibilityPrincipalId, role: AssignmentRole.PRIMARY_OWNER } } }]
+        : []),
+    ];
+    if (!relevance.length) return { ok: true, data: [] };
+    const records = await db.task.findMany({
+      where: {
+        AND: [
+          taskVisibilityWhere(actor, workspaceId),
+          { archivedAt: null },
+          ...(input.organizationId ? [{ organizationId: input.organizationId }] : []),
+          ...(input.projectId ? [{ projectId: input.projectId }] : []),
+          { OR: relevance },
+        ],
+      },
+      select: {
+        id: true,
+        version: true,
+        title: true,
+        status: true,
+        archivedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        completedAt: true,
+        organizationId: true,
+        projectId: true,
+        currentStep: true,
+        organization: { select: { name: true } },
+        project: { select: { name: true } },
+        assignments: {
+          where: { role: AssignmentRole.PRIMARY_OWNER },
+          select: { principalId: true, principal: { select: { name: true } } },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 60,
+    });
+    const matches = findCaptureTaskMatches(input, records.map(record => ({
+      id: record.id,
+      version: record.version,
+      title: record.title,
+      status: asTaskStatus(record.status),
+      organizationId: record.organizationId || undefined,
+      organization: record.organization?.name,
+      projectId: record.projectId || undefined,
+      project: record.project?.name,
+      currentResponsibilityPrincipalId: record.assignments[0]?.principalId,
+      currentResponsibilityName: record.assignments[0]?.principal.name,
+      currentStep: record.currentStep || undefined,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+      completedAt: record.completedAt?.toISOString(),
+      archivedAt: record.archivedAt?.toISOString(),
+    })));
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[capture-duplicate-check]", {
+        taskTitle: title,
+        candidateIds: records.map(record => record.id),
+        matches: matches.map(match => ({ id: match.id, kind: match.kind, score: match.score })),
+      });
+    }
+    return { ok: true, data: matches };
+  } catch (error) {
+    if (error instanceof AuthenticationRequiredError) return { ok: false, code: "UNAUTHORIZED", message: "Sign in to check similar work." };
+    if (error instanceof AuthorizationError) return forbidden("You do not have permission to check similar work.");
+    return { ok: false, code: "VALIDATION", message: error instanceof Error ? error.message : "Could not check similar work." };
+  }
 }
 
 async function incrementRevision(tx: Prisma.TransactionClient, workspaceId: string) {
@@ -1214,8 +1538,11 @@ async function applyCompletionEffects(tx: Prisma.TransactionClient, task: TaskRe
       sourceTaskId: task.sourceTaskId,
       recurrenceId: task.recurrenceId,
       createdByPrincipalId: actorId,
+      ownerPrincipalId: task.ownerPrincipalId,
+      ownerInferredFromCreator: task.ownerInferredFromCreator,
       title: task.title,
       description: task.description,
+      currentStep: task.currentStep,
       priority: task.priority,
       status: TaskStatus.READY,
       startDate: nextStartDate,
@@ -1291,6 +1618,23 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
         : Promise.resolve(0),
     ]);
     const visibleProjectIds = new Set(records.map(task => task.projectId).filter((projectId): projectId is string => Boolean(projectId)));
+    // Merged source tasks are archived and deliberately absent from active
+    // work views. Fetch only sources for already visible survivors so their
+    // compact relationship remains discoverable without reviving old work.
+    const mergedSources = records.length
+      ? await db.task.findMany({
+        where: { workspaceId, mergedIntoTaskId: { in: records.map(record => record.id) }, deletedAt: null },
+        include: taskInclude,
+        orderBy: { updatedAt: "desc" },
+      })
+      : [];
+    const mergedHistoryByTaskId = new Map<string, TaskDTO["mergedHistory"]>();
+    mergedSources.forEach((source) => {
+      if (!source.mergedIntoTaskId || !canViewTask(actor, source)) return;
+      const history = mergedHistoryByTaskId.get(source.mergedIntoTaskId) || [];
+      history.push({ id: source.id, title: source.title });
+      mergedHistoryByTaskId.set(source.mergedIntoTaskId, history);
+    });
     const visibleOrganizationIds = new Set([
       ...records.map((task) => task.organizationId).filter((organizationId): organizationId is string => Boolean(organizationId)),
       ...projects.map((project) => project.organizationId),
@@ -1358,7 +1702,7 @@ export async function getWorkspaceSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): 
       revision: workspace.revision,
       actorId: actor.id,
       profile: toProfileDTO(actor, preference, pendingAccessRequestCount),
-      tasks: records.map((task) => toTaskDTO(task, actor.id)),
+      tasks: records.map((task) => toTaskDTO(task, actor.id, { mergedHistory: mergedHistoryByTaskId.get(task.id) })),
       projects: projects.filter(project => canViewProject(actor, project) || visibleProjectIds.has(project.id)).map(toProjectDTO),
       directory,
       organizations: organizations.map(toOrganizationDTO),
@@ -2337,10 +2681,15 @@ export async function createCanonicalTask(input: CreateTaskInput): Promise<Actio
     }
     const recurrenceError = recurrenceValidationMessage(input.recurrence);
     if (recurrenceError) return { ok: false, code: "VALIDATION", message: recurrenceError };
+    const planningError = planningDatesValidationMessage(input.startDate, input.deadlineDate);
+    if (planningError) return { ok: false, code: "VALIDATION", message: planningError };
     const organization = input.organizationId ? await db.organization.findFirst({ where: { id: input.organizationId, workspaceId } }) : undefined;
     if (organization && !actorIsOwner(actor) && !actorManagesOrganization(actor, organization.id)) return forbidden();
-    if ((input.assignments || []).filter(assignment => assignment.role === "primary_owner").length > 1) return { ok: false, code: "VALIDATION", message: "Shared work needs one primary owner." };
-    const assignments = await defaultTeamAssignmentForDepartments(db, workspaceId, departmentIds, input.assignments || []);
+    if ((input.assignments || []).filter(assignment => assignment.role === "primary_owner").length > 1) return { ok: false, code: "VALIDATION", message: "Choose one person or team currently responsible for this task." };
+    const assignments = withCurrentResponsibility(
+      await defaultTeamAssignmentForDepartments(db, workspaceId, departmentIds, input.assignments || []),
+      actor.id,
+    );
     const result = await db.$transaction(async (tx) => {
       const task = await tx.task.create({
         data: {
@@ -2351,8 +2700,10 @@ export async function createCanonicalTask(input: CreateTaskInput): Promise<Actio
           parentTaskId: input.parentTaskId || null,
           sourceTaskId: input.sourceTaskId || null,
           createdByPrincipalId: actor.id,
+          ownerPrincipalId: actor.id,
           title,
           description: input.description?.trim() || null,
+          currentStep: input.currentStep?.trim() || null,
           priority: input.priority ? asDbPriority(input.priority) : TaskPriority.MEDIUM,
           status: TaskStatus.READY,
           startDate: dateOnly(input.startDate),
@@ -2420,6 +2771,21 @@ export async function createCanonicalTask(input: CreateTaskInput): Promise<Actio
         await tx.captureTask.create({ data: { captureId: capture.id, taskId: task.id } });
       }
       await addEvent(tx, task.id, actor.id, TaskEventType.CREATED, "Created task");
+      const initialResponsibility = assignments.find((assignment) => assignment.role === "primary_owner");
+      if (initialResponsibility && initialResponsibility.principalId !== actor.id) {
+        const recipient = await tx.principal.findUnique({ where: { id: initialResponsibility.principalId }, select: { id: true, name: true } });
+        if (recipient) {
+          await addEvent(
+            tx,
+            task.id,
+            actor.id,
+            TaskEventType.REASSIGNED,
+            `${actor.name} assigned this task to ${recipient.name}`,
+            { currentResponsibilityId: actor.id },
+            { currentResponsibilityId: recipient.id, initial: true },
+          );
+        }
+      }
       const revision = await incrementRevision(tx, workspaceId);
       return { taskId: task.id, revision: revision.revision };
     });
@@ -2439,6 +2805,11 @@ export async function updateCanonicalTask(input: UpdateTaskInput): Promise<Actio
     const actor = await resolveActor(initial.workspaceId);
     if (!canManageTask(actor, initial)) return forbidden();
     if (initial.version !== input.expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere. Review the latest version before saving.", latest: toTaskDTO(initial, actor.id) };
+    const planningError = planningDatesValidationMessage(
+      input.startDate === undefined ? toDateString(initial.startDate) : input.startDate,
+      input.deadlineDate === undefined ? toDateString(initial.deadline) : input.deadlineDate,
+    );
+    if (planningError) return { ok: false, code: "VALIDATION", message: planningError };
     const resultingOrganizationId = input.organizationId === undefined ? initial.organizationId : input.organizationId;
     const resultingDepartmentIds = input.involvedDepartmentIds === undefined
       ? initial.involvedDepartments.map(({ departmentId }) => departmentId)
@@ -2469,6 +2840,9 @@ export async function updateCanonicalTask(input: UpdateTaskInput): Promise<Actio
     ].filter(([, next, previous]) => next !== undefined && next !== previous) as Array<[string, string | null | undefined, string | undefined]>;
     for (const [label, next, previous] of dateChanges) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: `Changed ${label} ${previous || "not set"} → ${next || "not set"}`, before: { value: previous || null }, after: { value: next || null } });
     if (input.description !== undefined && (input.description || null) !== (initial.description || null)) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: "Updated task description" });
+    if (input.currentStep !== undefined && (input.currentStep?.trim() || null) !== (initial.currentStep || null)) {
+      changeEvents.push({ type: TaskEventType.NEXT_ACTION_CHANGED, summary: input.currentStep?.trim() ? `Set current step to “${input.currentStep.trim()}”` : "Cleared current step" });
+    }
     if (input.priority !== undefined && asDbPriority(input.priority) !== initial.priority) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: `Changed priority to ${input.priority}` });
     if (input.estimatedMinutes !== undefined && (input.estimatedMinutes ?? null) !== initial.estimatedMinutes) changeEvents.push({ type: TaskEventType.DATES_CHANGED, summary: input.estimatedMinutes ? `Set estimated effort to ${input.estimatedMinutes} minutes` : "Cleared estimated effort" });
     const result = await db.$transaction(async (tx) => {
@@ -2480,6 +2854,7 @@ export async function updateCanonicalTask(input: UpdateTaskInput): Promise<Actio
         data: {
           title: input.title === undefined ? undefined : input.title.trim(),
           description: input.description === undefined ? undefined : input.description?.trim() || null,
+          currentStep: input.currentStep === undefined ? undefined : input.currentStep?.trim() || null,
           organizationId: input.organizationId === undefined ? undefined : input.organizationId,
           leadDepartmentId: input.leadDepartmentId === undefined ? undefined : input.leadDepartmentId,
           projectId: input.projectId === undefined ? undefined : input.projectId,
@@ -2507,6 +2882,232 @@ export async function updateCanonicalTask(input: UpdateTaskInput): Promise<Actio
   }
 }
 
+async function responsibilityRecipient(
+  db: ReturnType<typeof getDb>,
+  task: TaskRecord,
+  principalId: string,
+): Promise<{ principal: { id: string; name: string; type: PrincipalType } } | { error: string }> {
+  const referenceError = await validateTaskReferences(db, {
+    workspaceId: task.workspaceId,
+    organizationId: task.organizationId,
+    principalIds: [principalId],
+  });
+  if (referenceError) return { error: referenceError };
+  const principal = await db.principal.findFirst({
+    where: { id: principalId, workspaceId: task.workspaceId, active: true },
+    select: { id: true, name: true, type: true },
+  });
+  return principal ? { principal } : { error: "Choose an active person or team in this workspace." };
+}
+
+async function setCurrentResponsibilityInTransaction(
+  tx: Prisma.TransactionClient,
+  task: TaskRecord,
+  actor: ActorRecord,
+  recipient: { id: string; name: string; type: PrincipalType },
+  source: AssignmentSource,
+) {
+  const previous = currentResponsibilityAssignment(task.assignments);
+  // A handoff does not leave the previous individual in the active work model.
+  // An assigned Team stays as collaborator context after a claim/handoff so its
+  // work view can retain the relationship without double-counting workload.
+  if (previous && previous.principalId !== recipient.id) {
+    if (previous.principal.type === PrincipalType.PERSON) {
+      await tx.taskAssignment.delete({ where: { id: previous.id } });
+    } else {
+      await tx.taskAssignment.update({ where: { id: previous.id }, data: { role: AssignmentRole.COLLABORATOR } });
+    }
+  }
+  await tx.taskAssignment.updateMany({
+    where: { taskId: task.id, role: AssignmentRole.PRIMARY_OWNER, principalId: { not: recipient.id } },
+    data: { role: AssignmentRole.COLLABORATOR },
+  });
+  await tx.taskAssignment.upsert({
+    where: { taskId_principalId: { taskId: task.id, principalId: recipient.id } },
+    create: {
+      taskId: task.id,
+      principalId: recipient.id,
+      role: AssignmentRole.PRIMARY_OWNER,
+      source,
+      assignedByPrincipalId: actor.id,
+    },
+    update: {
+      role: AssignmentRole.PRIMARY_OWNER,
+      source,
+      assignedAt: new Date(),
+      assignedByPrincipalId: actor.id,
+      claimedFromAssignmentId: null,
+    },
+  });
+  return previous;
+}
+
+/** Changes the single active responsibility without completing the current step. */
+export async function reassignCanonicalTask(
+  taskId: string,
+  expectedVersion: number,
+  input: CurrentResponsibilityInput,
+): Promise<ActionResult<TaskDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const db = getDb();
+  const task = await taskById(taskId);
+  if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
+  const actor = await resolveActor(task.workspaceId);
+  if (!canManageTask(actor, task)) return forbidden();
+  if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere. Review the latest version before saving.", latest: toTaskDTO(task, actor.id) };
+  if (requiresRerouteConfirmation(actor, task, input.recipientPrincipalId) && !input.confirmReroute) {
+    return { ok: false, code: "VALIDATION", message: "Confirm this reroute before moving work held by someone else." };
+  }
+  const resolved = await responsibilityRecipient(db, task, input.recipientPrincipalId);
+  if ("error" in resolved) return { ok: false, code: "VALIDATION", message: resolved.error };
+  const previous = currentResponsibilityAssignment(task.assignments);
+  if (previous?.principalId === resolved.principal.id) {
+    const dto = await taskDtoById(taskId, actor.id);
+    return dto ? { ok: true, data: dto } : { ok: false, code: "NOT_FOUND", message: "Task not found after reassignment." };
+  }
+  const note = input.note?.trim();
+  const revision = await db.$transaction(async (tx) => {
+    const before = await setCurrentResponsibilityInTransaction(tx, task, actor, resolved.principal, AssignmentSource.MANUAL);
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        version: { increment: 1 },
+        ...(task.status === TaskStatus.WAITING || task.status === TaskStatus.REVIEW ? {} : nextActionData({ kind: "ready" })),
+      },
+    });
+    await addEvent(
+      tx,
+      task.id,
+      actor.id,
+      TaskEventType.REASSIGNED,
+      `${actor.name} reassigned this task from ${before?.principal.name || "unassigned"} to ${resolved.principal.name}`,
+      { currentResponsibilityId: before?.principalId || null },
+      { currentResponsibilityId: resolved.principal.id, note: note || undefined },
+    );
+    return (await incrementRevision(tx, task.workspaceId)).revision;
+  });
+  const dto = await taskDtoById(taskId, actor.id);
+  return dto ? { ok: true, data: dto, revision } : { ok: false, code: "NOT_FOUND", message: "Task not found after reassignment." };
+}
+
+/** Explicitly transfers overall accountability; it never changes current work. */
+export async function setCanonicalTaskOwner(
+  taskId: string,
+  expectedVersion: number,
+  ownerPrincipalId: string | undefined,
+): Promise<ActionResult<TaskDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const db = getDb();
+  const task = await taskById(taskId);
+  if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
+  const actor = await resolveActor(task.workspaceId);
+  if (!actorCanRerouteTask(actor, task)) return forbidden("Only the Task Owner or an authorized manager can transfer ownership.");
+  if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere. Review the latest version before saving.", latest: toTaskDTO(task, actor.id) };
+  let owner: { id: string; name: string } | undefined;
+  if (ownerPrincipalId) {
+    const candidate = await db.principal.findFirst({
+      where: { id: ownerPrincipalId, workspaceId: task.workspaceId, type: PrincipalType.PERSON, active: true },
+      select: { id: true, name: true },
+    });
+    if (!candidate) return { ok: false, code: "VALIDATION", message: "Choose an active person as Task Owner." };
+    if (task.organizationId) {
+      const membership = await db.organizationMembership.findFirst({ where: { personId: candidate.id, organizationId: task.organizationId, status: MembershipStatus.ACTIVE } });
+      if (!membership) return { ok: false, code: "VALIDATION", message: "Choose an owner who belongs to this task’s organization." };
+    }
+    owner = candidate;
+  }
+  const revision = await db.$transaction(async (tx) => {
+    await tx.task.update({ where: { id: task.id }, data: { ownerPrincipalId: owner?.id || null, ownerInferredFromCreator: false, version: { increment: 1 } } });
+    await addEvent(tx, task.id, actor.id, TaskEventType.ASSIGNED, owner
+      ? `${actor.name} transferred task ownership to ${owner.name}`
+      : `${actor.name} cleared the task owner`, { ownerPrincipalId: task.ownerPrincipalId || null }, { ownerPrincipalId: owner?.id || null });
+    return (await incrementRevision(tx, task.workspaceId)).revision;
+  });
+  const dto = await taskDtoById(taskId, actor.id);
+  return dto ? { ok: true, data: dto, revision } : { ok: false, code: "NOT_FOUND", message: "Task not found after ownership update." };
+}
+
+/**
+ * Completes one human workflow step on the same canonical Task. Sequential
+ * work changes responsibility; parallel deliverables remain canonical child
+ * tasks and are not created here.
+ */
+export async function completeCanonicalTaskStep(
+  taskId: string,
+  expectedVersion: number,
+  input: CompleteTaskStepInput,
+): Promise<ActionResult<TaskDTO>> {
+  if (!hasDatabaseConfiguration()) return configuration();
+  const db = getDb();
+  const task = await taskById(taskId);
+  if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
+  const actor = await resolveActor(task.workspaceId);
+  if (!canCompleteCurrentStep(actor, task)) return forbidden("Only the person currently responsible, the active reviewer, or an authorized manager can complete this step.");
+  if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere. Review the latest version before saving.", latest: toTaskDTO(task, actor.id) };
+  if (task.status === TaskStatus.DONE) return { ok: false, code: "VALIDATION", message: "This task is already complete." };
+  const step = task.currentStep || task.title;
+  const note = input.note?.trim();
+  if (input.outcome === "finish" && task.dependencies.some((dependency) => dependency.type === DependencyType.COMPLETION_BLOCKER && !dependency.resolvedAt)) {
+    return { ok: false, code: "DEPENDENCY", message: "This task still has a completion blocker." };
+  }
+  if ((input.outcome === "handoff" || input.outcome === "review") && !input.nextStep?.trim()) {
+    return { ok: false, code: "VALIDATION", message: "Describe the next step before sending this task on." };
+  }
+  let recipient: { id: string; name: string; type: PrincipalType } | undefined;
+  if (input.outcome === "handoff" || input.outcome === "review") {
+    if (!input.recipientPrincipalId) return { ok: false, code: "VALIDATION", message: "Choose who should take the next step." };
+    const resolved = await responsibilityRecipient(db, task, input.recipientPrincipalId);
+    if ("error" in resolved) return { ok: false, code: "VALIDATION", message: resolved.error };
+    recipient = resolved.principal;
+    if (input.outcome === "review" && recipient.type !== PrincipalType.PERSON) return { ok: false, code: "VALIDATION", message: "Choose a person to review this task." };
+  }
+  const revision = await db.$transaction(async (tx) => {
+    if (input.outcome === "finish") {
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          status: TaskStatus.DONE,
+          completedAt: new Date(),
+          version: { increment: 1 },
+          ...nextActionData({ kind: "ready" }),
+        },
+      });
+      await applyCompletionEffects(tx, task, actor.id);
+      await addEvent(tx, task.id, actor.id, TaskEventType.COMPLETED, `${actor.name} completed “${step}” and marked task Done`, undefined, note ? { note } : undefined);
+    } else if (input.outcome === "handoff" && recipient) {
+      const before = await setCurrentResponsibilityInTransaction(tx, task, actor, recipient, AssignmentSource.MANUAL);
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          status: task.status === TaskStatus.READY ? TaskStatus.IN_PROGRESS : task.status,
+          currentStep: input.nextStep!.trim(),
+          version: { increment: 1 },
+          ...nextActionData({ kind: "ready" }),
+        },
+      });
+      await addEvent(tx, task.id, actor.id, TaskEventType.COMPLETED, `${actor.name} completed “${step}”`, undefined, note ? { note } : undefined);
+      await addEvent(tx, task.id, actor.id, TaskEventType.REASSIGNED, `${actor.name} sent this task to ${recipient.name}`, { currentResponsibilityId: before?.principalId || null, step }, { currentResponsibilityId: recipient.id, step: input.nextStep!.trim(), note: note || undefined });
+    } else if (input.outcome === "review" && recipient) {
+      const before = await setCurrentResponsibilityInTransaction(tx, task, actor, recipient, AssignmentSource.MANUAL);
+      await tx.taskReviewCycle.create({ data: { taskId: task.id, submittedByPrincipalId: actor.id, reviewerPrincipalId: recipient.id } });
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          status: TaskStatus.REVIEW,
+          currentStep: input.nextStep!.trim(),
+          version: { increment: 1 },
+          ...nextActionData({ kind: "principal", principalId: recipient.id }),
+        },
+      });
+      await addEvent(tx, task.id, actor.id, TaskEventType.COMPLETED, `${actor.name} completed “${step}”`, undefined, note ? { note } : undefined);
+      await addEvent(tx, task.id, actor.id, TaskEventType.REVIEW_SUBMITTED, `${actor.name} requested review from ${recipient.name}`, { currentResponsibilityId: before?.principalId || null, step }, { currentResponsibilityId: recipient.id, step: input.nextStep!.trim(), note: note || undefined });
+    }
+    return (await incrementRevision(tx, task.workspaceId)).revision;
+  });
+  const dto = await taskDtoById(taskId, actor.id);
+  return dto ? { ok: true, data: dto, revision } : { ok: false, code: "NOT_FOUND", message: "Task not found after completing the step." };
+}
+
 export async function setCanonicalAssignments(taskId: string, expectedVersion: number, assignments: AssignmentInput[]): Promise<ActionResult<TaskDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const db = getDb();
@@ -2515,11 +3116,16 @@ export async function setCanonicalAssignments(taskId: string, expectedVersion: n
   const actor = await resolveActor(task.workspaceId);
   if (!canManageTask(actor, task)) return forbidden();
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
-  if (assignments.filter((assignment) => assignment.role === "primary_owner").length > 1) return { ok: false, code: "VALIDATION", message: "Shared work needs one primary owner." };
+  if (assignments.filter((assignment) => assignment.role === "primary_owner").length > 1) return { ok: false, code: "VALIDATION", message: "Choose one party currently responsible for the next move." };
   const principalIds = assignments.map((assignment) => assignment.principalId);
   if (new Set(principalIds).size !== principalIds.length) return { ok: false, code: "VALIDATION", message: "Add each person or team only once." };
-  const validPrincipals = await db.principal.count({ where: { workspaceId: task.workspaceId, active: true, id: { in: principalIds } } });
-  if (validPrincipals !== principalIds.length) return { ok: false, code: "VALIDATION", message: "One or more assignees are not active in this workspace." };
+  const referenceError = await validateTaskReferences(db, { workspaceId: task.workspaceId, organizationId: task.organizationId, principalIds });
+  if (referenceError) return { ok: false, code: "VALIDATION", message: referenceError };
+  const existingCurrent = currentResponsibilityAssignment(task.assignments);
+  const requestedCurrent = currentResponsibilityAssignment(assignments);
+  if ((existingCurrent?.principalId || "") !== (requestedCurrent?.principalId || "")) {
+    return { ok: false, code: "VALIDATION", message: "Use Currently with to reroute work so Binnie can confirm and record the handoff." };
+  }
   const existingAssignments = new Map(task.assignments.map((assignment) => [assignment.principalId, assignment]));
   const removedPrincipalIds = task.assignments.map((assignment) => assignment.principalId).filter((principalId) => !principalIds.includes(principalId));
   const addedAssignments = assignments.filter((assignment) => !existingAssignments.has(assignment.principalId));
@@ -2543,14 +3149,15 @@ export async function setCanonicalAssignments(taskId: string, expectedVersion: n
         data: { role: assignment.role === "primary_owner" ? AssignmentRole.PRIMARY_OWNER : AssignmentRole.COLLABORATOR },
       });
     }
-    const primaryOwner = assignments.find((assignment) => assignment.role === "primary_owner");
-    await tx.task.update({ where: { id: taskId }, data: { version: { increment: 1 }, ...(task.nextActionPrincipalId && !assignments.some((assignment) => assignment.principalId === task.nextActionPrincipalId) ? nextActionData(primaryOwner ? { kind: "principal", principalId: primaryOwner.principalId } : { kind: "ready" }) : {}) } });
+    // Shared collaborators are separate from the one operational
+    // responsibility. This compatibility action cannot silently reroute it.
+    await tx.task.update({ where: { id: taskId }, data: { version: { increment: 1 } } });
     await addEvent(
       tx,
       taskId,
       actor.id,
       TaskEventType.ASSIGNED,
-      assignments.length ? "Updated task assignees" : "Cleared task assignees",
+      assignments.length ? "Updated shared work" : "Cleared shared work",
       { assignments: task.assignments.map((assignment) => ({ principalId: assignment.principalId, role: assignmentRole(assignment.role) })) },
       { assignments: assignments.map((assignment) => ({ principalId: assignment.principalId, role: assignment.role })) },
     );
@@ -2567,18 +3174,14 @@ export async function claimCanonicalTask(taskId: string, expectedVersion: number
   if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
   const actor = await resolveActor(task.workspaceId);
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
-  const queueAssignment = task.assignments.find((assignment) => assignment.principal.type === PrincipalType.TEAM && (!teamId || assignment.principalId === teamId));
-  if (!queueAssignment) return { ok: false, code: "VALIDATION", message: "Choose an assigned team queue to claim." };
+  const queueAssignment = currentResponsibilityAssignment(task.assignments);
+  if (!queueAssignment || queueAssignment.principal.type !== PrincipalType.TEAM || (teamId && queueAssignment.principalId !== teamId)) return { ok: false, code: "VALIDATION", message: "Choose the team currently responsible for this task." };
   const belongsToTeam = actor.teamIds.includes(queueAssignment.principalId);
   if (!canManageTask(actor, task) && !belongsToTeam) return forbidden("You can only claim work from a team you belong to.");
   const revision = await db.$transaction(async (tx) => {
-    await tx.taskAssignment.updateMany({ where: { taskId, role: AssignmentRole.PRIMARY_OWNER }, data: { role: AssignmentRole.COLLABORATOR } });
-    await tx.taskAssignment.upsert({
-      where: { taskId_principalId: { taskId, principalId: actor.id } },
-      create: { taskId, principalId: actor.id, role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.CLAIM, assignedByPrincipalId: actor.id, claimedFromAssignmentId: queueAssignment.id },
-      update: { role: AssignmentRole.PRIMARY_OWNER, source: AssignmentSource.CLAIM, assignedByPrincipalId: actor.id, claimedFromAssignmentId: queueAssignment.id },
-    });
-    await tx.task.update({ where: { id: taskId }, data: { version: { increment: 1 }, ...nextActionData({ kind: "principal", principalId: actor.id }) } });
+    await setCurrentResponsibilityInTransaction(tx, task, actor, { id: actor.id, name: actor.name, type: PrincipalType.PERSON }, AssignmentSource.CLAIM);
+    await tx.taskAssignment.update({ where: { taskId_principalId: { taskId, principalId: actor.id } }, data: { claimedFromAssignmentId: queueAssignment.id } });
+    await tx.task.update({ where: { id: taskId }, data: { version: { increment: 1 }, ...nextActionData({ kind: "ready" }) } });
     await addEvent(tx, taskId, actor.id, TaskEventType.CLAIMED, `${actor.name} claimed task from ${queueAssignment.principal.name}`);
     return (await incrementRevision(tx, task.workspaceId)).revision;
   });
@@ -2592,19 +3195,17 @@ export async function transitionCanonicalTask(taskId: string, expectedVersion: n
   const task = await taskById(taskId);
   if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
   const actor = await resolveActor(task.workspaceId);
-  if (!canManageTask(actor, task)) return forbidden();
+  if (!canCompleteCurrentStep(actor, task)) return forbidden("Only the current responsible party or an authorized manager can change this task’s work state.");
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
+  if (task.archivedAt) return { ok: false, code: "VALIDATION", message: "Archived tasks are historical and cannot be changed." };
   const dbStatus = asDbStatus(status);
+  if (task.status === TaskStatus.DONE && dbStatus !== TaskStatus.DONE) {
+    return { ok: false, code: "VALIDATION", message: "Completed tasks stay Done. Archive the task when it no longer belongs in completed work." };
+  }
   const unresolvedStartBlockers = task.dependencies.filter((dependency) => dependency.type === DependencyType.START_BLOCKER && !dependency.resolvedAt);
   const unresolvedCompletionBlockers = task.dependencies.filter((dependency) => dependency.type === DependencyType.COMPLETION_BLOCKER && !dependency.resolvedAt);
   const transitionBlockReason = taskTransitionBlockReason({ targetStatus: status, unresolvedStartBlockers: unresolvedStartBlockers.length, unresolvedCompletionBlockers: unresolvedCompletionBlockers.length });
   if (transitionBlockReason) return { ok: false, code: "DEPENDENCY", message: transitionBlockReason };
-  // Waiting is only meaningful when Binnie knows who (or what) is expected to
-  // move next.  Rejecting an unassigned transition prevents another
-  // “Next action by: Ready” record from entering the canonical task store.
-  if (dbStatus === TaskStatus.WAITING && task.nextActionKind === NextActionKind.READY) {
-    return { ok: false, code: "VALIDATION", message: "Set Next Action By before marking this task as Waiting." };
-  }
   const revision = await db.$transaction(async (tx) => {
     if (dbStatus === TaskStatus.BLOCKED && blocker) {
       await tx.taskDependency.create({ data: { taskId, type: DependencyType.START_BLOCKER, label: blocker.label.trim() || "A dependency", prerequisiteTaskId: blocker.prerequisiteTaskId || null, ownerPrincipalId: blocker.ownerPrincipalId || null, ownerDepartmentId: blocker.ownerDepartmentId || null } });
@@ -2732,6 +3333,8 @@ export async function archiveCanonicalTask(taskId: string, expectedVersion: numb
   const actor = await resolveActor(task.workspaceId);
   if (!canManageTask(actor, task)) return forbidden();
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
+  const archiveError = taskArchiveValidationMessage(asTaskStatus(task.status), Boolean(task.archivedAt));
+  if (archiveError) return { ok: false, code: "VALIDATION", message: archiveError };
   const revision = await getDb().$transaction(async tx => {
     await tx.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), version: { increment: 1 } } });
     await addEvent(tx, taskId, actor.id, TaskEventType.ARCHIVED, "Archived task");
@@ -2886,6 +3489,7 @@ export async function createCanonicalSubtask(parentTaskId: string, input: Omit<C
   });
   if (!result.ok) return result;
   await getDb().$transaction(async tx => {
+    await tx.task.update({ where: { id: parentTaskId }, data: { version: { increment: 1 } } });
     await addEvent(tx, parentTaskId, actor.id, TaskEventType.UPDATE_POSTED, `Added subtask — ${result.data.title}`);
     await incrementRevision(tx, parent.workspaceId);
   });
@@ -2897,7 +3501,16 @@ export async function mergeCanonicalTasks(
   expectedVersion: number,
   sourceTaskIds: string[],
   title?: string,
-  dateResolution?: { startDate?: "survivor" | "source" | "clear"; targetDate?: "survivor" | "source" | "clear"; deadlineDate?: "survivor" | "source" | "clear"; followUpDate?: "survivor" | "source" | "clear" },
+  dateResolution?: {
+    startDate?: "survivor" | "source" | "clear";
+    targetDate?: "survivor" | "source" | "clear";
+    deadlineDate?: "survivor" | "source" | "clear";
+    followUpDate?: "survivor" | "source" | "clear";
+    priority?: "survivor" | "source";
+    project?: "survivor" | "source";
+    leadDepartment?: "survivor" | "source";
+    currentStep?: "survivor" | "source";
+  },
 ): Promise<ActionResult<TaskDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const db = getDb();
@@ -2910,6 +3523,8 @@ export async function mergeCanonicalTasks(
   if (!uniqueSources.length) return { ok: false, code: "VALIDATION", message: "Choose at least one other task to merge." };
   const sources = await db.task.findMany({ where: { id: { in: uniqueSources }, workspaceId: survivor.workspaceId, archivedAt: null, deletedAt: null }, include: taskInclude });
   if (sources.length !== uniqueSources.length || sources.some(source => !canManageTask(actor, source))) return forbidden("You can only merge active work you are allowed to manage.");
+  if (sources.some(source => source.organizationId !== survivor.organizationId)) return { ok: false, code: "VALIDATION", message: "Tasks from different organizations cannot be merged." };
+  if (sources.some(source => source.parentTaskId === survivorId || survivor.parentTaskId === source.id)) return { ok: false, code: "VALIDATION", message: "Use subtasks for directly related work instead of merging a parent with its child." };
   const preferredSource = uniqueSources.map(id => sources.find(source => source.id === id)).find((source): source is typeof sources[number] => Boolean(source)) || survivor;
   const resolvedDates = dateResolution ? {
     startDate: dateResolution.startDate === "source" ? preferredSource.startDate : dateResolution.startDate === "clear" ? null : survivor.startDate,
@@ -2917,21 +3532,61 @@ export async function mergeCanonicalTasks(
     deadline: dateResolution.deadlineDate === "source" ? preferredSource.deadline : dateResolution.deadlineDate === "clear" ? null : survivor.deadline,
     followUpDate: dateResolution.followUpDate === "source" ? preferredSource.followUpDate : dateResolution.followUpDate === "clear" ? null : survivor.followUpDate,
   } : {};
+  // Operational responsibility, Owner, status, and organization always stay
+  // with the task currently open in the drawer. Only an explicit difference
+  // choice may adopt the duplicate's non-operational metadata.
+  const resolvedTaskDetails = {
+    priority: dateResolution?.priority === "source" ? preferredSource.priority : survivor.priority,
+    projectId: dateResolution?.project === "source" ? preferredSource.projectId : survivor.projectId,
+    leadDepartmentId: dateResolution?.leadDepartment === "source" ? preferredSource.leadDepartmentId : survivor.leadDepartmentId,
+    currentStep: dateResolution?.currentStep === "source" ? preferredSource.currentStep : survivor.currentStep,
+  };
+  const planningError = planningDatesValidationMessage(
+    "startDate" in resolvedDates ? toDateString(resolvedDates.startDate) : toDateString(survivor.startDate),
+    "deadline" in resolvedDates ? toDateString(resolvedDates.deadline) : toDateString(survivor.deadline),
+  );
+  if (planningError) return { ok: false, code: "VALIDATION", message: planningError };
   const revision = await db.$transaction(async tx => {
-    const assignmentData = sources.flatMap(source => source.assignments.map(assignment => ({ taskId: survivorId, principalId: assignment.principalId, role: assignment.role, source: AssignmentSource.MANUAL, assignedByPrincipalId: actor.id })));
+    const survivorAssignmentIds = new Set(survivor.assignments.map(assignment => assignment.principalId));
+    // Supporting collaborators may follow the merge, but a duplicate's active
+    // recipient must never replace the survivor's current responsibility.
+    const assignmentData = sources.flatMap(source => source.assignments
+      .filter(assignment => !survivorAssignmentIds.has(assignment.principalId))
+      .map(assignment => ({ taskId: survivorId, principalId: assignment.principalId, role: AssignmentRole.COLLABORATOR, source: AssignmentSource.MANUAL, assignedByPrincipalId: actor.id })));
     const departmentData = sources.flatMap(source => source.involvedDepartments.map(item => ({ taskId: survivorId, departmentId: item.departmentId })));
     if (assignmentData.length) await tx.taskAssignment.createMany({ data: assignmentData, skipDuplicates: true });
     if (departmentData.length) await tx.taskInvolvedDepartment.createMany({ data: departmentData, skipDuplicates: true });
     await tx.taskResource.updateMany({ where: { taskId: { in: uniqueSources } }, data: { taskId: survivorId } });
     await tx.taskUpdate.updateMany({ where: { taskId: { in: uniqueSources } }, data: { taskId: survivorId } });
+    await tx.task.updateMany({ where: { parentTaskId: { in: uniqueSources }, id: { not: survivorId } }, data: { parentTaskId: survivorId } });
     await tx.taskDependency.updateMany({ where: { taskId: { in: uniqueSources }, prerequisiteTaskId: { not: survivorId } }, data: { taskId: survivorId } });
     // A task that depended on a merged source now depends on the surviving task.
     // Dependencies owned by the survivor itself would become self-dependencies,
     // so they are no longer meaningful and must be removed.
     await tx.taskDependency.deleteMany({ where: { taskId: survivorId, prerequisiteTaskId: { in: uniqueSources } } });
     await tx.taskDependency.updateMany({ where: { taskId: { not: survivorId }, prerequisiteTaskId: { in: uniqueSources } }, data: { prerequisiteTaskId: survivorId } });
+    const dependencies = await tx.taskDependency.findMany({ where: { taskId: survivorId }, orderBy: { createdAt: "asc" } });
+    const dependencyKeys = new Set<string>();
+    const duplicateDependencyIds: string[] = [];
+    for (const dependency of dependencies) {
+      const key = dependency.prerequisiteTaskId
+        ? `${dependency.type}:${dependency.prerequisiteTaskId}`
+        : `${dependency.type}:external:${dependency.label.trim().toLocaleLowerCase()}`;
+      if (dependencyKeys.has(key)) duplicateDependencyIds.push(dependency.id);
+      else dependencyKeys.add(key);
+    }
+    if (duplicateDependencyIds.length) await tx.taskDependency.deleteMany({ where: { id: { in: duplicateDependencyIds } } });
+    const checklistTitles = new Set(survivor.checklistItems.map(item => item.title.trim().toLocaleLowerCase()));
+    let checklistPosition = survivor.checklistItems.reduce((highest, item) => Math.max(highest, item.position), -1) + 1;
+    const checklistData = sources.flatMap(source => source.checklistItems).flatMap(item => {
+      const normalized = item.title.trim().toLocaleLowerCase();
+      if (!normalized || checklistTitles.has(normalized)) return [];
+      checklistTitles.add(normalized);
+      return [{ taskId: survivorId, title: item.title, position: checklistPosition++, completedAt: item.completedAt, completedByPrincipalId: item.completedByPrincipalId }];
+    });
+    if (checklistData.length) await tx.taskChecklistItem.createMany({ data: checklistData });
     const combinedDescription = [survivor.description, ...sources.map(source => source.description)].filter((value): value is string => Boolean(value?.trim())).join("\n\n");
-    await tx.task.update({ where: { id: survivorId }, data: { title: title?.trim() || survivor.title, description: combinedDescription || null, ...resolvedDates, version: { increment: 1 } } });
+    await tx.task.update({ where: { id: survivorId }, data: { title: title?.trim() || survivor.title, description: combinedDescription || null, ...resolvedDates, ...resolvedTaskDetails, version: { increment: 1 } } });
     await tx.task.updateMany({ where: { id: { in: uniqueSources } }, data: { archivedAt: new Date(), mergedIntoTaskId: survivorId, version: { increment: 1 } } });
     for (const source of sources) await addEvent(tx, source.id, actor.id, TaskEventType.ARCHIVED, `Merged into “${title?.trim() || survivor.title}”`);
     await addEvent(tx, survivorId, actor.id, TaskEventType.UPDATE_POSTED, `Merged ${sources.length} task${sources.length === 1 ? "" : "s"} into this task`);
@@ -2955,8 +3610,8 @@ export async function splitCanonicalTask(taskId: string, expectedVersion: number
     const createdTasks = [];
     for (const title of pieces) {
       const task = await tx.task.create({ data: {
-        workspaceId: original.workspaceId, organizationId: original.organizationId, leadDepartmentId: original.leadDepartmentId, projectId: original.projectId, sourceTaskId: original.id, createdByPrincipalId: actor.id,
-        title, description: original.description, priority: original.priority, status: TaskStatus.READY, startDate: original.startDate, targetDate: original.targetDate, deadline: original.deadline, followUpDate: original.followUpDate,
+        workspaceId: original.workspaceId, organizationId: original.organizationId, leadDepartmentId: original.leadDepartmentId, projectId: original.projectId, sourceTaskId: original.id, createdByPrincipalId: actor.id, ownerPrincipalId: original.ownerPrincipalId, ownerInferredFromCreator: original.ownerInferredFromCreator,
+        title, description: original.description, currentStep: original.currentStep, priority: original.priority, status: TaskStatus.READY, startDate: original.startDate, targetDate: original.targetDate, deadline: original.deadline, followUpDate: original.followUpDate,
         ...nextActionData({ kind: "ready" }),
         involvedDepartments: { create: original.involvedDepartments.map(item => ({ departmentId: item.departmentId })) },
         assignments: { create: original.assignments.map(assignment => ({ principalId: assignment.principalId, role: assignment.role, source: AssignmentSource.MANUAL, assignedByPrincipalId: actor.id })) },
@@ -3061,50 +3716,86 @@ export async function getAuthorizedTaskResource(resourceId: string) {
   return undefined;
 }
 
-export async function submitCanonicalTaskForReview(taskId: string, expectedVersion: number, reviewerId: string): Promise<ActionResult<TaskDTO>> {
+export async function submitCanonicalTaskForReview(taskId: string, expectedVersion: number, reviewerId: string, nextStep?: string): Promise<ActionResult<TaskDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const db = getDb();
   const task = await taskById(taskId);
   if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
   const actor = await resolveActor(task.workspaceId);
-  if (!canManageTask(actor, task)) return forbidden();
+  if (!canCompleteCurrentStep(actor, task)) return forbidden("Only the current responsible party or an authorized manager can request review.");
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
   if (task.status !== TaskStatus.IN_PROGRESS) return { ok: false, code: "VALIDATION", message: "Only work in progress can be submitted for review." };
-  const reviewer = await db.principal.findFirst({ where: { id: reviewerId, workspaceId: task.workspaceId, active: true } });
-  if (!reviewer) return { ok: false, code: "VALIDATION", message: "Choose a real reviewer from this workspace." };
+  const resolved = await responsibilityRecipient(db, task, reviewerId);
+  if ("error" in resolved || resolved.principal.type !== PrincipalType.PERSON) return { ok: false, code: "VALIDATION", message: "Choose a real reviewer from this task’s organization." };
+  const reviewer = resolved.principal;
+  const reviewStep = nextStep?.trim() || (task.currentStep ? `Review: ${task.currentStep}` : `Review ${task.title}`);
   const revision = await db.$transaction(async (tx) => {
+    const previous = await setCurrentResponsibilityInTransaction(tx, task, actor, reviewer, AssignmentSource.MANUAL);
     await tx.taskReviewCycle.create({ data: { taskId, submittedByPrincipalId: actor.id, reviewerPrincipalId: reviewer.id } });
-    await tx.task.update({ where: { id: taskId }, data: { status: TaskStatus.REVIEW, version: { increment: 1 }, ...nextActionData({ kind: "principal", principalId: reviewer.id }) } });
-    await addEvent(tx, taskId, actor.id, TaskEventType.REVIEW_SUBMITTED, `Submitted for review to ${reviewer.name}`);
+    await tx.task.update({ where: { id: taskId }, data: { status: TaskStatus.REVIEW, currentStep: reviewStep, version: { increment: 1 }, ...nextActionData({ kind: "principal", principalId: reviewer.id }) } });
+    await addEvent(tx, taskId, actor.id, TaskEventType.REVIEW_SUBMITTED, `${actor.name} requested review from ${reviewer.name}`, { currentResponsibilityId: previous?.principalId || null }, { currentResponsibilityId: reviewer.id, step: reviewStep });
     return (await incrementRevision(tx, task.workspaceId)).revision;
   });
   const dto = await taskDtoById(taskId, actor.id);
   return dto ? { ok: true, data: dto, revision } : { ok: false, code: "NOT_FOUND", message: "Task not found after submission." };
 }
 
-export async function decideCanonicalReview(taskId: string, expectedVersion: number, approve: boolean, revisionNote?: string): Promise<ActionResult<TaskDTO>> {
+export interface ReviewDecisionInput {
+  approve: boolean;
+  /** Approval must finish the Task or deliberately send the same Task onward. */
+  outcome?: "finish" | "handoff";
+  recipientPrincipalId?: string;
+  nextStep?: string;
+  revisionNote?: string;
+}
+
+export async function decideCanonicalReview(
+  taskId: string,
+  expectedVersion: number,
+  rawDecision: boolean | ReviewDecisionInput,
+  legacyRevisionNote?: string,
+): Promise<ActionResult<TaskDTO>> {
   if (!hasDatabaseConfiguration()) return configuration();
   const db = getDb();
   const task = await taskById(taskId);
   if (!task) return { ok: false, code: "NOT_FOUND", message: "Task not found." };
   const actor = await resolveActor(task.workspaceId);
+  const decision: ReviewDecisionInput = typeof rawDecision === "boolean"
+    ? { approve: rawDecision, outcome: rawDecision ? "finish" : undefined, revisionNote: legacyRevisionNote }
+    : rawDecision;
   if (task.version !== expectedVersion) return { ok: false, code: "CONFLICT", message: "This task changed elsewhere.", latest: toTaskDTO(task, actor.id) };
   const review = task.reviewCycles[0];
   if (!review || task.status !== TaskStatus.REVIEW) return { ok: false, code: "VALIDATION", message: "This task is not waiting for review." };
   if (review.reviewerPrincipalId !== actor.id && !canManageTask(actor, task)) return forbidden("Only the selected reviewer or an authorized manager can decide this review.");
-  if (!approve && !revisionNote?.trim()) return { ok: false, code: "VALIDATION", message: "Explain what needs revision before sending work back." };
-  if (approve && task.dependencies.some((dependency) => dependency.type === DependencyType.COMPLETION_BLOCKER && !dependency.resolvedAt)) return { ok: false, code: "DEPENDENCY", message: "Final approval is waiting on a completion dependency." };
+  if (!decision.approve && !decision.revisionNote?.trim()) return { ok: false, code: "VALIDATION", message: "Explain what needs revision before sending work back." };
+  if (decision.approve && !decision.outcome) return { ok: false, code: "VALIDATION", message: "Choose whether approval finishes the task or sends it onward." };
+  if (decision.approve && decision.outcome === "finish" && task.dependencies.some((dependency) => dependency.type === DependencyType.COMPLETION_BLOCKER && !dependency.resolvedAt)) return { ok: false, code: "DEPENDENCY", message: "Final approval is waiting on a completion dependency." };
+  let recipient: { id: string; name: string; type: PrincipalType } | undefined;
+  if (decision.approve && decision.outcome === "handoff") {
+    if (!decision.recipientPrincipalId || !decision.nextStep?.trim()) return { ok: false, code: "VALIDATION", message: "Choose who receives the approved work and describe the next step." };
+    const resolved = await responsibilityRecipient(db, task, decision.recipientPrincipalId);
+    if ("error" in resolved) return { ok: false, code: "VALIDATION", message: resolved.error };
+    recipient = resolved.principal;
+  }
   const revision = await db.$transaction(async (tx) => {
-    await tx.taskReviewCycle.update({ where: { id: review.id }, data: { reviewedByPrincipalId: actor.id, reviewedAt: new Date(), decision: approve ? ReviewDecision.APPROVED : ReviewDecision.REVISION_REQUESTED, revisionNote: approve ? null : revisionNote!.trim() } });
-    const owner = task.assignments.find((assignment) => assignment.role === AssignmentRole.PRIMARY_OWNER);
-    await tx.task.update({
-      where: { id: taskId },
-      data: approve
-        ? { status: TaskStatus.DONE, completedAt: new Date(), version: { increment: 1 }, ...nextActionData({ kind: "ready" }) }
-        : { status: TaskStatus.IN_PROGRESS, version: { increment: 1 }, ...nextActionData(owner ? { kind: "principal", principalId: owner.principalId } : { kind: "ready" }) },
-    });
-    if (approve) await applyCompletionEffects(tx, task, actor.id);
-    await addEvent(tx, taskId, actor.id, approve ? TaskEventType.REVIEW_APPROVED : TaskEventType.REVISION_REQUESTED, approve ? "Approved review and completed task" : "Requested revision", undefined, approve ? undefined : { revisionNote: revisionNote!.trim() });
+    await tx.taskReviewCycle.update({ where: { id: review.id }, data: { reviewedByPrincipalId: actor.id, reviewedAt: new Date(), decision: decision.approve ? ReviewDecision.APPROVED : ReviewDecision.REVISION_REQUESTED, revisionNote: decision.approve ? null : decision.revisionNote!.trim() } });
+    if (!decision.approve) {
+      const submitter = await db.principal.findFirst({ where: { id: review.submittedByPrincipalId, workspaceId: task.workspaceId, active: true }, select: { id: true, name: true, type: true } });
+      if (!submitter || submitter.type !== PrincipalType.PERSON) throw new Error("The original reviewer is no longer available to receive this task.");
+      const previous = await setCurrentResponsibilityInTransaction(tx, task, actor, submitter, AssignmentSource.MANUAL);
+      const revisionStep = decision.nextStep?.trim() || "Address review feedback";
+      await tx.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS, currentStep: revisionStep, version: { increment: 1 }, ...nextActionData({ kind: "ready" }) } });
+      await addEvent(tx, taskId, actor.id, TaskEventType.REVISION_REQUESTED, `${actor.name} requested changes and sent this task back to ${submitter.name}`, { currentResponsibilityId: previous?.principalId || null }, { currentResponsibilityId: submitter.id, step: revisionStep, note: decision.revisionNote!.trim() });
+    } else if (decision.outcome === "finish") {
+      await tx.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE, completedAt: new Date(), version: { increment: 1 }, ...nextActionData({ kind: "ready" }) } });
+      await applyCompletionEffects(tx, task, actor.id);
+      await addEvent(tx, taskId, actor.id, TaskEventType.REVIEW_APPROVED, `${actor.name} approved review and marked task Done`);
+    } else if (recipient) {
+      const previous = await setCurrentResponsibilityInTransaction(tx, task, actor, recipient, AssignmentSource.MANUAL);
+      await tx.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS, currentStep: decision.nextStep!.trim(), version: { increment: 1 }, ...nextActionData({ kind: "ready" }) } });
+      await addEvent(tx, taskId, actor.id, TaskEventType.REVIEW_APPROVED, `${actor.name} approved review`);
+      await addEvent(tx, taskId, actor.id, TaskEventType.REASSIGNED, `${actor.name} sent this task to ${recipient.name}`, { currentResponsibilityId: previous?.principalId || null }, { currentResponsibilityId: recipient.id, step: decision.nextStep!.trim(), note: decision.revisionNote?.trim() || undefined });
+    }
     return (await incrementRevision(tx, task.workspaceId)).revision;
   });
   const dto = await taskDtoById(taskId, actor.id);

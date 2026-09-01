@@ -120,6 +120,7 @@ export type TaskPlannerDateInput = {
   deadlineDate?: string;
   deadline?: string;
   isToday?: boolean;
+  priority?: "low" | "medium" | "high" | "urgent";
 };
 
 /** The smallest client-safe shape needed to derive a person's planner work. */
@@ -127,6 +128,15 @@ export type PersonalPlannerTask = TaskPlannerDateInput & {
   id: string;
   status?: WorkStatus;
   archived?: boolean;
+  /** Canonical current operational responsibility, never Task ownership. */
+  currentResponsibilityId?: string;
+  /**
+   * Canonical assignment relationships, when this is a server-backed Task.
+   * Their presence tells us that an arbitrary collaborator must never be
+   * promoted to current responsibility by a legacy display fallback.
+   */
+  assignments?: TaskAssignmentRelationship[];
+  ownerPrincipalId?: string;
   assigneeIds?: string[];
   nextActionPrincipalId?: string;
   createdByPrincipalId?: string;
@@ -143,6 +153,7 @@ export type PersonalPlannerTask = TaskPlannerDateInput & {
 export type TaskAssignmentRelationship = {
   principalId: string;
   assignedByPrincipalId?: string;
+  role?: "primary_owner" | "collaborator";
 };
 
 export type WorkQueueTask = PersonalPlannerTask & {
@@ -175,6 +186,8 @@ export type AttentionScopeTask = WorkQueueTask & {
 export function getTaskAttentionPrincipalIds(task: AttentionScopeTask) {
   return Array.from(new Set([
     ...(task.assigneeIds || []),
+    task.currentResponsibilityId,
+    task.ownerPrincipalId,
     ...(task.assignments || []).flatMap((assignment) => [assignment.principalId, assignment.assignedByPrincipalId]),
     task.createdByPrincipalId,
     task.nextActionPrincipalId,
@@ -202,20 +215,17 @@ export function filterAttentionTasks<T extends AttentionScopeTask>(tasks: T[], s
  * for `personId` here.
  */
 export function isTaskPersonallyActionableForPerson(task: PersonalPlannerTask, personId: string) {
-  if (!personId) return false;
-  const assigneeIds = task.assigneeIds || [];
+  if (!personId || !isOpenTask(task)) return false;
   const isCurrentReviewer = task.status === "review" && task.reviewerPrincipalId === personId;
-  const isUnassignedOwnedCapture = assigneeIds.length === 0
-    && task.createdByPrincipalId === personId
-    // Once a task explicitly says another person must move it, delegation is
-    // no longer the creator's personal queue.
-    && (!task.nextActionPrincipalId || task.nextActionPrincipalId === personId)
-    && (task.status !== "review" || isCurrentReviewer);
-  return assigneeIds.includes(personId)
-    || task.nextActionPrincipalId === personId
-    || isCurrentReviewer
-    || task.dependencyActionOwnerIds?.includes(personId) === true
-    || isUnassignedOwnedCapture;
+  // Server-backed work always declares its one operational responsibility.
+  // A collaborator can be listed before the active owner for display/history,
+  // so it must never become My Work merely because it is the first assignee.
+  // The assigneeIds fallback is reserved for old local-only records which do
+  // not carry normalized TaskAssignment relationships yet.
+  const current = task.currentResponsibilityId
+    || task.assignments?.find((assignment) => assignment.role === "primary_owner")?.principalId
+    || (task.assignments === undefined ? task.assigneeIds?.[0] : undefined);
+  return current === personId || isCurrentReviewer;
 }
 
 function isOpenTask(task: Pick<PersonalPlannerTask, "archived" | "status">) {
@@ -224,8 +234,11 @@ function isOpenTask(task: Pick<PersonalPlannerTask, "archived" | "status">) {
 
 /**
  * Delegated is an authored relationship, not a guess based on a task being
- * visible or assigned.  `assignedByPrincipalId` is the canonical distinction
- * between “I gave this away” and “I can inspect this work”.
+ * visible or assigned. `assignedByPrincipalId` is the canonical distinction
+ * between “I gave this away” and “I can inspect this work”. We intentionally
+ * include retained collaboration assignments too: a later handoff can replace
+ * the current responsibility, but it must not erase a delegator's tracking
+ * relationship in local/offline compatibility data.
  */
 export function isTaskDelegatedByPerson(task: WorkQueueTask, personId: string) {
   if (!personId) return false;
@@ -380,16 +393,13 @@ export function getOrganizationActiveTasks<T extends OrganizationWorkTask>(tasks
 /** Organization operational Today: all authorized unfinished organization work. */
 export function getOrganizationTodayTasks<T extends OrganizationWorkTask>(tasks: T[], organizationId: string, date: string) {
   return getOrganizationActiveTasks(tasks, organizationId)
-    .filter((task) => getTaskPlannerDate(task) === date);
+    .filter((task) => isTaskScheduledForDate(task, date));
 }
 
 /** Organization operational week: the same planner rule as Today, wider range. */
 export function getOrganizationWeekTasks<T extends OrganizationWorkTask>(tasks: T[], organizationId: string, startDate: string, endDate: string) {
   return getOrganizationActiveTasks(tasks, organizationId)
-    .filter((task) => {
-      const plannerDate = getTaskPlannerDate(task);
-      return Boolean(plannerDate && plannerDate >= startDate && plannerDate <= endDate);
-    });
+    .filter((task) => isTaskScheduledDuring(task, startDate, endDate));
 }
 
 /** Waiting is status-derived; personal Waiting applies an extra person scope. */
@@ -508,6 +518,9 @@ function legacyDeadlineDate(deadline: string | undefined, today: Date) {
  * compatibility only; they never create a second source of work.
  */
 export function getTaskPlannerDate(task: TaskPlannerDateInput, today = new Date()) {
+  // Older data can predate the Plan For <= Deadline invariant. Let the deadline
+  // win for planner visibility until a person corrects the stored record.
+  if (task.startDate && task.deadlineDate) return task.startDate <= task.deadlineDate ? task.startDate : task.deadlineDate;
   if (task.startDate) return task.startDate;
   if (task.targetDate) return task.targetDate;
   if (task.deadlineDate) return task.deadlineDate;
@@ -517,40 +530,61 @@ export function getTaskPlannerDate(task: TaskPlannerDateInput, today = new Date(
   return legacyDeadlineDate(task.deadline, today);
 }
 
+function urgentCarryForwardStart(task: TaskPlannerDateInput, today = new Date()) {
+  // startDate is Plan For. targetDate remains a compatibility fallback for
+  // older work created before Plan For existed as an explicit field.
+  return task.startDate || task.deadlineDate || task.targetDate || (task.isToday || task.deadline ? getTaskPlannerDate(task, today) : undefined);
+}
+
+/** Whether one canonical task should be projected on a particular planner day. */
+export function isTaskScheduledForDate(task: TaskPlannerDateInput & { status?: WorkStatus; archived?: boolean }, date: string) {
+  // An unfinished deadline remains visible from the deadline onward. This is
+  // a planner projection of one Task, not generated recurrence data.
+  if (task.status !== "done" && !task.archived && task.deadlineDate && task.deadlineDate <= date) return true;
+  if (task.priority === "urgent" && task.status !== "done" && !task.archived) {
+    const start = urgentCarryForwardStart(task);
+    return !start || start <= date;
+  }
+  return getTaskPlannerDate(task) === date;
+}
+
+/** Range version used by weekly and organization planner projections. */
+export function isTaskScheduledDuring(task: TaskPlannerDateInput & { status?: WorkStatus; archived?: boolean }, startDate: string, endDate: string) {
+  if (task.status !== "done" && !task.archived && task.deadlineDate && task.deadlineDate <= endDate) return true;
+  if (task.priority === "urgent" && task.status !== "done" && !task.archived) {
+    const start = urgentCarryForwardStart(task);
+    return !start || start <= endDate;
+  }
+  const plannerDate = getTaskPlannerDate(task);
+  return Boolean(plannerDate && plannerDate >= startDate && plannerDate <= endDate);
+}
+
 /**
  * The personal planner universe is deliberately separate from management
  * visibility. Every planner slice starts here, so Today, This Week, and their
  * counters cannot drift into different assignment rules.
  */
-export function getVisiblePersonalTasks<T extends PersonalPlannerTask>(
-  tasks: T[],
-  actorId: string,
-  options: { includeCompleted?: boolean } = {},
-) {
-  return tasks.filter((task) =>
-    !task.archived
-    && (options.includeCompleted || task.status !== "done")
-    && isTaskPersonallyActionableForPerson(task, actorId),
-  );
+export function getPersonallyActionableTasks<T extends PersonalPlannerTask>(tasks: T[], actorId: string) {
+  return tasks.filter((task) => isTaskPersonallyActionableForPerson(task, actorId));
 }
+
+/** @deprecated Use getPersonallyActionableTasks. */
+export const getVisiblePersonalTasks = getPersonallyActionableTasks;
 
 /** Today's unfinished personal work for one canonical calendar date. */
 export function getTodayTasks<T extends PersonalPlannerTask>(tasks: T[], actorId: string, date: string) {
-  return getVisiblePersonalTasks(tasks, actorId)
-    .filter((task) => getTaskPlannerDate(task) === date);
+  return getPersonallyActionableTasks(tasks, actorId)
+    .filter((task) => isTaskScheduledForDate(task, date));
 }
 
 /**
- * This Week is the same personal universe as Today, expanded to a date range.
- * Completed work stays in the weekly record; Today intentionally excludes it
- * from remaining workload.
+ * This Week is the same unfinished personal universe as Today, expanded to a
+ * date range. Completed and archived work belongs in the historical scopes,
+ * never in a person's active planner.
  */
 export function getWeekTasks<T extends PersonalPlannerTask>(tasks: T[], actorId: string, startDate: string, endDate: string) {
-  return getVisiblePersonalTasks(tasks, actorId, { includeCompleted: true })
-    .filter((task) => {
-      const plannerDate = getTaskPlannerDate(task);
-      return Boolean(plannerDate && plannerDate >= startDate && plannerDate <= endDate);
-    });
+  return getPersonallyActionableTasks(tasks, actorId)
+    .filter((task) => isTaskScheduledDuring(task, startDate, endDate));
 }
 
 /** @deprecated Use getTaskPlannerDate. Retained for narrow compatibility. */
@@ -671,11 +705,11 @@ export type WorkloadTask = {
   isOverdue?: boolean;
   isFollowUpDue?: boolean;
   assigneeIds?: string[];
+  currentResponsibilityId?: string;
   nextActionPrincipalId?: string;
   createdByPrincipalId?: string;
   reviewerPrincipalId?: string;
   dependencyActionOwnerIds?: string[];
-  primaryOwnerId?: string;
   blockedDependentCount?: number;
 };
 
@@ -702,16 +736,12 @@ export type WorkloadSummary = {
 /** Directional workload, not a promise of capacity forecasting. */
 export function deriveWorkload(tasks: WorkloadTask[], principals: WorkloadPrincipal[]): WorkloadSummary[] {
   return principals.filter(person => person.active).map(person => {
-    const assigned = tasks.filter(task => task.status !== "done" && (
-      person.type === "team"
-        ? task.assigneeIds?.includes(person.id)
-        : isTaskPersonallyActionableForPerson(task, person.id)
-    ));
+    const assigned = tasks.filter(task => task.status !== "done" && task.currentResponsibilityId === person.id);
     const count = (status: WorkStatus) => assigned.filter(task => task.status === status).length;
     const active = assigned.filter(task => task.status === "ready" || task.status === "in_progress" || task.status === "review").length;
     const overdue = assigned.filter(task => task.isOverdue).length;
     const needsAttention = assigned.filter(task => task.isOverdue || task.isFollowUpDue || task.status === "blocked" || task.status === "review").length;
-    const blockingOthers = tasks.filter(task => task.primaryOwnerId === person.id).reduce((sum, task) => sum + (task.blockedDependentCount || 0), 0);
+    const blockingOthers = tasks.filter(task => task.currentResponsibilityId === person.id).reduce((sum, task) => sum + (task.blockedDependentCount || 0), 0);
     const pressure = active + count("blocked") * 1.5 + count("review") * 1.25 + overdue * 2 + blockingOthers * 1.5;
     return {
       principalId: person.id,
@@ -724,7 +754,7 @@ export function deriveWorkload(tasks: WorkloadTask[], principals: WorkloadPrinci
       review: count("review"),
       overdue,
       needsAttention,
-      primaryOwned: assigned.filter(task => task.primaryOwnerId === person.id).length,
+      primaryOwned: assigned.filter(task => task.currentResponsibilityId === person.id).length,
       active,
       waitingOnOthers: count("waiting") + count("blocked"),
       blockingOthers,

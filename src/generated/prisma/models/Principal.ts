@@ -240,6 +240,7 @@ export type PrincipalWhereInput = {
   assignments?: Prisma.TaskAssignmentListRelationFilter
   assignedBy?: Prisma.TaskAssignmentListRelationFilter
   createdTasks?: Prisma.TaskListRelationFilter
+  ownedTasks?: Prisma.TaskListRelationFilter
   createdProjects?: Prisma.ProjectListRelationFilter
   projectMemberships?: Prisma.ProjectMemberListRelationFilter
   milestoneOwnership?: Prisma.ProjectMilestoneListRelationFilter
@@ -288,6 +289,7 @@ export type PrincipalOrderByWithRelationInput = {
   assignments?: Prisma.TaskAssignmentOrderByRelationAggregateInput
   assignedBy?: Prisma.TaskAssignmentOrderByRelationAggregateInput
   createdTasks?: Prisma.TaskOrderByRelationAggregateInput
+  ownedTasks?: Prisma.TaskOrderByRelationAggregateInput
   createdProjects?: Prisma.ProjectOrderByRelationAggregateInput
   projectMemberships?: Prisma.ProjectMemberOrderByRelationAggregateInput
   milestoneOwnership?: Prisma.ProjectMilestoneOrderByRelationAggregateInput
@@ -340,6 +342,7 @@ export type PrincipalWhereUniqueInput = Prisma.AtLeast<{
   assignments?: Prisma.TaskAssignmentListRelationFilter
   assignedBy?: Prisma.TaskAssignmentListRelationFilter
   createdTasks?: Prisma.TaskListRelationFilter
+  ownedTasks?: Prisma.TaskListRelationFilter
   createdProjects?: Prisma.ProjectListRelationFilter
   projectMemberships?: Prisma.ProjectMemberListRelationFilter
   milestoneOwnership?: Prisma.ProjectMilestoneListRelationFilter
@@ -419,6 +422,7 @@ export type PrincipalCreateInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -466,6 +470,7 @@ export type PrincipalUncheckedCreateInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -513,6 +518,7 @@ export type PrincipalUpdateInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -560,6 +566,7 @@ export type PrincipalUncheckedUpdateInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -991,6 +998,12 @@ export type PrincipalCreateNestedOneWithoutCreatedTasksInput = {
   connect?: Prisma.PrincipalWhereUniqueInput
 }
 
+export type PrincipalCreateNestedOneWithoutOwnedTasksInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutOwnedTasksInput, Prisma.PrincipalUncheckedCreateWithoutOwnedTasksInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutOwnedTasksInput
+  connect?: Prisma.PrincipalWhereUniqueInput
+}
+
 export type PrincipalCreateNestedOneWithoutNextActionTasksInput = {
   create?: Prisma.XOR<Prisma.PrincipalCreateWithoutNextActionTasksInput, Prisma.PrincipalUncheckedCreateWithoutNextActionTasksInput>
   connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutNextActionTasksInput
@@ -1005,6 +1018,16 @@ export type PrincipalUpdateOneWithoutCreatedTasksNestedInput = {
   delete?: Prisma.PrincipalWhereInput | boolean
   connect?: Prisma.PrincipalWhereUniqueInput
   update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutCreatedTasksInput, Prisma.PrincipalUpdateWithoutCreatedTasksInput>, Prisma.PrincipalUncheckedUpdateWithoutCreatedTasksInput>
+}
+
+export type PrincipalUpdateOneWithoutOwnedTasksNestedInput = {
+  create?: Prisma.XOR<Prisma.PrincipalCreateWithoutOwnedTasksInput, Prisma.PrincipalUncheckedCreateWithoutOwnedTasksInput>
+  connectOrCreate?: Prisma.PrincipalCreateOrConnectWithoutOwnedTasksInput
+  upsert?: Prisma.PrincipalUpsertWithoutOwnedTasksInput
+  disconnect?: Prisma.PrincipalWhereInput | boolean
+  delete?: Prisma.PrincipalWhereInput | boolean
+  connect?: Prisma.PrincipalWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PrincipalUpdateToOneWithWhereWithoutOwnedTasksInput, Prisma.PrincipalUpdateWithoutOwnedTasksInput>, Prisma.PrincipalUncheckedUpdateWithoutOwnedTasksInput>
 }
 
 export type PrincipalUpdateOneWithoutNextActionTasksNestedInput = {
@@ -1276,6 +1299,7 @@ export type PrincipalCreateWithoutWorkspaceInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -1322,6 +1346,7 @@ export type PrincipalUncheckedCreateWithoutWorkspaceInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -1411,6 +1436,7 @@ export type PrincipalCreateWithoutCreatedProjectsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
@@ -1457,6 +1483,7 @@ export type PrincipalUncheckedCreateWithoutCreatedProjectsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
@@ -1519,6 +1546,7 @@ export type PrincipalUpdateWithoutCreatedProjectsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
@@ -1565,6 +1593,7 @@ export type PrincipalUncheckedUpdateWithoutCreatedProjectsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
@@ -1611,6 +1640,7 @@ export type PrincipalCreateWithoutProjectMembershipsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
@@ -1657,6 +1687,7 @@ export type PrincipalUncheckedCreateWithoutProjectMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
@@ -1719,6 +1750,7 @@ export type PrincipalUpdateWithoutProjectMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
@@ -1765,6 +1797,7 @@ export type PrincipalUncheckedUpdateWithoutProjectMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
@@ -1811,6 +1844,7 @@ export type PrincipalCreateWithoutMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
@@ -1857,6 +1891,7 @@ export type PrincipalUncheckedCreateWithoutMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
@@ -1919,6 +1954,7 @@ export type PrincipalUpdateWithoutMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
@@ -1965,6 +2001,7 @@ export type PrincipalUncheckedUpdateWithoutMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
@@ -2010,6 +2047,7 @@ export type PrincipalCreateWithoutPreferencesInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -2056,6 +2094,7 @@ export type PrincipalUncheckedCreateWithoutPreferencesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -2118,6 +2157,7 @@ export type PrincipalUpdateWithoutPreferencesInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -2164,6 +2204,7 @@ export type PrincipalUncheckedUpdateWithoutPreferencesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -2210,6 +2251,7 @@ export type PrincipalCreateWithoutMembershipsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -2256,6 +2298,7 @@ export type PrincipalUncheckedCreateWithoutMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -2318,6 +2361,7 @@ export type PrincipalUpdateWithoutMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -2364,6 +2408,7 @@ export type PrincipalUncheckedUpdateWithoutMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -2410,6 +2455,7 @@ export type PrincipalCreateWithoutOrganizationMembershipsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -2456,6 +2502,7 @@ export type PrincipalUncheckedCreateWithoutOrganizationMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -2518,6 +2565,7 @@ export type PrincipalUpdateWithoutOrganizationMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -2564,6 +2612,7 @@ export type PrincipalUncheckedUpdateWithoutOrganizationMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -2610,6 +2659,7 @@ export type PrincipalCreateWithoutDepartmentMembershipsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -2656,6 +2706,7 @@ export type PrincipalUncheckedCreateWithoutDepartmentMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -2718,6 +2769,7 @@ export type PrincipalUpdateWithoutDepartmentMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -2764,6 +2816,7 @@ export type PrincipalUncheckedUpdateWithoutDepartmentMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -2810,6 +2863,7 @@ export type PrincipalCreateWithoutTeamMembershipsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -2856,6 +2910,7 @@ export type PrincipalUncheckedCreateWithoutTeamMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -2907,6 +2962,7 @@ export type PrincipalCreateWithoutTeamMemberMembershipsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -2953,6 +3009,7 @@ export type PrincipalUncheckedCreateWithoutTeamMemberMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -3015,6 +3072,7 @@ export type PrincipalUpdateWithoutTeamMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -3061,6 +3119,7 @@ export type PrincipalUncheckedUpdateWithoutTeamMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -3118,6 +3177,7 @@ export type PrincipalUpdateWithoutTeamMemberMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -3164,6 +3224,7 @@ export type PrincipalUncheckedUpdateWithoutTeamMemberMembershipsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -3210,6 +3271,7 @@ export type PrincipalCreateWithoutTeamScopesInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -3256,6 +3318,7 @@ export type PrincipalUncheckedCreateWithoutTeamScopesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -3318,6 +3381,7 @@ export type PrincipalUpdateWithoutTeamScopesInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -3364,6 +3428,7 @@ export type PrincipalUncheckedUpdateWithoutTeamScopesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -3410,6 +3475,7 @@ export type PrincipalCreateWithoutUserAccountInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -3456,6 +3522,7 @@ export type PrincipalUncheckedCreateWithoutUserAccountInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -3518,6 +3585,7 @@ export type PrincipalUpdateWithoutUserAccountInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -3564,6 +3632,7 @@ export type PrincipalUncheckedUpdateWithoutUserAccountInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -3610,6 +3679,7 @@ export type PrincipalCreateWithoutInvitationPersonInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -3656,6 +3726,7 @@ export type PrincipalUncheckedCreateWithoutInvitationPersonInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -3707,6 +3778,7 @@ export type PrincipalCreateWithoutRequestedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -3753,6 +3825,7 @@ export type PrincipalUncheckedCreateWithoutRequestedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -3804,6 +3877,7 @@ export type PrincipalCreateWithoutApprovedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -3850,6 +3924,7 @@ export type PrincipalUncheckedCreateWithoutApprovedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -3901,6 +3976,7 @@ export type PrincipalCreateWithoutRejectedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -3947,6 +4023,7 @@ export type PrincipalUncheckedCreateWithoutRejectedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -4009,6 +4086,7 @@ export type PrincipalUpdateWithoutInvitationPersonInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -4055,6 +4133,7 @@ export type PrincipalUncheckedUpdateWithoutInvitationPersonInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -4112,6 +4191,7 @@ export type PrincipalUpdateWithoutRequestedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -4158,6 +4238,7 @@ export type PrincipalUncheckedUpdateWithoutRequestedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -4215,6 +4296,7 @@ export type PrincipalUpdateWithoutApprovedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -4261,6 +4343,7 @@ export type PrincipalUncheckedUpdateWithoutApprovedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -4318,6 +4401,7 @@ export type PrincipalUpdateWithoutRejectedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -4364,6 +4448,7 @@ export type PrincipalUncheckedUpdateWithoutRejectedInvitationsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -4410,6 +4495,7 @@ export type PrincipalCreateWithoutAccessAuditActorInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -4456,6 +4542,7 @@ export type PrincipalUncheckedCreateWithoutAccessAuditActorInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -4507,6 +4594,7 @@ export type PrincipalCreateWithoutAccessAuditTargetInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -4553,6 +4641,7 @@ export type PrincipalUncheckedCreateWithoutAccessAuditTargetInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -4615,6 +4704,7 @@ export type PrincipalUpdateWithoutAccessAuditActorInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -4661,6 +4751,7 @@ export type PrincipalUncheckedUpdateWithoutAccessAuditActorInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -4718,6 +4809,7 @@ export type PrincipalUpdateWithoutAccessAuditTargetInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -4764,6 +4856,7 @@ export type PrincipalUncheckedUpdateWithoutAccessAuditTargetInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -4810,6 +4903,7 @@ export type PrincipalCreateWithoutCreatedTasksInput = {
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -4856,6 +4950,7 @@ export type PrincipalUncheckedCreateWithoutCreatedTasksInput = {
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -4878,6 +4973,105 @@ export type PrincipalUncheckedCreateWithoutCreatedTasksInput = {
 export type PrincipalCreateOrConnectWithoutCreatedTasksInput = {
   where: Prisma.PrincipalWhereUniqueInput
   create: Prisma.XOR<Prisma.PrincipalCreateWithoutCreatedTasksInput, Prisma.PrincipalUncheckedCreateWithoutCreatedTasksInput>
+}
+
+export type PrincipalCreateWithoutOwnedTasksInput = {
+  id?: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrincipalsInput
+  userAccount?: Prisma.UserAccountCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalUncheckedCreateWithoutOwnedTasksInput = {
+  id?: string
+  workspaceId: string
+  type: $Enums.PrincipalType
+  name: string
+  jobTitle?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  active?: boolean
+  status?: $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedCreateNestedOneWithoutPersonInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedCreateNestedManyWithoutPersonInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutPersonInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedCreateNestedManyWithoutTeamInput
+  teamScopes?: Prisma.TeamScopeUncheckedCreateNestedManyWithoutTeamInput
+  invitationPerson?: Prisma.InvitationUncheckedCreateNestedManyWithoutPersonInput
+  requestedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRequestedByInput
+  approvedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutApprovedByInput
+  rejectedInvitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutRejectedByInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutActorInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedCreateNestedManyWithoutTargetInput
+  memberships?: Prisma.PrincipalMembershipUncheckedCreateNestedManyWithoutPrincipalInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
+  assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
+  createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nextActionTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutNextActionPrincipalInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedCreateNestedManyWithoutOwnerPrincipalInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutSubmittedByInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewerInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedCreateNestedManyWithoutReviewedByInput
+  updates?: Prisma.TaskUpdateUncheckedCreateNestedManyWithoutAuthorInput
+  events?: Prisma.TaskEventUncheckedCreateNestedManyWithoutActorInput
+  captures?: Prisma.InboxCaptureUncheckedCreateNestedManyWithoutActorInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedCreateNestedManyWithoutCompletedByInput
+  savedViews?: Prisma.SavedViewUncheckedCreateNestedManyWithoutOwnerInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedCreateNestedManyWithoutCreatedByInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedCreateNestedManyWithoutDefaultAssigneeInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedCreateNestedManyWithoutOwnerInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type PrincipalCreateOrConnectWithoutOwnedTasksInput = {
+  where: Prisma.PrincipalWhereUniqueInput
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutOwnedTasksInput, Prisma.PrincipalUncheckedCreateWithoutOwnedTasksInput>
 }
 
 export type PrincipalCreateWithoutNextActionTasksInput = {
@@ -4908,6 +5102,7 @@ export type PrincipalCreateWithoutNextActionTasksInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -4954,6 +5149,7 @@ export type PrincipalUncheckedCreateWithoutNextActionTasksInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -5015,6 +5211,7 @@ export type PrincipalUpdateWithoutCreatedTasksInput = {
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -5061,6 +5258,112 @@ export type PrincipalUncheckedUpdateWithoutCreatedTasksInput = {
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
+  createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUncheckedUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUncheckedUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUncheckedUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUncheckedUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUncheckedUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUncheckedUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUncheckedUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUncheckedUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUncheckedUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUncheckedUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUpsertWithoutOwnedTasksInput = {
+  update: Prisma.XOR<Prisma.PrincipalUpdateWithoutOwnedTasksInput, Prisma.PrincipalUncheckedUpdateWithoutOwnedTasksInput>
+  create: Prisma.XOR<Prisma.PrincipalCreateWithoutOwnedTasksInput, Prisma.PrincipalUncheckedCreateWithoutOwnedTasksInput>
+  where?: Prisma.PrincipalWhereInput
+}
+
+export type PrincipalUpdateToOneWithWhereWithoutOwnedTasksInput = {
+  where?: Prisma.PrincipalWhereInput
+  data: Prisma.XOR<Prisma.PrincipalUpdateWithoutOwnedTasksInput, Prisma.PrincipalUncheckedUpdateWithoutOwnedTasksInput>
+}
+
+export type PrincipalUpdateWithoutOwnedTasksInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrincipalsNestedInput
+  userAccount?: Prisma.UserAccountUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
+  projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
+  milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
+  nextActionTasks?: Prisma.TaskUpdateManyWithoutNextActionPrincipalNestedInput
+  dependencyOwners?: Prisma.TaskDependencyUpdateManyWithoutOwnerPrincipalNestedInput
+  submittedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutSubmittedByNestedInput
+  requestedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewerNestedInput
+  reviewedReviews?: Prisma.TaskReviewCycleUpdateManyWithoutReviewedByNestedInput
+  updates?: Prisma.TaskUpdateUpdateManyWithoutAuthorNestedInput
+  events?: Prisma.TaskEventUpdateManyWithoutActorNestedInput
+  captures?: Prisma.InboxCaptureUpdateManyWithoutActorNestedInput
+  completedChecklistItems?: Prisma.TaskChecklistItemUpdateManyWithoutCompletedByNestedInput
+  savedViews?: Prisma.SavedViewUpdateManyWithoutOwnerNestedInput
+  createdTemplates?: Prisma.WorkflowTemplateUpdateManyWithoutCreatedByNestedInput
+  templateAssignments?: Prisma.WorkflowTemplateTaskUpdateManyWithoutDefaultAssigneeNestedInput
+  templateMilestoneOwnership?: Prisma.WorkflowTemplateMilestoneUpdateManyWithoutOwnerNestedInput
+  nudgeStates?: Prisma.WorkNudgeUpdateManyWithoutRecipientNestedInput
+}
+
+export type PrincipalUncheckedUpdateWithoutOwnedTasksInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumPrincipalTypeFieldUpdateOperationsInput | $Enums.PrincipalType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notes?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  active?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  status?: Prisma.EnumPrincipalStatusFieldUpdateOperationsInput | $Enums.PrincipalStatus
+  userAccount?: Prisma.UserAccountUncheckedUpdateOneWithoutPersonNestedInput
+  organizationMemberships?: Prisma.OrganizationMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  departmentMemberships?: Prisma.DepartmentMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutPersonNestedInput
+  teamMemberMemberships?: Prisma.TeamMembershipUncheckedUpdateManyWithoutTeamNestedInput
+  teamScopes?: Prisma.TeamScopeUncheckedUpdateManyWithoutTeamNestedInput
+  invitationPerson?: Prisma.InvitationUncheckedUpdateManyWithoutPersonNestedInput
+  requestedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRequestedByNestedInput
+  approvedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutApprovedByNestedInput
+  rejectedInvitations?: Prisma.InvitationUncheckedUpdateManyWithoutRejectedByNestedInput
+  accessAuditActor?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutActorNestedInput
+  accessAuditTarget?: Prisma.AccessAuditLogUncheckedUpdateManyWithoutTargetNestedInput
+  memberships?: Prisma.PrincipalMembershipUncheckedUpdateManyWithoutPrincipalNestedInput
+  preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
+  assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
+  assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
+  createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -5119,6 +5422,7 @@ export type PrincipalUpdateWithoutNextActionTasksInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -5165,6 +5469,7 @@ export type PrincipalUncheckedUpdateWithoutNextActionTasksInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -5211,6 +5516,7 @@ export type PrincipalCreateWithoutCompletedChecklistItemsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -5257,6 +5563,7 @@ export type PrincipalUncheckedCreateWithoutCompletedChecklistItemsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -5319,6 +5626,7 @@ export type PrincipalUpdateWithoutCompletedChecklistItemsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -5365,6 +5673,7 @@ export type PrincipalUncheckedUpdateWithoutCompletedChecklistItemsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -5411,6 +5720,7 @@ export type PrincipalCreateWithoutSavedViewsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -5457,6 +5767,7 @@ export type PrincipalUncheckedCreateWithoutSavedViewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -5519,6 +5830,7 @@ export type PrincipalUpdateWithoutSavedViewsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -5565,6 +5877,7 @@ export type PrincipalUncheckedUpdateWithoutSavedViewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -5610,6 +5923,7 @@ export type PrincipalCreateWithoutAssignmentsInput = {
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -5656,6 +5970,7 @@ export type PrincipalUncheckedCreateWithoutAssignmentsInput = {
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -5707,6 +6022,7 @@ export type PrincipalCreateWithoutAssignedByInput = {
   preferences?: Prisma.PrincipalPreferenceCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -5753,6 +6069,7 @@ export type PrincipalUncheckedCreateWithoutAssignedByInput = {
   preferences?: Prisma.PrincipalPreferenceUncheckedCreateNestedOneWithoutPrincipalInput
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -5815,6 +6132,7 @@ export type PrincipalUpdateWithoutAssignmentsInput = {
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -5861,6 +6179,7 @@ export type PrincipalUncheckedUpdateWithoutAssignmentsInput = {
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -5918,6 +6237,7 @@ export type PrincipalUpdateWithoutAssignedByInput = {
   preferences?: Prisma.PrincipalPreferenceUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -5964,6 +6284,7 @@ export type PrincipalUncheckedUpdateWithoutAssignedByInput = {
   preferences?: Prisma.PrincipalPreferenceUncheckedUpdateOneWithoutPrincipalNestedInput
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -6011,6 +6332,7 @@ export type PrincipalCreateWithoutDependencyOwnersInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -6057,6 +6379,7 @@ export type PrincipalUncheckedCreateWithoutDependencyOwnersInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -6119,6 +6442,7 @@ export type PrincipalUpdateWithoutDependencyOwnersInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -6165,6 +6489,7 @@ export type PrincipalUncheckedUpdateWithoutDependencyOwnersInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -6211,6 +6536,7 @@ export type PrincipalCreateWithoutSubmittedReviewsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -6257,6 +6583,7 @@ export type PrincipalUncheckedCreateWithoutSubmittedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -6308,6 +6635,7 @@ export type PrincipalCreateWithoutRequestedReviewsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -6354,6 +6682,7 @@ export type PrincipalUncheckedCreateWithoutRequestedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -6405,6 +6734,7 @@ export type PrincipalCreateWithoutReviewedReviewsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -6451,6 +6781,7 @@ export type PrincipalUncheckedCreateWithoutReviewedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -6513,6 +6844,7 @@ export type PrincipalUpdateWithoutSubmittedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -6559,6 +6891,7 @@ export type PrincipalUncheckedUpdateWithoutSubmittedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -6616,6 +6949,7 @@ export type PrincipalUpdateWithoutRequestedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -6662,6 +6996,7 @@ export type PrincipalUncheckedUpdateWithoutRequestedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -6719,6 +7054,7 @@ export type PrincipalUpdateWithoutReviewedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -6765,6 +7101,7 @@ export type PrincipalUncheckedUpdateWithoutReviewedReviewsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -6811,6 +7148,7 @@ export type PrincipalCreateWithoutUpdatesInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -6857,6 +7195,7 @@ export type PrincipalUncheckedCreateWithoutUpdatesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -6919,6 +7258,7 @@ export type PrincipalUpdateWithoutUpdatesInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -6965,6 +7305,7 @@ export type PrincipalUncheckedUpdateWithoutUpdatesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -7011,6 +7352,7 @@ export type PrincipalCreateWithoutEventsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -7057,6 +7399,7 @@ export type PrincipalUncheckedCreateWithoutEventsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -7119,6 +7462,7 @@ export type PrincipalUpdateWithoutEventsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -7165,6 +7509,7 @@ export type PrincipalUncheckedUpdateWithoutEventsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -7211,6 +7556,7 @@ export type PrincipalCreateWithoutCapturesInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -7257,6 +7603,7 @@ export type PrincipalUncheckedCreateWithoutCapturesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -7319,6 +7666,7 @@ export type PrincipalUpdateWithoutCapturesInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -7365,6 +7713,7 @@ export type PrincipalUncheckedUpdateWithoutCapturesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -7411,6 +7760,7 @@ export type PrincipalCreateWithoutCreatedTemplatesInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -7457,6 +7807,7 @@ export type PrincipalUncheckedCreateWithoutCreatedTemplatesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -7519,6 +7870,7 @@ export type PrincipalUpdateWithoutCreatedTemplatesInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -7565,6 +7917,7 @@ export type PrincipalUncheckedUpdateWithoutCreatedTemplatesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -7611,6 +7964,7 @@ export type PrincipalCreateWithoutTemplateAssignmentsInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -7657,6 +8011,7 @@ export type PrincipalUncheckedCreateWithoutTemplateAssignmentsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -7719,6 +8074,7 @@ export type PrincipalUpdateWithoutTemplateAssignmentsInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -7765,6 +8121,7 @@ export type PrincipalUncheckedUpdateWithoutTemplateAssignmentsInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -7811,6 +8168,7 @@ export type PrincipalCreateWithoutTemplateMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -7857,6 +8215,7 @@ export type PrincipalUncheckedCreateWithoutTemplateMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -7919,6 +8278,7 @@ export type PrincipalUpdateWithoutTemplateMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -7965,6 +8325,7 @@ export type PrincipalUncheckedUpdateWithoutTemplateMilestoneOwnershipInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -8011,6 +8372,7 @@ export type PrincipalCreateWithoutNudgeStatesInput = {
   assignments?: Prisma.TaskAssignmentCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneCreateNestedManyWithoutOwnerInput
@@ -8057,6 +8419,7 @@ export type PrincipalUncheckedCreateWithoutNudgeStatesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutPrincipalInput
   assignedBy?: Prisma.TaskAssignmentUncheckedCreateNestedManyWithoutAssignedByInput
   createdTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutCreatedByInput
+  ownedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutOwnerInput
   createdProjects?: Prisma.ProjectUncheckedCreateNestedManyWithoutCreatedByInput
   projectMemberships?: Prisma.ProjectMemberUncheckedCreateNestedManyWithoutPrincipalInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedCreateNestedManyWithoutOwnerInput
@@ -8119,6 +8482,7 @@ export type PrincipalUpdateWithoutNudgeStatesInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -8165,6 +8529,7 @@ export type PrincipalUncheckedUpdateWithoutNudgeStatesInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -8222,6 +8587,7 @@ export type PrincipalUpdateWithoutWorkspaceInput = {
   assignments?: Prisma.TaskAssignmentUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUpdateManyWithoutOwnerNestedInput
@@ -8268,6 +8634,7 @@ export type PrincipalUncheckedUpdateWithoutWorkspaceInput = {
   assignments?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutPrincipalNestedInput
   assignedBy?: Prisma.TaskAssignmentUncheckedUpdateManyWithoutAssignedByNestedInput
   createdTasks?: Prisma.TaskUncheckedUpdateManyWithoutCreatedByNestedInput
+  ownedTasks?: Prisma.TaskUncheckedUpdateManyWithoutOwnerNestedInput
   createdProjects?: Prisma.ProjectUncheckedUpdateManyWithoutCreatedByNestedInput
   projectMemberships?: Prisma.ProjectMemberUncheckedUpdateManyWithoutPrincipalNestedInput
   milestoneOwnership?: Prisma.ProjectMilestoneUncheckedUpdateManyWithoutOwnerNestedInput
@@ -8320,6 +8687,7 @@ export type PrincipalCountOutputType = {
   assignments: number
   assignedBy: number
   createdTasks: number
+  ownedTasks: number
   createdProjects: number
   projectMemberships: number
   milestoneOwnership: number
@@ -8355,6 +8723,7 @@ export type PrincipalCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensi
   assignments?: boolean | PrincipalCountOutputTypeCountAssignmentsArgs
   assignedBy?: boolean | PrincipalCountOutputTypeCountAssignedByArgs
   createdTasks?: boolean | PrincipalCountOutputTypeCountCreatedTasksArgs
+  ownedTasks?: boolean | PrincipalCountOutputTypeCountOwnedTasksArgs
   createdProjects?: boolean | PrincipalCountOutputTypeCountCreatedProjectsArgs
   projectMemberships?: boolean | PrincipalCountOutputTypeCountProjectMembershipsArgs
   milestoneOwnership?: boolean | PrincipalCountOutputTypeCountMilestoneOwnershipArgs
@@ -8486,6 +8855,13 @@ export type PrincipalCountOutputTypeCountAssignedByArgs<ExtArgs extends runtime.
  * PrincipalCountOutputType without action
  */
 export type PrincipalCountOutputTypeCountCreatedTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TaskWhereInput
+}
+
+/**
+ * PrincipalCountOutputType without action
+ */
+export type PrincipalCountOutputTypeCountOwnedTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.TaskWhereInput
 }
 
@@ -8638,6 +9014,7 @@ export type PrincipalSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   assignments?: boolean | Prisma.Principal$assignmentsArgs<ExtArgs>
   assignedBy?: boolean | Prisma.Principal$assignedByArgs<ExtArgs>
   createdTasks?: boolean | Prisma.Principal$createdTasksArgs<ExtArgs>
+  ownedTasks?: boolean | Prisma.Principal$ownedTasksArgs<ExtArgs>
   createdProjects?: boolean | Prisma.Principal$createdProjectsArgs<ExtArgs>
   projectMemberships?: boolean | Prisma.Principal$projectMembershipsArgs<ExtArgs>
   milestoneOwnership?: boolean | Prisma.Principal$milestoneOwnershipArgs<ExtArgs>
@@ -8719,6 +9096,7 @@ export type PrincipalInclude<ExtArgs extends runtime.Types.Extensions.InternalAr
   assignments?: boolean | Prisma.Principal$assignmentsArgs<ExtArgs>
   assignedBy?: boolean | Prisma.Principal$assignedByArgs<ExtArgs>
   createdTasks?: boolean | Prisma.Principal$createdTasksArgs<ExtArgs>
+  ownedTasks?: boolean | Prisma.Principal$ownedTasksArgs<ExtArgs>
   createdProjects?: boolean | Prisma.Principal$createdProjectsArgs<ExtArgs>
   projectMemberships?: boolean | Prisma.Principal$projectMembershipsArgs<ExtArgs>
   milestoneOwnership?: boolean | Prisma.Principal$milestoneOwnershipArgs<ExtArgs>
@@ -8766,6 +9144,7 @@ export type $PrincipalPayload<ExtArgs extends runtime.Types.Extensions.InternalA
     assignments: Prisma.$TaskAssignmentPayload<ExtArgs>[]
     assignedBy: Prisma.$TaskAssignmentPayload<ExtArgs>[]
     createdTasks: Prisma.$TaskPayload<ExtArgs>[]
+    ownedTasks: Prisma.$TaskPayload<ExtArgs>[]
     createdProjects: Prisma.$ProjectPayload<ExtArgs>[]
     projectMemberships: Prisma.$ProjectMemberPayload<ExtArgs>[]
     milestoneOwnership: Prisma.$ProjectMilestonePayload<ExtArgs>[]
@@ -9207,6 +9586,7 @@ export interface Prisma__PrincipalClient<T, Null = never, ExtArgs extends runtim
   assignments<T extends Prisma.Principal$assignmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$assignmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   assignedBy<T extends Prisma.Principal$assignedByArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$assignedByArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   createdTasks<T extends Prisma.Principal$createdTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$createdTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  ownedTasks<T extends Prisma.Principal$ownedTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$ownedTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   createdProjects<T extends Prisma.Principal$createdProjectsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$createdProjectsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   projectMemberships<T extends Prisma.Principal$projectMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$projectMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProjectMemberPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   milestoneOwnership<T extends Prisma.Principal$milestoneOwnershipArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Principal$milestoneOwnershipArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProjectMilestonePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -10041,6 +10421,30 @@ export type Principal$assignedByArgs<ExtArgs extends runtime.Types.Extensions.In
  * Principal.createdTasks
  */
 export type Principal$createdTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Task
+   */
+  select?: Prisma.TaskSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Task
+   */
+  omit?: Prisma.TaskOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TaskInclude<ExtArgs> | null
+  where?: Prisma.TaskWhereInput
+  orderBy?: Prisma.TaskOrderByWithRelationInput | Prisma.TaskOrderByWithRelationInput[]
+  cursor?: Prisma.TaskWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TaskScalarFieldEnum | Prisma.TaskScalarFieldEnum[]
+}
+
+/**
+ * Principal.ownedTasks
+ */
+export type Principal$ownedTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   /**
    * Select specific fields to fetch from the Task
    */

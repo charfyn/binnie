@@ -75,7 +75,7 @@ export interface TaskAssignmentDTO {
  * reached through People/Team selection rather than a separate "all work"
  * dashboard, which keeps the default workspace personal and calm.
  */
-export const TASK_WORKSPACE_SCOPES = ["my", "team", "people"] as const;
+export const TASK_WORKSPACE_SCOPES = ["my", "team", "people", "assigned_by_me", "completed", "archive"] as const;
 export type TaskWorkspaceScope = (typeof TASK_WORKSPACE_SCOPES)[number];
 
 /** A deliberately narrow option set for the Tasks scope selector. */
@@ -90,6 +90,8 @@ export interface TaskScopeOptionDTO {
 /** Server-authorized task data for one Tasks page scope. */
 export interface TaskScopeResultDTO {
   scope: TaskWorkspaceScope;
+  /** Advanced monitoring filter; never changes the primary My Work meaning. */
+  ownedByMe?: boolean;
   tasks: TaskDTO[];
   people: TaskScopeOptionDTO[];
   teams: TaskScopeOptionDTO[];
@@ -151,6 +153,25 @@ export interface TaskChecklistItemDTO {
   position: number;
   completedAt?: string;
   completedBy?: string;
+}
+
+/** A compact child projection for the parent Task Detail drawer. */
+export interface TaskSubtaskDTO {
+  id: string;
+  title: string;
+  status: TaskStatusValue;
+  priority: TaskPriorityValue;
+  org: string;
+  area: string;
+  assignee?: string;
+  startDate?: string;
+  deadlineDate?: string;
+}
+
+/** A compact historical source kept after a merge archives the duplicate. */
+export interface TaskMergedHistoryDTO {
+  id: string;
+  title: string;
 }
 
 export interface TaskRecurrenceDTO {
@@ -288,10 +309,18 @@ export interface TaskDTO {
   priority: TaskPriorityValue;
   status: TaskStatusValue;
   assignments: TaskAssignmentDTO[];
+  /** Accountable Person for the whole deliverable; distinct from current work. */
+  ownerPrincipalId?: string;
+  /** True only for the migration's creator-derived Owner default. */
+  ownerInferredFromCreator?: boolean;
+  owner?: { id: string; name: string };
+  /** The one Person or Team expected to make the next operational move. */
+  currentResponsibility?: TaskAssignmentDTO;
+  /** Omit for simple work; callers use the task title as its implicit step. */
+  currentStep?: string;
   assigneeIds: string[];
   assignee?: string;
-  primaryOwner?: TaskAssignmentDTO;
-  /** Stable Person identity that created/owns unassigned captured work. */
+  /** Stable identity of the creator; this is not the Task Owner. */
   createdByPrincipalId?: string;
   nextActionKind: NextActionKindValue;
   nextActionBy: string;
@@ -308,6 +337,8 @@ export interface TaskDTO {
   actualMinutes?: number;
   waitingSince?: string;
   completedAt?: string;
+  /** The person who marked the whole task Done, when completion is recorded. */
+  completedBy?: { id: string; name: string };
   isOverdue: boolean;
   isFollowUpDue: boolean;
   canStartNow: boolean;
@@ -318,10 +349,15 @@ export interface TaskDTO {
   resources: TaskResourceDTO[];
   activity: TaskActivityDTO[];
   checklistItems: TaskChecklistItemDTO[];
+  subtasks: TaskSubtaskDTO[];
   subtaskProgress: { total: number; completed: number };
   parentTaskId?: string;
+  parentTask?: { id: string; title: string };
   sourceTaskId?: string;
   mergedIntoTaskId?: string;
+  /** Present only when this archived task was merged into accessible work. */
+  mergedIntoTask?: { id: string; title: string };
+  mergedHistory: TaskMergedHistoryDTO[];
   recurrence?: TaskRecurrenceDTO;
   review?: ReviewDTO;
   createdAt: string;
