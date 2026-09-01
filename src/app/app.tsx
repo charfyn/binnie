@@ -1,51 +1,284 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
+import {
+  addChecklistItemAction,
+  addTaskLinkAction,
+  addTaskDependencyAction,
+  addProjectFocusItemAction,
+  addProjectLinkAction,
+  addProjectMilestoneAction,
+  deleteProjectFocusItemAction,
+  deleteProjectResourceAction,
+  updateProjectMilestoneAction,
+  deleteProjectMilestoneAction,
+  claimTaskAction,
+  completeTaskStepAction,
+  createSubtaskAction,
+  createTaskAction,
+  findCaptureTaskMatchesAction,
+  createWorkflowTemplateAction,
+  createProjectAction,
+  deleteProjectAction,
+  archiveProjectAction,
+  createOrganizationAction,
+  createPrincipalAction,
+  resetDemoDataAction,
+  updateProfileAction,
+  updatePrincipalAction,
+  decideTaskReviewAction,
+  archiveTaskAction,
+  archiveWorkflowTemplateAction,
+  applyWorkflowTemplateAction,
+  importLocalTasksAction,
+  mergeTasksAction,
+  postTaskUpdateAction,
+  removeTaskDependencyAction,
+  resolveTaskDependencyAction,
+  resolveInboxCaptureAction,
+  saveInboxCaptureAction,
+  getTaskScopeAction,
+  getTaskAction,
+  getTaskResponsibilityOptionsAction,
+  saveViewAction,
+  saveTaskListColumnsAction,
+  deleteViewAction,
+  setCurrentResponsibilityAction,
+  setTaskOwnerAction,
+  setProjectMembersAction,
+  setNudgeStateAction,
+  setTaskRecurrenceAction,
+  transitionTaskAction,
+  toggleChecklistItemAction,
+  undoCaptureAction,
+  updateTaskAction,
+  updateOrganizationVocabularyAction,
+  uploadTaskFileAction,
+  uploadTaskUpdateFileAction,
+  uploadProjectFileAction,
+} from "./actions";
+import type { DirectoryDTO, InboxCaptureDTO, NudgeStateDTO, OrganizationDTO, ProjectDTO, SavedViewDTO, TaskDTO, TaskScopeResultDTO, UserProfileDTO, WorkflowTemplateDTO, WorkspaceSnapshotDTO } from "@/lib/work-types";
+import { getOrganizationColorStyles, ORGANIZATION_COLOR_KEYS, ORGANIZATION_COLOR_STYLES, type OrganizationColorKey } from "@/lib/organization-colors";
+import { getRecommendedTaskListColumns, getTaskListColumnOptions, TASK_LIST_COLUMNS, type TaskListColumnId } from "@/lib/task-list";
+import { getTaskDetailPrimaryAction, getTaskDetailPriorityLabel, hasTaskDetailSecondaryContext } from "@/lib/task-detail";
+import { getTasksFilterControls } from "@/lib/tasks-filter-controls";
+import { normalizeTaskScopeFilters } from "@/lib/task-scope-filters";
+import { getPrimarySidebarView } from "@/lib/primary-navigation";
+import { calendarDateKey, deriveRoadmapDependencies, deriveWorkNudges, deriveWorkload, filterAttentionTasks, getAttentionWork as getCanonicalAttentionWork, getDelegatedTasks as getCanonicalDelegatedTasks, getOrganizationActiveTasks as getCanonicalOrganizationActiveTasks, getOrganizationAreaTasks as getCanonicalOrganizationAreaTasks, getOrganizationCurrentFocus, getOrganizationRevisitTasks as getCanonicalOrganizationRevisitTasks, getOrganizationTasks as getCanonicalOrganizationTasks, getOrganizationTodayTasks as getCanonicalOrganizationTodayTasks, getOrganizationWaitingTasks as getCanonicalOrganizationWaitingTasks, getOrganizationWeekTasks as getCanonicalOrganizationWeekTasks, getOverdueTasks as getCanonicalOverdueTasks, getProjectMovableTasks, getProjectNextTask, getProjectProgress, getReviewTasks as getCanonicalReviewTasks, getTaskAttentionPrincipalIds, getTaskPlannerDate as getCanonicalTaskPlannerDate, getTodayTasks as getCanonicalTodayTasks, getWaitingWork as getCanonicalWaitingWork, getWeekTasks as getCanonicalWeekTasks, isTaskPersonallyActionableForPerson, isTaskScheduledDuring, isTaskScheduledForDate, isTaskTrackedByPerson, matchesNaturalTaskSearch, parseNaturalTaskSearch } from "@/lib/work-rules";
+import { taskDateInputError, taskDateInputFromIso, taskDateInputToIso } from "@/lib/task-dates";
+import { canArchiveTask as canArchiveTaskByLifecycle } from "@/lib/task-lifecycle";
+import { conciseCaptureTitle, explicitCaptureEstimatedMinutes, findCaptureTaskMatches, inferCapturePriority, splitCaptureActionClauses, suggestCaptureEstimatedMinutes, type CaptureTaskCandidate, type CaptureTaskMatch } from "@/lib/capture-intelligence";
+import { authClient } from "@/lib/auth-client";
 import {
   Home, CalendarDays, Inbox, Users, AlertTriangle,
   Building2, FolderKanban, Search, Sparkles, Paperclip,
   Link2, FileText, CheckCircle2, X, RotateCcw, MoreHorizontal,
   Settings, ExternalLink,
   ChevronRight, Plus, Globe, GitBranch, RefreshCw,
-  ChevronDown, Check, Calendar, Download, Send, Zap,
+  ChevronDown, ChevronUp, Check, Calendar, Send,
   Hourglass, Eye, BarChart2, Layers, Timer,
   SlidersHorizontal, ArrowUpDown, Copy, ChevronLeft,
-  MessageSquare, ListTodo, Target, UserCheck,
+  MessageSquare, ListTodo, Target, UserCheck, Menu, ImagePlus, Trash2, Pencil, Database,
 } from "lucide-react";
 
 const cn = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
+const WORKSPACE_TIME_ZONE = "Asia/Jakarta";
+const WEEK_LANE_TOKENS = ["--week-mon", "--week-tue", "--week-wed", "--week-thu", "--week-fri", "--week-sat", "--week-sun"];
+// The Board deliberately shares This Week's calm lane palette: status owns the
+// column colour, while an organization remains a small secondary card cue.
+const BOARD_STATUS_LANE_TOKENS = {
+  ready: "--week-mon",
+  in_progress: "--week-wed",
+  waiting: "--week-tue",
+  blocked: "--week-thu",
+  review: "--week-fri",
+  done: "--week-sun",
+} as const;
+const BOARD_STATUS_DOT_CLASSES = {
+  ready: "bg-primary",
+  in_progress: "bg-info",
+  waiting: "bg-success",
+  blocked: "bg-overdue",
+  review: "bg-warning",
+  done: "bg-success",
+} as const;
+
+function getWorkspaceCalendarDate() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: WORKSPACE_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
+
+function formatWorkspaceDate(date: Date, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...options }).format(date);
+}
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type OrgName = "Villa Khayangan" | "Apotik" | "Personal";
-type AreaName = "System Development" | "Operations" | "Marketing" | "Finance" | "HR";
+type OrgName = string;
+type AreaName = "System Development" | "Operations" | "Marketing" | "Finance" | "HR" | "Purchasing" | "Design" | "Front Office" | "F&B" | "Maintenance" | "Warehouse" | "Housekeeping" | (string & {});
 type Priority = "urgent" | "high" | "medium" | "low";
-type TaskStatus = "todo" | "in_progress" | "waiting" | "review" | "done";
+type TaskStatus = "ready" | "in_progress" | "waiting" | "blocked" | "review" | "done";
+type DependencyKind = "task" | "department" | "decision" | "external" | "other";
+type DependencyType = "blocking" | "related";
+type WorkspaceTheme = "soft" | "clear" | "dark";
 type NavView =
   | "home" | "today" | "this-week" | "inbox" | "delegated"
   | "waiting" | "review" | "overdue" | "organizations" | "projects" | "search"
-  | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup";
+  | "all-tasks" | "people" | "person-detail" | "org-detail" | "project-detail" | "followup" | "workload" | "templates" | "attention";
+type AttentionTab = "all" | "followup" | "waiting" | "delegated" | "review" | "overdue";
+type AttentionReason = "follow_up" | "waiting_on_me" | "blocked" | "review" | "overdue";
+type WaitingFilterKey = "others" | "me" | "blocked" | "external";
+type AttentionFilterState = {
+  search: string;
+  organizationId: string;
+  principalId: string;
+  waitingKinds: WaitingFilterKey[];
+  followUpDueOnly: boolean;
+};
+const EMPTY_ATTENTION_FILTERS: AttentionFilterState = { search: "", organizationId: "", principalId: "", waitingKinds: [], followUpDueOnly: false };
+type PeopleHubTab = "people" | "teams" | "workload";
+type ProjectsHubMode = "projects" | "templates";
 
-interface TaskLink { label: string; url: string; type: "website" | "sheet" | "figma" | "github" | "drive" }
-interface TaskFile { name: string; type: "pdf" | "excel" | "screenshot" | "doc" }
+type ResourceType = "website" | "sheet" | "figma" | "github" | "drive" | "doc" | "dashboard" | "notion" | "other";
+interface TaskLink { label: string; url: string; type: ResourceType; description?: string }
+interface OrganizationResource extends TaskLink { area?: AreaName; project?: string; description?: string }
+interface TaskFile { id?: string; name: string; type: "pdf" | "excel" | "screenshot" | "doc"; size?: string; url?: string }
 interface Activity { type: "assigned" | "updated" | "submitted" | "commented" | "revision" | "approved"; actor: string; text: string; time: string }
+interface ResponsibilityOption extends Pick<DirectoryPerson, "id" | "name" | "type" | "memberships" | "active" | "accountStatus"> {
+  kind?: "team";
+  subtitle?: string;
+}
 
 interface Task {
-  id: string; title: string; org: OrgName; area: AreaName;
+  id: string; title: string; org: OrgName; area: AreaName; // area is the lead area
+  involvedAreas?: AreaName[];
   project?: string; priority: Priority; status: TaskStatus;
-  assignee?: string; nextActionBy: string;
-  deadline?: string; waitingSince?: string; responseDue?: string;
+  // assignee remains the primary display fallback for older work. assigneeIds is
+  // the source of truth: a task can be shared by any number of people or teams.
+  assignee?: string; assigneeIds?: string[]; nextActionBy: string;
+  assignments?: Array<{ id: string; principalId: string; name: string; type: "person" | "team"; role: "primary_owner" | "collaborator"; assignedAt: string; assignedByPrincipalId?: string; assignedBy?: string }>;
+  ownerPrincipalId?: string; ownerInferredFromCreator?: boolean; owner?: { id: string; name: string };
+  currentResponsibilityId?: string; currentResponsibility?: { id: string; principalId: string; name: string; type: "person" | "team"; role: "primary_owner" | "collaborator"; assignedAt: string; assignedByPrincipalId?: string; assignedBy?: string };
+  currentStep?: string;
+  createdByPrincipalId?: string; reviewerPrincipalId?: string; reviewer?: string;
+  deadline?: string; deadlineDate?: string; startDate?: string; targetDate?: string; waitingSince?: string; responseDue?: string;
   lastUpdate?: string; isDelegated: boolean; isWaiting: boolean;
-  isOverdue?: boolean; isToday?: boolean; estimatedHours?: number;
-  links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; activity?: Activity[];
+  isOverdue?: boolean; isToday?: boolean; estimatedHours?: number; estimatedMinutes?: number; actualMinutes?: number;
+  carriedOver?: boolean; archived?: boolean; completedInCurrentMonth?: boolean; statusBeforeCompletion?: Exclude<TaskStatus, "done">; staleDays?: number;
+  links?: TaskLink[]; files?: TaskFile[]; originalCapture?: string; description?: string; notes?: string; contributorIds?: string[]; activity?: Activity[];
+  createdAt?: string; createdBy?: string; updatedAt?: string; completedAt?: string; completedBy?: { id: string; name: string }; archivedAt?: string;
+  version?: number; organizationId?: string; leadDepartmentId?: string; projectId?: string; involvedDepartmentIds?: string[];
+  followUpDate?: string; nextActionKind?: "principal" | "department" | "external" | "ready";
+  nextActionPrincipalId?: string; nextActionDepartmentId?: string; nextActionExternalLabel?: string; completionBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
+  startBlockedBy?: Array<{ id: string; label: string; owner?: string }>;
+  dependencyRecords?: Array<{ id: string; type: "start_blocker" | "completion_blocker" | "related"; label: string; prerequisiteTaskId?: string; ownerPrincipalId?: string; owner?: string; resolvedAt?: string }>;
+  dependencyActionOwnerIds?: string[];
+  canStartNow?: boolean; updates?: Array<{ id: string; author: string; text: string; createdAt: string; resources?: Array<{ id: string; label: string; url?: string; fileName?: string; kind: "link" | "file" }> }>;
+  checklistItems?: Array<{ id: string; title: string; position: number; completedAt?: string; completedBy?: string }>;
+  subtasks?: Array<{ id: string; title: string; status: TaskStatus; priority: Priority; org: OrgName; area: AreaName; assignee?: string; startDate?: string; deadlineDate?: string }>;
+  subtaskProgress?: { total: number; completed: number };
+  parentTaskId?: string; parentTask?: { id: string; title: string }; sourceTaskId?: string; mergedIntoTaskId?: string; mergedIntoTask?: { id: string; title: string };
+  mergedHistory?: Array<{ id: string; title: string }>;
+  recurrence?: { id: string; frequency: "daily" | "weekly" | "monthly" | "months"; interval: number; weekDays: number[]; monthDay?: number; startDate: string; endDate?: string; nextOccurrenceDate?: string; active: boolean };
+  blockedBy?: { kind: DependencyKind; type: DependencyType; label: string; taskId?: string; owner?: string };
+  relatedTaskIds?: string[];
 }
 
-interface PersonRecord {
-  name: string; role: string; org: OrgName;
-  active: number; waitingOnThem: number; waitingOnMe: number;
-  overdue: number; lastUpdate: string; oldestUnanswered: string; needsFollowUp: boolean;
+function getTaskAreas(task: Task) {
+  return Array.from(new Set([task.area, ...(task.involvedAreas || [])].filter((area): area is AreaName => Boolean(area) && area !== "Unassigned")));
 }
+
+function taskInvolvesArea(task: Task, area?: AreaName | "all" | null) {
+  return !area || area === "all" || getTaskAreas(task).includes(area);
+}
+
+function isSharedTask(task: Task) {
+  return getTaskAreas(task).length > 1;
+}
+
+type DirectoryEntityType = "person" | "team";
+type DirectoryAccountStatus = "no_account" | "invited" | "active_user" | "disabled" | "suspended" | "access_removed";
+
+interface OrganizationMembership {
+  organization: OrgName;
+  role?: string;
+  area?: AreaName;
+}
+
+interface DirectoryPerson {
+  id: string;
+  name: string;
+  type: DirectoryEntityType;
+  memberships: OrganizationMembership[];
+  active: boolean;
+  accountStatus: DirectoryAccountStatus;
+  email?: string;
+  phone?: string;
+  notes?: string;
+}
+
+interface PersonAccountability {
+  active: number;
+  ready: number;
+  inProgress: number;
+  waitingOnThem: number;
+  waitingOnMe: number;
+  blocked: number;
+  overdue: number;
+  review: number;
+  lastUpdate: string;
+  oldestUnanswered: string;
+}
+
+interface UserProfile {
+  directoryId?: string;
+  displayName: string;
+  username?: string;
+  role: string;
+  email: string;
+  timezone: string;
+  dateFormat: string;
+  teamIds: string[];
+  taskListColumns: string[];
+  accountStatus: "ACTIVE";
+  workspaces: Array<{ organizationId: string; organization: string; accessLevel: string }>;
+  pendingAccessRequestCount: number;
+}
+
+function canonicalProfileToUserProfile(profile: UserProfileDTO): UserProfile {
+  return {
+    directoryId: profile.principalId,
+    displayName: profile.displayName,
+    username: profile.username,
+    role: profile.role,
+    email: profile.email || "",
+    timezone: profile.timezone,
+    dateFormat: profile.dateFormat,
+    teamIds: profile.teamIds,
+    taskListColumns: profile.taskListColumns,
+    accountStatus: profile.accountStatus,
+    workspaces: profile.workspaces,
+    pendingAccessRequestCount: profile.pendingAccessRequestCount,
+  };
+}
+
+function profileRoleLabel(role: string) {
+  return role.replace(/_/g, " ").replace(/\b\w/g, character => character.toUpperCase());
+}
+
+// Capture is used in several places, but self-assignment must always resolve to
+// the active profile rather than a demo name embedded in parsing rules.
+const CurrentUserContext = createContext<string | undefined>(undefined);
 
 interface FollowUpItem {
   title: string; taskId: string; daysWaiting: number;
@@ -57,296 +290,803 @@ interface FollowUpPerson {
   items: FollowUpItem[]; suggestedMessage: string;
 }
 
-interface ProjectDetail {
-  id: string; name: string; org: OrgName; area: AreaName;
-  progress: number; deadline: string; status: "on_track" | "at_risk" | "behind";
-  tasks: number; done: number; currentFocus: string[];
-  resources: TaskLink[]; recentActivity: Activity[];
+interface Milestone {
+  id: string; name: string; date: string; project: string; owner: string;
+  status: "planned" | "at_risk" | "done"; description?: string;
 }
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 
-const TASKS: Task[] = [
-  {
-    id: "t1", title: "Review website accommodation prices",
-    org: "Villa Khayangan", area: "Marketing", project: "Villa Website Revamp",
-    priority: "high", status: "waiting", assignee: "Bu Desti", nextActionBy: "Bu Desti",
-    deadline: "Wed, 14 Aug", waitingSince: "Mon, 11 Aug", responseDue: "Wed, 14 Aug",
-    lastUpdate: "3 days ago", isDelegated: true, isWaiting: true, estimatedHours: 2,
-    links: [{ label: "Website", url: "https://example.com", type: "website" }],
-    originalCapture: "ask Bu Desti to check website prices by Wednesday https://example.com",
-    activity: [
-      { type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "3 days ago" },
-      { type: "commented", actor: "Bu Desti", text: "Will check and update by Wednesday", time: "2 days ago" },
-    ]
-  },
-  {
-    id: "t2", title: "Fix purchasing settlement receipt flow",
-    org: "Villa Khayangan", area: "System Development", project: "Finance Automation",
-    priority: "high", status: "in_progress", nextActionBy: "me",
-    deadline: "Tomorrow", isDelegated: false, isWaiting: false, isToday: true, estimatedHours: 4,
-    links: [{ label: "Dev Branch", url: "#", type: "github" }, { label: "Finance Sheet", url: "#", type: "sheet" }],
-    originalCapture: "fix purchasing receipt flow because finance needs to calculate money return",
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "Yesterday" }]
-  },
-  {
-    id: "t3", title: "Check expired medicine inventory",
-    org: "Apotik", area: "Operations", priority: "urgent", status: "todo",
-    nextActionBy: "me", deadline: "Today", isDelegated: false, isWaiting: false, isToday: true, estimatedHours: 1,
-    originalCapture: "tomorrow check apotik expired medicine issue",
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "Yesterday" }]
-  },
-  {
-    id: "t4", title: "Update restaurant SOP documentation",
-    org: "Villa Khayangan", area: "Operations", project: "Ops Manual 2024",
-    priority: "medium", status: "waiting", assignee: "Bu Desti", nextActionBy: "Bu Desti",
-    deadline: "Fri, 16 Aug", waitingSince: "Sat, 9 Aug", lastUpdate: "5 days ago",
-    isDelegated: true, isWaiting: true,
-    files: [{ name: "SOP_Draft_v2.docx", type: "doc" }],
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "5 days ago" }]
-  },
-  {
-    id: "t5", title: "Reconcile August petty cash",
-    org: "Apotik", area: "Finance", priority: "urgent", status: "todo",
-    nextActionBy: "me", deadline: "Yesterday", isDelegated: false, isWaiting: false, isOverdue: true, estimatedHours: 2,
-    files: [{ name: "Cash_July.xlsx", type: "excel" }],
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "3 days ago" }]
-  },
-  {
-    id: "t6", title: "Prepare supplier quotation comparison",
-    org: "Villa Khayangan", area: "Finance", priority: "high", status: "waiting",
-    assignee: "Purchasing Manager", nextActionBy: "Purchasing Manager",
-    deadline: "Thu, 15 Aug", waitingSince: "Mon, 11 Aug", responseDue: "Thu, 15 Aug",
-    lastUpdate: "2 days ago", isDelegated: true, isWaiting: true,
-    files: [{ name: "Quotation_Template.xlsx", type: "excel" }],
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Purchasing Manager", time: "2 days ago" }]
-  },
-  {
-    id: "t7", title: "Review new hire onboarding checklist",
-    org: "Villa Khayangan", area: "HR", priority: "medium", status: "review",
-    assignee: "HR Manager", nextActionBy: "me", deadline: "Fri, 16 Aug", isDelegated: true, isWaiting: false,
-    files: [{ name: "Onboarding_Checklist.pdf", type: "pdf" }],
-    activity: [
-      { type: "assigned", actor: "You", text: "Assigned to HR Manager", time: "4 days ago" },
-      { type: "submitted", actor: "HR Manager", text: "Submitted for review", time: "1 day ago" },
-    ]
-  },
-  {
-    id: "t8", title: "Update Figma mockup for mobile booking flow",
-    org: "Villa Khayangan", area: "System Development", project: "Villa Website Revamp",
-    priority: "medium", status: "review", assignee: "Design Team", nextActionBy: "me",
-    deadline: "Wed, 14 Aug", isDelegated: true, isWaiting: false,
-    links: [{ label: "Figma File", url: "#", type: "figma" }],
-    activity: [
-      { type: "assigned", actor: "You", text: "Assigned to Design Team", time: "3 days ago" },
-      { type: "submitted", actor: "Design Team", text: "Mockups ready for review", time: "Today" },
-    ]
-  },
-  {
-    id: "t9", title: "Follow up with bank on credit facility renewal",
-    org: "Personal", area: "Finance", priority: "high", status: "waiting",
-    nextActionBy: "Bank Officer", deadline: "Fri, 16 Aug", waitingSince: "Wed, 7 Aug", lastUpdate: "4 days ago",
-    isDelegated: false, isWaiting: true,
-    activity: [{ type: "assigned", actor: "You", text: "Called bank, waiting for callback", time: "4 days ago" }]
-  },
-  {
-    id: "t10", title: "Review Q3 marketing budget proposal",
-    org: "Villa Khayangan", area: "Marketing", priority: "high", status: "todo",
-    nextActionBy: "me", deadline: "Today", isDelegated: false, isWaiting: false, isToday: true, estimatedHours: 1.5,
-    files: [{ name: "Marketing_Budget_Q3.xlsx", type: "excel" }],
-    activity: [{ type: "assigned", actor: "Marketing Team", text: "Sent for owner approval", time: "Yesterday" }]
-  },
-  {
-    id: "t11", title: "Update staff schedule for Lebaran holiday",
-    org: "Villa Khayangan", area: "HR", priority: "medium", status: "todo",
-    nextActionBy: "me", deadline: "Thu, 15 Aug", isDelegated: false, isWaiting: false, estimatedHours: 1,
-    activity: [{ type: "assigned", actor: "You", text: "Created task", time: "Today" }]
-  },
-  {
-    id: "t12", title: "Negotiate new supplier contract terms",
-    org: "Apotik", area: "Operations", priority: "medium", status: "waiting",
-    assignee: "Purchasing Manager", nextActionBy: "Purchasing Manager",
-    deadline: "Mon, 18 Aug", waitingSince: "Fri, 8 Aug", lastUpdate: "2 days ago",
-    isDelegated: true, isWaiting: true,
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Purchasing Manager", time: "2 days ago" }]
-  },
-  {
-    id: "t13", title: "Finalize annual revenue report",
-    org: "Villa Khayangan", area: "Finance", project: "Finance Automation",
-    priority: "high", status: "done", nextActionBy: "me",
-    isDelegated: false, isWaiting: false,
-    activity: [{ type: "approved", actor: "You", text: "Marked as complete", time: "Last week" }]
-  },
-  {
-    id: "t14", title: "Train front desk staff on new booking system",
-    org: "Villa Khayangan", area: "HR", priority: "medium", status: "todo",
-    assignee: "Bu Desti", nextActionBy: "Bu Desti",
-    deadline: "Mon, 19 Aug", isDelegated: true, isWaiting: true, waitingSince: "Today",
-    activity: [{ type: "assigned", actor: "You", text: "Assigned to Bu Desti", time: "Today" }]
-  },
-];
+const SEED_TASKS: Task[] = [];
+const SEED_ARCHIVED_TASKS: Task[] = [];
 
-const STRATEGIC_PROJECTS = [
-  { id: "p1", name: "Villa Website Revamp", org: "Villa Khayangan" as OrgName, progress: 65, tasks: 12, done: 8, deadline: "Sep 2024", status: "on_track" as const },
-  { id: "p2", name: "Apotik Management System", org: "Apotik" as OrgName, progress: 30, tasks: 18, done: 5, deadline: "Dec 2024", status: "at_risk" as const },
-  { id: "p3", name: "Finance Automation", org: "Villa Khayangan" as OrgName, progress: 80, tasks: 10, done: 8, deadline: "Aug 2024", status: "on_track" as const },
-];
+// ─── CANONICAL TASK STORE ────────────────────────────────────────────────────
+// Every shared screen reads this server-scoped PostgreSQL projection. Browser
+// local work is never merged here; it stays in the explicit import banner until
+// its idempotent migration creates the same canonical Task records.
+const BINNIE_TASK_STORE_STORAGE_KEY = "binnie-task-store-v1";
+// A current user exists only after the authenticated, server-scoped snapshot
+// has loaded. There is deliberately no Charlotte/demo authorization fallback.
+const DEFAULT_CURRENT_USER_ID = "";
+type TaskDraft = Omit<Task, "id"> & { id?: string };
 
-const PEOPLE_DATA: PersonRecord[] = [
-  { name: "Bu Desti", role: "Manager", org: "Villa Khayangan", active: 4, waitingOnThem: 3, waitingOnMe: 1, overdue: 1, lastUpdate: "Yesterday", oldestUnanswered: "5 days", needsFollowUp: true },
-  { name: "Purchasing Manager", role: "Procurement", org: "Villa Khayangan", active: 2, waitingOnThem: 2, waitingOnMe: 0, overdue: 1, lastUpdate: "2 days ago", oldestUnanswered: "3 days", needsFollowUp: true },
-  { name: "HR Manager", role: "HR", org: "Villa Khayangan", active: 1, waitingOnThem: 0, waitingOnMe: 1, overdue: 0, lastUpdate: "1 day ago", oldestUnanswered: "4 days", needsFollowUp: false },
-  { name: "Design Team", role: "Design", org: "Villa Khayangan", active: 1, waitingOnThem: 0, waitingOnMe: 1, overdue: 0, lastUpdate: "Today", oldestUnanswered: "3 days", needsFollowUp: false },
-  { name: "Marketing Team", role: "Marketing", org: "Villa Khayangan", active: 2, waitingOnThem: 1, waitingOnMe: 0, overdue: 0, lastUpdate: "3 days ago", oldestUnanswered: "6 days", needsFollowUp: true },
-];
+let TASKS: Task[] = SEED_TASKS.map(task => ({ ...task }));
+let ARCHIVED_TASKS: Task[] = SEED_ARCHIVED_TASKS.map(task => ({ ...task }));
+let taskStoreVersion = 0;
+let taskStoreUsesServer = false;
+let taskStoreServerRevision = 0;
+let CANONICAL_ACTOR_ID = DEFAULT_CURRENT_USER_ID;
+let CANONICAL_PROJECTS: ProjectDTO[] = [];
+let CANONICAL_SAVED_VIEWS: SavedViewDTO[] = [];
+let CANONICAL_INBOX_CAPTURES: InboxCaptureDTO[] = [];
+let CANONICAL_WORKFLOW_TEMPLATES: WorkflowTemplateDTO[] = [];
+let CANONICAL_NUDGE_STATES: NudgeStateDTO[] = [];
+const remoteDepartmentIds = new Map<string, string>();
+const remoteOrganizationIds = new Map<string, string>();
+const taskStoreListeners = new Set<() => void>();
 
-const FOLLOWUP_DATA: FollowUpPerson[] = [
-  {
-    person: "Bu Desti", section: "today",
-    items: [
-      { title: "Review website accommodation prices", taskId: "t1", daysWaiting: 4, status: "overdue", note: "No update for 4 days" },
-      { title: "Restaurant SOP documentation", taskId: "t4", daysWaiting: 2, status: "due_today", note: "Update expected today" },
-      { title: "August promotion pricing", taskId: "new1", daysWaiting: 1, status: "due_today", note: "Response due today" },
-    ],
-    suggestedMessage: "Bu Desti, mau follow up untuk beberapa hal ya Bu:\n\n1. Review website accommodation prices — sudah 4 hari belum ada update\n2. Restaurant SOP update — targetnya hari ini\n3. August promotion pricing — response seharusnya hari ini\n\nMohon dibantu update perkembangannya ya Bu. Terima kasih 🙏",
-  },
-  {
-    person: "Purchasing Manager", section: "today",
-    items: [
-      { title: "Supplier quotation comparison", taskId: "t6", daysWaiting: 2, status: "due_soon", note: "Due Thursday" },
-      { title: "Negotiate supplier contract terms", taskId: "t12", daysWaiting: 3, status: "no_update", note: "No update since Monday" },
-    ],
-    suggestedMessage: "Pak, mau follow up untuk 2 hal ya Pak:\n\n1. Quotation comparison supplier — due hari Kamis\n2. Negosiasi kontrak supplier — belum ada update sejak Senin\n\nMohon dibantu ya Pak. Terima kasih 🙏",
-  },
-  {
-    person: "Marketing Team", section: "later",
-    items: [
-      { title: "Q3 campaign calendar", taskId: "new2", daysWaiting: 6, status: "no_update", note: "6 days without update" },
-    ],
-    suggestedMessage: "Tim Marketing, mau tanya update untuk Q3 campaign calendar ya. Sudah 6 hari belum ada kabar. Terima kasih 🙏",
-  },
-];
+function taskStoreSnapshot() {
+  return taskStoreVersion;
+}
 
-const ORG_RESOURCES: Record<OrgName, TaskLink[]> = {
-  "Villa Khayangan": [
-    { label: "Google Drive", url: "#", type: "drive" },
-    { label: "Main Website", url: "#", type: "website" },
-    { label: "Finance Dashboard", url: "#", type: "sheet" },
-    { label: "Design System", url: "#", type: "figma" },
-  ],
-  "Apotik": [
-    { label: "Inventory Sheet", url: "#", type: "sheet" },
-    { label: "Operations Drive", url: "#", type: "drive" },
-  ],
-  "Personal": [
-    { label: "Personal Drive", url: "#", type: "drive" },
-    { label: "Budget Tracker", url: "#", type: "sheet" },
-  ],
-};
+function subscribeToTaskStore(listener: () => void) {
+  taskStoreListeners.add(listener);
+  return () => taskStoreListeners.delete(listener);
+}
 
-const PROJECT_DETAILS: Record<string, ProjectDetail> = {
-  "p1": {
-    id: "p1", name: "Villa Website Revamp", org: "Villa Khayangan", area: "System Development",
-    progress: 65, deadline: "Sep 2024", status: "on_track", tasks: 12, done: 8,
-    currentFocus: ["Mobile booking flow redesign", "Payment gateway integration", "Accommodation pricing section"],
-    resources: [
-      { label: "Production Site", url: "#", type: "website" },
-      { label: "GitHub Repo", url: "#", type: "github" },
-      { label: "Figma File", url: "#", type: "figma" },
-      { label: "Requirements", url: "#", type: "drive" },
-      { label: "Sprint Tracker", url: "#", type: "sheet" },
-    ],
-    recentActivity: [
-      { type: "submitted", actor: "Design Team", text: "Submitted mobile booking mockups for review", time: "Today" },
-      { type: "commented", actor: "You", text: "Left comments on payment flow design", time: "Yesterday" },
-      { type: "updated", actor: "Bu Desti", text: "Checked accommodation pricing section", time: "3 days ago" },
-    ],
-  },
-  "p2": {
-    id: "p2", name: "Apotik Management System", org: "Apotik", area: "System Development",
-    progress: 30, deadline: "Dec 2024", status: "at_risk", tasks: 18, done: 5,
-    currentFocus: ["Inventory management module", "Prescription tracking", "Supplier data integration"],
-    resources: [
-      { label: "GitHub Repo", url: "#", type: "github" },
-      { label: "Requirements", url: "#", type: "drive" },
-      { label: "Design File", url: "#", type: "figma" },
-    ],
-    recentActivity: [
-      { type: "updated", actor: "You", text: "Reviewed system architecture document", time: "2 days ago" },
-      { type: "assigned", actor: "You", text: "Assigned inventory module to dev team", time: "4 days ago" },
-    ],
-  },
-  "p3": {
-    id: "p3", name: "Finance Automation", org: "Villa Khayangan", area: "Finance",
-    progress: 80, deadline: "Aug 2024", status: "on_track", tasks: 10, done: 8,
-    currentFocus: ["Purchasing receipt flow fix", "Monthly auto-reconciliation"],
-    resources: [
-      { label: "Finance Sheet", url: "#", type: "sheet" },
-      { label: "GitHub Repo", url: "#", type: "github" },
-      { label: "Documentation", url: "#", type: "drive" },
-    ],
-    recentActivity: [
-      { type: "updated", actor: "You", text: "Working on purchasing receipt flow fix", time: "Today" },
-      { type: "approved", actor: "You", text: "Approved automated reconciliation v1", time: "3 days ago" },
-    ],
-  },
-};
+function publishTaskStore() {
+  taskStoreVersion += 1;
+  taskStoreListeners.forEach(listener => listener());
+}
+
+function taskDateLabel(iso?: string) {
+  if (!iso) return undefined;
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${iso}T00:00:00Z`));
+}
+
+function workspaceDateKeyForInstant(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: WORKSPACE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+/** Formats timestamps for people while preserving the workspace calendar day. */
+function humanizeWaitingSince(value?: string) {
+  const waitingDate = value ? workspaceDateKeyForInstant(value) : undefined;
+  if (!waitingDate) return "—";
+  const today = isoDate(getWorkspaceCalendarDate());
+  const days = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00.000Z`) - Date.parse(`${waitingDate}T00:00:00.000Z`)) / 86400000));
+  const label = taskDateLabel(waitingDate)?.replace(/\s+\d{4}$/, "") || waitingDate;
+  return days ? `Since ${label} · ${days} ${days === 1 ? "day" : "days"}` : `Since ${label}`;
+}
+
+function readableTaskNextAction(task: Task) {
+  return task.nextActionBy === "me" ? "You" : task.nextActionBy || "Not assigned";
+}
+
+function taskActivityType(type: string): Activity["type"] {
+  if (type.includes("submitted")) return "submitted";
+  if (type.includes("revision")) return "revision";
+  if (type.includes("approved") || type.includes("completed")) return "approved";
+  if (type.includes("assigned") || type.includes("claimed") || type.includes("reassigned")) return "assigned";
+  if (type.includes("update")) return "commented";
+  return "updated";
+}
+
+function canonicalTaskToLegacy(task: TaskDTO): Task {
+  const startBlocker = task.startBlockedBy[0];
+  return {
+    id: task.id,
+    title: task.title,
+    org: task.org,
+    organizationId: task.organizationId,
+    area: task.area,
+    leadDepartmentId: task.leadDepartmentId,
+    involvedAreas: task.involvedAreas as AreaName[],
+    involvedDepartmentIds: task.involvedDepartments.map(department => department.id),
+    project: task.project,
+    projectId: task.projectId,
+    priority: task.priority,
+    status: task.status,
+    assignee: task.assignee,
+    assigneeIds: task.assigneeIds,
+    assignments: task.assignments,
+    ownerPrincipalId: task.ownerPrincipalId,
+    ownerInferredFromCreator: task.ownerInferredFromCreator,
+    owner: task.owner,
+    currentResponsibilityId: task.currentResponsibility?.principalId,
+    currentResponsibility: task.currentResponsibility,
+    currentStep: task.currentStep,
+    createdByPrincipalId: task.createdByPrincipalId,
+    reviewerPrincipalId: task.review?.reviewerId,
+    reviewer: task.review?.reviewer,
+    nextActionBy: task.nextActionBy,
+    nextActionKind: task.nextActionKind,
+    nextActionPrincipalId: task.nextActionPrincipalId,
+    nextActionDepartmentId: task.nextActionDepartmentId,
+    nextActionExternalLabel: task.nextActionExternalLabel,
+    startDate: task.startDate,
+    targetDate: task.targetDate,
+    deadline: taskDateLabel(task.deadlineDate),
+    deadlineDate: task.deadlineDate,
+    followUpDate: task.followUpDate,
+    estimatedMinutes: task.estimatedMinutes,
+    actualMinutes: task.actualMinutes,
+    responseDue: task.followUpDate ? taskDateLabel(task.followUpDate) : undefined,
+    waitingSince: task.waitingSince,
+    completedAt: task.completedAt,
+    completedBy: task.completedBy,
+    isDelegated: Boolean(task.currentResponsibility && task.currentResponsibility.assignedByPrincipalId === CANONICAL_ACTOR_ID && task.currentResponsibility.principalId !== CANONICAL_ACTOR_ID),
+    isWaiting: task.status === "waiting",
+    isOverdue: task.isOverdue,
+    completedInCurrentMonth: task.status === "done",
+    archived: Boolean(task.archivedAt),
+    archivedAt: task.archivedAt,
+    description: task.description,
+    notes: task.description,
+    originalCapture: task.originalCapture,
+    version: task.version,
+    canStartNow: task.canStartNow,
+    completionBlockedBy: task.completionBlockedBy,
+    startBlockedBy: task.startBlockedBy,
+    dependencyRecords: [...task.startBlockedBy, ...task.completionBlockedBy, ...task.relatedWork],
+    dependencyActionOwnerIds: [...task.startBlockedBy, ...task.completionBlockedBy]
+      .filter(dependency => !dependency.resolvedAt)
+      .map(dependency => dependency.ownerPrincipalId)
+      .filter((id): id is string => Boolean(id)),
+    updates: task.updates.map(update => ({ id: update.id, author: update.author, text: update.text, createdAt: update.createdAt, resources: update.resources })),
+    checklistItems: task.checklistItems,
+    subtasks: task.subtasks,
+    subtaskProgress: task.subtaskProgress,
+    parentTaskId: task.parentTaskId,
+    parentTask: task.parentTask,
+    sourceTaskId: task.sourceTaskId,
+    mergedIntoTaskId: task.mergedIntoTaskId,
+    mergedIntoTask: task.mergedIntoTask,
+    mergedHistory: task.mergedHistory,
+    recurrence: task.recurrence,
+    links: task.resources.filter(resource => resource.kind === "link" && resource.url).map(resource => ({ label: resource.label, url: resource.url!, type: "website" as ResourceType })),
+    files: task.resources.filter(resource => resource.kind === "file").map(resource => ({ id: resource.id, name: resource.fileName || resource.label, type: resource.mimeType?.includes("pdf") ? "pdf" as const : resource.mimeType?.includes("sheet") || resource.mimeType?.includes("excel") ? "excel" as const : resource.mimeType?.startsWith("image/") ? "screenshot" as const : "doc" as const, size: resource.byteSize ? `${Math.ceil(resource.byteSize / 1024)} KB` : undefined, url: resource.url })),
+    activity: task.activity.map(activity => ({ type: taskActivityType(activity.type), actor: activity.actor || "Binnie", text: activity.summary, time: new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(Math.round((new Date(activity.createdAt).getTime() - Date.now()) / 86400000), "day") })),
+    blockedBy: startBlocker ? { kind: startBlocker.prerequisiteTaskId ? "task" : startBlocker.owner ? "department" : "other", type: "blocking", label: startBlocker.label, taskId: startBlocker.prerequisiteTaskId, owner: startBlocker.owner } : undefined,
+    relatedTaskIds: task.relatedWork.map(dependency => dependency.prerequisiteTaskId).filter((id): id is string => Boolean(id)),
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    lastUpdate: task.activity[0] ? "Updated recently" : undefined,
+  };
+}
+
+function canonicalOrganizationToMeta(organization: OrganizationDTO): OrganizationMeta {
+  const previous = ORGS_META.find(candidate => candidate.name === organization.name);
+  return {
+    id: organization.id,
+    name: organization.name,
+    desc: organization.description || previous?.desc || "No description yet.",
+    colorKey: organization.colorKey,
+    aliases: organization.aliases,
+    areas: organization.departments.map(department => department.name as AreaName),
+    areaSettings: Object.fromEntries(organization.departments.map(department => [department.name, {
+      aliases: department.aliases,
+      defaultTeamId: department.teamId,
+      defaultAssignee: department.teamId ? PEOPLE_DIRECTORY.find(person => person.id === department.teamId)?.name : undefined,
+    }])),
+  };
+}
+
+function applyCanonicalOrganization(organization: OrganizationDTO) {
+  const next = canonicalOrganizationToMeta(organization);
+  const index = ORGS_META.findIndex(candidate => candidate.name === organization.name);
+  if (index >= 0) ORGS_META[index] = next;
+  else ORGS_META.push(next);
+  remoteOrganizationIds.set(organization.name, organization.id);
+  organization.departments.forEach(department => remoteDepartmentIds.set(`${organization.name}::${department.name}`, department.id));
+  return next;
+}
+
+function hydrateCanonicalTaskStore(snapshot: WorkspaceSnapshotDTO) {
+  taskStoreUsesServer = true;
+  taskStoreServerRevision = snapshot.revision;
+  CANONICAL_ACTOR_ID = snapshot.actorId;
+  remoteDepartmentIds.clear();
+  remoteOrganizationIds.clear();
+  snapshot.organizations.forEach(organization => {
+    remoteOrganizationIds.set(organization.name, organization.id);
+    organization.departments.forEach(department => remoteDepartmentIds.set(`${organization.name}::${department.name}`, department.id));
+  });
+  // The client directory is only a compatibility projection for existing views.
+  // In shared mode it is always hydrated from canonical principals, never used as
+  // an independent source of truth.
+  PEOPLE_DIRECTORY.splice(0, PEOPLE_DIRECTORY.length, ...snapshot.directory.map(person => ({
+    id: person.id,
+    name: person.name,
+    type: person.type,
+    active: person.active,
+    accountStatus: person.accountStatus === "ACTIVE" ? "active_user" as const : person.accountStatus === "SUSPENDED" ? "suspended" as const : person.accountStatus === "ACCESS_REMOVED" ? "access_removed" as const : "no_account" as const,
+    email: person.email,
+    memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", role: membership.role?.replace(/_/g, " "), area: membership.department as AreaName | undefined })),
+  })));
+  ORGS_META.splice(0, ORGS_META.length, ...snapshot.organizations.map(canonicalOrganizationToMeta));
+  TASKS = snapshot.tasks.filter(task => !task.archivedAt).map(canonicalTaskToLegacy);
+  ARCHIVED_TASKS = snapshot.tasks.filter(task => task.archivedAt).map(canonicalTaskToLegacy);
+  CANONICAL_PROJECTS = snapshot.projects;
+  CANONICAL_SAVED_VIEWS = snapshot.savedViews;
+  CANONICAL_INBOX_CAPTURES = snapshot.inboxCaptures;
+  CANONICAL_WORKFLOW_TEMPLATES = snapshot.workflowTemplates;
+  CANONICAL_NUDGE_STATES = snapshot.nudgeStates;
+  publishTaskStore();
+}
+
+function applyCanonicalInboxCapture(capture: InboxCaptureDTO, revision?: number) {
+  CANONICAL_INBOX_CAPTURES = [capture, ...CANONICAL_INBOX_CAPTURES.filter(item => item.id !== capture.id)];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function removeCanonicalInboxCapture(captureId: string, revision?: number) {
+  CANONICAL_INBOX_CAPTURES = CANONICAL_INBOX_CAPTURES.filter(item => item.id !== captureId);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function applyCanonicalProject(project: ProjectDTO, revision?: number) {
+  const exists = CANONICAL_PROJECTS.some(candidate => candidate.id === project.id);
+  CANONICAL_PROJECTS = exists
+    ? CANONICAL_PROJECTS.map(candidate => candidate.id === project.id ? project : candidate)
+    : [project, ...CANONICAL_PROJECTS];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+  return project;
+}
+
+function getCanonicalProject(projectId: string) {
+  return CANONICAL_PROJECTS.find(project => project.id === projectId);
+}
+
+function removeCanonicalProject(projectId: string, revision?: number) {
+  CANONICAL_PROJECTS = CANONICAL_PROJECTS.filter(project => project.id !== projectId);
+  const detach = (task: Task) => task.projectId === projectId ? { ...task, projectId: undefined, project: undefined } : task;
+  TASKS = TASKS.map(detach);
+  ARCHIVED_TASKS = ARCHIVED_TASKS.map(detach);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function canManageCanonicalProject(project: ProjectDTO) {
+  const actor = PEOPLE_DIRECTORY.find(person => person.id === CANONICAL_ACTOR_ID);
+  if (!actor) return false;
+  if (project.members.some(member => member.principalId === actor.id && member.role === "owner")) return true;
+  return actor.memberships.some(membership =>
+    membership.role === "owner"
+    || (membership.organization === project.organization && membership.role === "organization_manager")
+    || (membership.area === project.leadArea && membership.role === "department_manager"),
+  );
+}
+
+function applyCanonicalWorkflowTemplate(template: WorkflowTemplateDTO, revision?: number) {
+  const exists = CANONICAL_WORKFLOW_TEMPLATES.some(candidate => candidate.id === template.id);
+  CANONICAL_WORKFLOW_TEMPLATES = exists
+    ? CANONICAL_WORKFLOW_TEMPLATES.map(candidate => candidate.id === template.id ? template : candidate)
+    : [template, ...CANONICAL_WORKFLOW_TEMPLATES];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function removeCanonicalWorkflowTemplate(templateId: string, revision?: number) {
+  CANONICAL_WORKFLOW_TEMPLATES = CANONICAL_WORKFLOW_TEMPLATES.filter(template => template.id !== templateId);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function applyCanonicalNudgeState(state: NudgeStateDTO, revision?: number) {
+  CANONICAL_NUDGE_STATES = [...CANONICAL_NUDGE_STATES.filter(item => item.dedupKey !== state.dedupKey), state];
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function applyCanonicalTask(task: TaskDTO, revision?: number) {
+  const next = canonicalTaskToLegacy(task);
+  const collection = next.archived ? ARCHIVED_TASKS : TASKS;
+  const otherCollection = next.archived ? TASKS : ARCHIVED_TASKS;
+  const exists = collection.some(candidate => candidate.id === next.id);
+  if (next.archived) {
+    TASKS = otherCollection.filter(candidate => candidate.id !== next.id);
+    ARCHIVED_TASKS = exists ? collection.map(candidate => candidate.id === next.id ? next : candidate) : [...collection, next];
+  } else {
+    ARCHIVED_TASKS = otherCollection.filter(candidate => candidate.id !== next.id);
+    TASKS = exists ? collection.map(candidate => candidate.id === next.id ? next : candidate) : [...collection, next];
+  }
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+  return next;
+}
+
+function getRemoteDepartmentId(org: OrgName, area: AreaName) {
+  return remoteDepartmentIds.get(`${org}::${area}`);
+}
+
+function useTaskStoreVersion() {
+  return useSyncExternalStore(subscribeToTaskStore, taskStoreSnapshot, () => 0);
+}
+
+function nextTaskId() {
+  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createTask(input: TaskDraft) {
+  const timestamp = new Date().toISOString();
+  const task: Task = {
+    ...input,
+    id: input.id || nextTaskId(),
+    createdAt: input.createdAt || timestamp,
+    updatedAt: timestamp,
+    createdBy: input.createdBy || DEFAULT_CURRENT_USER_ID,
+  };
+  TASKS = [...TASKS, task];
+  publishTaskStore();
+  return task;
+}
+
+function updateTask(taskId: string, patch: Partial<Task>) {
+  let updated: Task | undefined;
+  TASKS = TASKS.map(task => {
+    if (task.id !== taskId) return task;
+    updated = { ...task, ...patch, updatedAt: new Date().toISOString() };
+    return updated;
+  });
+  if (updated) publishTaskStore();
+  return updated;
+}
+
+function commitTaskStore() {
+  // Compatibility bridge for an existing interaction that still mutates a task
+  // object in place. It converts the collection reference and broadcasts it.
+  TASKS = [...TASKS];
+  ARCHIVED_TASKS = [...ARCHIVED_TASKS];
+  publishTaskStore();
+}
+
+function deleteTask(taskId: string) {
+  const before = TASKS.length;
+  TASKS = TASKS.filter(task => task.id !== taskId);
+  ARCHIVED_TASKS = ARCHIVED_TASKS.filter(task => task.id !== taskId);
+  if (TASKS.length !== before) publishTaskStore();
+}
+
+function archiveCanonicalTask(taskId: string) {
+  const task = TASKS.find(item => item.id === taskId);
+  if (!task || task.status !== "done") return false;
+  TASKS = TASKS.filter(item => item.id !== taskId);
+  ARCHIVED_TASKS = [...ARCHIVED_TASKS, { ...task, archived: true, status: "done", isWaiting: false, updatedAt: new Date().toISOString(), lastUpdate: "Archived just now" }];
+  publishTaskStore();
+  return true;
+}
+
+function markTaskDone(task: Task, lastUpdate = "Just now") {
+  const statusBeforeCompletion = task.status === "done" ? task.statusBeforeCompletion : task.status;
+  const scheduledDate = getTaskPlannerDate(task);
+  Object.assign(task, {
+    status: "done" as const,
+    statusBeforeCompletion: statusBeforeCompletion || "ready",
+    // Preserve a relative legacy deadline (such as "Tomorrow") as the date it
+    // represented when the work was completed, rather than letting it drift.
+    deadlineDate: task.deadlineDate || scheduledDate,
+    isWaiting: false,
+    isOverdue: false,
+    nextActionBy: "me",
+    completedInCurrentMonth: true,
+    lastUpdate,
+  });
+}
+
+// A person or team is created once in Binnie. Membership stores the role and
+// area for each organization, allowing one person to contribute in more than one place.
+const PEOPLE_DIRECTORY: DirectoryPerson[] = [];
+
+function getDirectoryPerson(nameOrId: string) {
+  return PEOPLE_DIRECTORY.find(person => person.name === nameOrId || person.id === nameOrId);
+}
+
+function applyCanonicalDirectoryPerson(person: DirectoryDTO) {
+  const next: DirectoryPerson = {
+    id: person.id, name: person.name, type: person.type, active: person.active,
+    accountStatus: person.accountStatus === "ACTIVE" ? "active_user" : person.accountStatus === "SUSPENDED" ? "suspended" : person.accountStatus === "ACCESS_REMOVED" ? "access_removed" : "no_account",
+    email: person.email,
+    memberships: person.memberships.map(membership => ({ organization: membership.organization || "Unassigned", area: membership.department as AreaName | undefined, role: membership.role.replace(/_/g, " ") })),
+  };
+  const index = PEOPLE_DIRECTORY.findIndex(item => item.id === next.id);
+  if (index >= 0) PEOPLE_DIRECTORY.splice(index, 1, next);
+  else PEOPLE_DIRECTORY.push(next);
+  publishTaskStore();
+  return next;
+}
+
+function getDirectoryPeople(ids?: string[]) {
+  return (ids || []).map(id => PEOPLE_DIRECTORY.find(person => person.id === id)).filter((person): person is DirectoryPerson => Boolean(person));
+}
+
+function directoryNames(ids?: string[]) {
+  return getDirectoryPeople(ids).map(person => person.name);
+}
+
+function getTaskAssigneeIds(task: Task) {
+  if (task.assigneeIds?.length) return Array.from(new Set(task.assigneeIds));
+  const legacy = task.assignee ? getDirectoryPerson(task.assignee)?.id : undefined;
+  return legacy ? [legacy] : [];
+}
+
+function getTaskAssignees(task: Task) {
+  return getDirectoryPeople(getTaskAssigneeIds(task));
+}
+
+function taskAssigneeNames(task: Task) {
+  const names = getTaskAssignees(task).map(person => person.name);
+  return names.length ? names : task.assignee ? [task.assignee] : [];
+}
+
+function taskHasAssignee(task: Task, person: DirectoryPerson | string) {
+  const entity = typeof person === "string" ? getDirectoryPerson(person) : person;
+  return entity ? getTaskAssigneeIds(task).includes(entity.id) : task.assignee === person;
+}
+
+function setTaskAssignees(task: Task, assigneeIds: string[], actor = "You") {
+  const ids = Array.from(new Set(assigneeIds.filter(id => PEOPLE_DIRECTORY.some(person => person.id === id))));
+  const names = directoryNames(ids);
+  const previousPrimary = task.assignee;
+  const nextActionBy = task.nextActionBy === previousPrimary ? names[0] || "Unassigned" : task.nextActionBy;
+  Object.assign(task, {
+    assigneeIds: ids,
+    assignee: names[0],
+    isDelegated: names.length > 0,
+    nextActionBy,
+    lastUpdate: "Assignees updated just now",
+    activity: [...(task.activity || []), { type: "assigned" as const, actor, text: names.length ? `Sent to ${names.join(" · ")}` : "Cleared current responsibility", time: "Just now" }],
+  });
+  commitTaskStore();
+}
+
+// ─── SHARED TASK SELECTORS ───────────────────────────────────────────────────
+// Views use these selectors instead of retaining their own copies of work.
+function isActiveTask(task: Task) {
+  return task.status !== "done" && !task.archived;
+}
+
+function isoDate(date: Date) {
+  return calendarDateKey(date);
+}
+
+function getTaskPlannerDate(task: Task) {
+  return getCanonicalTaskPlannerDate(task, getWorkspaceCalendarDate());
+}
+
+function isTaskOverdue(task: Task) {
+  const today = isoDate(getWorkspaceCalendarDate());
+  return Boolean(isActiveTask(task) && (task.isOverdue || (task.deadlineDate && task.deadlineDate < today)));
+}
+
+function taskIsForCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  // Today and This Week use this one personal relationship rule. Workspace
+  // authority is deliberately excluded: management visibility belongs in the
+  // People/Team task scopes, not in a person's own planner.
+  return isTaskPersonallyActionableForPerson({
+    id: task.id,
+    status: task.status,
+    archived: task.archived,
+    assigneeIds: getTaskAssigneeIds(task),
+    assignments: task.assignments?.map((assignment) => ({
+      principalId: assignment.principalId,
+      role: assignment.role,
+      assignedByPrincipalId: assignment.assignedByPrincipalId,
+    })),
+    currentResponsibilityId: task.currentResponsibilityId,
+    ownerPrincipalId: task.ownerPrincipalId,
+    nextActionPrincipalId: task.nextActionPrincipalId,
+    createdByPrincipalId: task.createdByPrincipalId,
+    reviewerPrincipalId: task.reviewerPrincipalId,
+    dependencyActionOwnerIds: task.dependencyActionOwnerIds,
+  }, currentUserId);
+}
+
+function getTasksForToday(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const today = isoDate(getWorkspaceCalendarDate());
+  return getCanonicalTodayTasks(tasks, currentUserId, today);
+}
+
+/** The exact same personal planning universe as Today, expanded to a week. */
+function getPersonalTasksForWeek(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID, weekStart?: Date) {
+  const today = getWorkspaceCalendarDate();
+  const monday = weekStart ? new Date(weekStart) : new Date(today);
+  if (!weekStart) monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+  const end = new Date(monday);
+  end.setUTCDate(end.getUTCDate() + 6);
+  return getCanonicalWeekTasks(tasks, currentUserId, isoDate(monday), isoDate(end));
+}
+
+function getTasksForWeek(tasks = TASKS, weekStart?: Date) {
+  const today = getWorkspaceCalendarDate();
+  const monday = weekStart ? new Date(weekStart) : new Date(today);
+  if (!weekStart) monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+  const start = isoDate(monday);
+  const end = new Date(monday); end.setUTCDate(end.getUTCDate() + 6);
+  return tasks.filter(task => {
+    // The week board is both a plan and a record. Keep completed tasks until
+    // their scheduled week is no longer being shown; archives remain separate.
+    return Boolean(!task.archived && isTaskScheduledDuring(task, start, isoDate(end)));
+  });
+}
+
+function weeklyTaskSortOrder(task: Task) {
+  if (task.status === "done") return 5;
+  if (isTaskOverdue(task) || task.status === "blocked" || task.status === "review") return 0;
+  if (task.status === "in_progress") return 1;
+  if (task.status === "ready") return 2;
+  if (task.status === "waiting") return 3;
+  return 4;
+}
+
+function getTasksForMonth(tasks = TASKS, date = getWorkspaceCalendarDate()) {
+  const prefix = isoDate(date).slice(0, 7);
+  return tasks.filter(task => isActiveTask(task) && getTaskPlannerDate(task)?.startsWith(prefix));
+}
+
+function taskIsPersonallyOwnedByCurrentUser(task: Task, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return taskIsForCurrentUser(task, currentUserId);
+}
+
+function formatEstimatedMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round((minutes / 60) * 2) / 2;
+  return `${Number.isInteger(hours) ? hours.toFixed(0) : hours}h`;
+}
+
+function getTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const personalTasks = tasks.filter(task => taskIsPersonallyOwnedByCurrentUser(task, currentUserId));
+  const summarize = (items: Task[]) => ({
+    estimatedMinutes: items.reduce((total, task) => total + (task.estimatedMinutes || 0), 0),
+    unestimatedCount: items.filter(task => !task.estimatedMinutes).length,
+  });
+  return summarize(personalTasks);
+}
+
+function formatTodayWorkload(tasks: Task[], currentUserId = DEFAULT_CURRENT_USER_ID) {
+  if (!tasks.length) return "0 tasks · Nothing planned";
+  const personal = getTodayWorkload(tasks, currentUserId);
+  const parts = [`${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`];
+  if (personal.estimatedMinutes) parts.push(`~${formatEstimatedMinutes(personal.estimatedMinutes)} estimated`);
+  if (personal.unestimatedCount) parts.push(personal.estimatedMinutes ? `${personal.unestimatedCount} ${personal.unestimatedCount === 1 ? "task" : "tasks"} unestimated` : "Not estimated yet");
+  return parts.join(" · ");
+}
+
+function getDelegatedTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getCanonicalDelegatedTasks(tasks, currentUserId);
+}
+
+function getWaitingWork(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getCanonicalWaitingWork(tasks, currentUserId);
+}
+
+function getWaitingTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getWaitingWork(tasks, currentUserId).all;
+}
+
+function getReviewTasks(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  return getCanonicalReviewTasks(tasks, currentUserId);
+}
+
+function getOverdueTasks(tasks = TASKS) {
+  return getCanonicalOverdueTasks(tasks, isoDate(getWorkspaceCalendarDate()));
+}
+
+function isFollowUpVisible(taskId: string, today: string) {
+  const state = CANONICAL_NUDGE_STATES.find(item => item.dedupKey === `follow-up:${taskId}`);
+  if (!state) return true;
+  if (state.disposition === "dismissed") return false;
+  return !state.snoozedUntil || state.snoozedUntil <= today;
+}
+
+function getAttentionWork(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const today = isoDate(getWorkspaceCalendarDate());
+  const source = getCanonicalAttentionWork(tasks, currentUserId, today);
+  const followUp = source.followUp.filter(task => isFollowUpVisible(task.id, today));
+  const reasonsByTaskId = new Map(Array.from(source.reasonsByTaskId.entries()).map(([taskId, reasons]) => [
+    taskId,
+    reasons.filter(reason => reason !== "follow_up" || isFollowUpVisible(taskId, today)),
+  ] as const));
+  const allNow = source.allNow.filter(task => (reasonsByTaskId.get(task.id) || []).length > 0);
+  return { ...source, today, followUp, reasonsByTaskId, allNow };
+}
+
+function getFollowUpNudgeCandidates(tasks = TASKS, currentUserId = DEFAULT_CURRENT_USER_ID) {
+  const today = isoDate(getWorkspaceCalendarDate());
+  const todayMs = Date.parse(`${today}T00:00:00.000Z`);
+  const allTasks = tasks.filter(task => isActiveTask(task) && isTaskTrackedByPerson(task, currentUserId));
+  const candidates = deriveWorkNudges(allTasks.map(task => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
+    daysWithoutUpdate: task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 86400000)) : undefined,
+    reviewWaitingHours: task.status === "review" && task.updatedAt ? Math.max(0, Math.floor((todayMs - new Date(task.updatedAt).getTime()) / 3600000)) : undefined,
+    blockedDependentCount: allTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
+    nextActionBy: task.nextActionBy,
+    deadlineDate: task.deadlineDate,
+    priority: task.priority,
+  })), new Date(`${today}T00:00:00.000Z`)).filter(candidate => {
+    const state = CANONICAL_NUDGE_STATES.find(item => item.dedupKey === candidate.dedupKey);
+    return !state || (state.disposition === "snoozed" && (!state.snoozedUntil || state.snoozedUntil <= `${today}T23:59:59.999Z`));
+  });
+  return { allTasks, candidates, today };
+}
+
+function organizationScopeId(organization: OrgName, tasks = TASKS) {
+  // Browser fallback tasks predate organization IDs. The server projection
+  // always has them; use the ID whenever it exists so organization scope is a
+  // stable relationship rather than a display-name match.
+  const canonicalId = ORGS_META.find(candidate => candidate.name === organization)?.id || remoteOrganizationIds.get(organization);
+  return tasks.some(task => Boolean(task.organizationId)) && canonicalId ? canonicalId : organization;
+}
+
+function getTasksForOrganization(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationTasks(tasks, organizationScopeId(organization, tasks));
+}
+
+function getOrganizationActiveWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationActiveTasks(tasks, organizationScopeId(organization, tasks));
+}
+
+function getOrganizationTodayWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationTodayTasks(tasks, organizationScopeId(organization, tasks), isoDate(getWorkspaceCalendarDate()));
+}
+
+function getOrganizationWeekWork(organization: OrgName, tasks = TASKS, weekStart?: Date) {
+  const today = getWorkspaceCalendarDate();
+  const monday = weekStart ? new Date(weekStart) : new Date(today);
+  if (!weekStart) monday.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+  const sunday = new Date(monday); sunday.setUTCDate(sunday.getUTCDate() + 6);
+  return getCanonicalOrganizationWeekTasks(tasks, organizationScopeId(organization, tasks), isoDate(monday), isoDate(sunday));
+}
+
+function getOrganizationWaitingWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationWaitingTasks(tasks, organizationScopeId(organization, tasks));
+}
+
+function getOrganizationRevisitWork(organization: OrgName, tasks = TASKS) {
+  return getCanonicalOrganizationRevisitTasks(tasks, organizationScopeId(organization, tasks), isoDate(getWorkspaceCalendarDate()));
+}
+
+function getOrganizationAreaWork(organization: OrgName, area: AreaName, tasks = TASKS) {
+  return getCanonicalOrganizationAreaTasks(tasks, organizationScopeId(organization, tasks), area);
+}
+
+function getTasksForArea(area: AreaName, organization?: OrgName, tasks = TASKS) {
+  return tasks.filter(task => !task.archived && (!organization || task.org === organization) && taskInvolvesArea(task, area));
+}
+
+function getPersonMembership(person: DirectoryPerson, organization?: OrgName) {
+  return organization ? person.memberships.find(membership => membership.organization === organization) : person.memberships[0];
+}
+
+function getPersonAccountability(name: string): PersonAccountability {
+  const entity = getDirectoryPerson(name);
+  const personId = entity?.id;
+  const involved = personId ? TASKS.filter(task => taskIsForCurrentUser(task, personId)) : [];
+  const waitingOnThemTasks = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === personId && (task.status === "waiting" || task.isWaiting || task.status === "blocked"));
+  const waitingOnThem = waitingOnThemTasks.length;
+  const waitingOnMe = involved.filter(task => task.status !== "done" && task.nextActionPrincipalId === CANONICAL_ACTOR_ID).length;
+  const updates = involved.flatMap(task => task.activity || []);
+  const oldestWaiting = [...waitingOnThemTasks].sort((left, right) => (left.waitingSince || "").localeCompare(right.waitingSince || ""))[0];
+  return {
+    active: involved.filter(task => task.status !== "done").length,
+    ready: involved.filter(task => task.status === "ready" && !task.blockedBy).length,
+    inProgress: involved.filter(task => task.status === "in_progress").length,
+    waitingOnThem,
+    waitingOnMe,
+    blocked: involved.filter(task => task.status === "blocked").length,
+    overdue: involved.filter(task => task.isOverdue).length,
+    review: involved.filter(task => task.status === "review").length,
+    lastUpdate: updates[0]?.time || "No updates yet",
+    oldestUnanswered: oldestWaiting ? humanizeWaitingSince(oldestWaiting.waitingSince) : "—",
+  };
+}
+
+function getDirectoryAssignees(organization?: OrgName) {
+  return PEOPLE_DIRECTORY.filter(person => person.active && (!organization || person.memberships.some(membership => membership.organization === organization)));
+}
+
+function resolveDirectoryAssignee(value?: string) {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const exact = PEOPLE_DIRECTORY.find(person => person.name.toLowerCase() === normalized);
+  const partial = PEOPLE_DIRECTORY.find(person => normalized.includes(person.name.toLowerCase()) || person.name.toLowerCase().includes(normalized));
+  return (exact || partial)?.name || value?.trim();
+}
+
+function replaceDirectoryPerson(id: string, update: (person: DirectoryPerson) => DirectoryPerson) {
+  const index = PEOPLE_DIRECTORY.findIndex(person => person.id === id);
+  if (index < 0) return undefined;
+  const current = PEOPLE_DIRECTORY[index];
+  const next = update({ ...current, memberships: current.memberships.map(membership => ({ ...membership })) });
+  PEOPLE_DIRECTORY[index] = next;
+  return next;
+}
+
+const FOLLOWUP_DATA: FollowUpPerson[] = [];
+
+const ORG_RESOURCES: Record<string, OrganizationResource[]> = {};
+
+const MILESTONES: Milestone[] = [];
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 
-const ORG_COLORS: Record<OrgName, { bg: string; text: string; dot: string; border: string }> = {
-  "Villa Khayangan": { bg: "bg-indigo-500/10", text: "text-indigo-400", dot: "bg-indigo-400", border: "border-indigo-400/30" },
-  "Apotik": { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "bg-emerald-400", border: "border-emerald-400/30" },
-  "Personal": { bg: "bg-orange-500/10", text: "text-orange-400", dot: "bg-orange-400", border: "border-orange-400/30" },
-};
+const DEFAULT_ORG_COLOR = { bg: "bg-primary/10", text: "text-primary", dot: "bg-primary", border: "border-primary/20", card: "bg-primary/[0.04]" };
+const ORG_COLORS: Record<string, typeof DEFAULT_ORG_COLOR> = {};
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; dot: string }> = {
-  urgent: { label: "Urgent", color: "text-red-400", bg: "bg-red-400/10", dot: "bg-red-400" },
-  high: { label: "High", color: "text-orange-400", bg: "bg-orange-400/10", dot: "bg-orange-400" },
-  medium: { label: "Medium", color: "text-yellow-400", bg: "bg-yellow-400/10", dot: "bg-yellow-400" },
-  low: { label: "Low", color: "text-slate-400", bg: "bg-slate-400/10", dot: "bg-slate-500" },
+  urgent: { label: "Urgent", color: "text-overdue", bg: "bg-overdue/10", dot: "bg-overdue" },
+  high: { label: "High", color: "text-[#a87955]", bg: "bg-[#fff1e7]", dot: "bg-[#dfa17c]" },
+  medium: { label: "Normal", color: "text-warning", bg: "bg-[#fff9e4]", dot: "bg-[#e2c66d]" },
+  low: { label: "Low", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-[#a8afbd]" },
 };
 
-const AREA_COLORS: Record<AreaName, string> = {
-  "System Development": "text-violet-400",
-  "Operations": "text-sky-400",
-  "Marketing": "text-pink-400",
-  "Finance": "text-teal-400",
-  "HR": "text-amber-400",
+const AREA_COLORS: Record<string, string> = {
+  "System Development": "text-[var(--area-system)]",
+  "Operations": "text-[var(--area-operations)]",
+  "Marketing": "text-[var(--area-marketing)]",
+  "Finance": "text-[var(--area-finance)]",
+  "HR": "text-[var(--area-hr)]",
 };
 
-const PERSON_COLORS: Record<string, string> = {
-  "Bu Desti": "#818cf8",
-  "Purchasing Manager": "#34d399",
-  "HR Manager": "#fb923c",
-  "Design Team": "#f472b6",
-  "Bank Officer": "#60a5fa",
-  "Marketing Team": "#a78bfa",
-  "You": "#fbbf24",
-};
+const PERSON_COLORS: Record<string, string> = {};
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
 }
 
 function getPersonColor(name: string) {
-  return PERSON_COLORS[name] || "#818cf8";
+  return PERSON_COLORS[name] || "var(--person-slate)";
+}
+
+function personColorStyle(color: string, borderWidth = 1) {
+  return {
+    backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
+    color,
+    border: `${borderWidth}px solid color-mix(in srgb, ${color} 27%, transparent)`,
+  };
 }
 
 // ─── SMALL COMPONENTS ─────────────────────────────────────────────────────────
 
 function OrgBadge({ org }: { org: OrgName }) {
-  const c = ORG_COLORS[org];
+  const c = ORG_COLORS[org] || DEFAULT_ORG_COLOR;
   return (
-    <span className={cn("inline-flex items-center gap-1 text-[11px] font-mono px-1.5 py-0.5 rounded", c.bg, c.text)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium tracking-[0.01em]", c.bg, c.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", c.dot)} />
       {org}
     </span>
   );
 }
 
+/** A task inherits its quiet visual grouping cue from its organization. */
+function TaskOrganizationBadge({ org }: { org: OrgName }) {
+  const organization = ORGS_META.find((item) => item.name === org);
+  const color = getOrganizationColorStyles(organization?.colorKey);
+  return (
+    <span className={cn("inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium", color.chip)}>
+      <span className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", color.dot)} />
+      <span className="truncate">{org}</span>
+    </span>
+  );
+}
+
 function AreaBadge({ area }: { area: AreaName }) {
-  return <span className={cn("text-[11px] font-mono", AREA_COLORS[area])}>{area}</span>;
+  return <span className={cn("text-[11px] font-medium", AREA_COLORS[area] || "text-muted-foreground")}>{area}</span>;
 }
 
 function PriorityDot({ priority }: { priority: Priority }) {
@@ -355,7 +1095,7 @@ function PriorityDot({ priority }: { priority: Priority }) {
 
 function PriorityBadge({ priority }: { priority: Priority }) {
   const c = PRIORITY_CONFIG[priority];
-  return <span className={cn("text-[11px] font-mono px-1.5 py-0.5 rounded", c.bg, c.color)}>{c.label}</span>;
+  return <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", c.bg, c.color)}>{getTaskDetailPriorityLabel(priority)}</span>;
 }
 
 function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" | "md" | "lg" }) {
@@ -363,7 +1103,7 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" | "md"
   const sz = size === "xs" ? "w-5 h-5 text-[9px]" : size === "md" ? "w-8 h-8 text-sm" : size === "lg" ? "w-10 h-10 text-sm" : "w-6 h-6 text-[10px]";
   return (
     <div className={cn("rounded-full flex items-center justify-center font-semibold flex-shrink-0", sz)}
-      style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+      style={personColorStyle(color)}>
       {getInitials(name)}
     </div>
   );
@@ -371,37 +1111,67 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" | "md"
 
 function StatusDot({ status }: { status: TaskStatus }) {
   const configs: Record<TaskStatus, string> = {
-    todo: "bg-slate-500", in_progress: "bg-indigo-400 animate-pulse",
-    waiting: "bg-amber-400", review: "bg-pink-400", done: "bg-emerald-400",
+    ready: "bg-primary", in_progress: "bg-success",
+    waiting: "bg-info", blocked: "bg-overdue", review: "bg-review", done: "bg-success",
   };
   return <span className={cn("w-2 h-2 rounded-full flex-shrink-0", configs[status])} />;
 }
 
+function DoneChip() {
+  return <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[9px] font-medium text-success"><Check className="h-2.5 w-2.5" strokeWidth={2.25} />Done</span>;
+}
+
+function WeeklyPlannerTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
+  const isDone = task.status === "done";
+  const waitingLabel = readableTaskNextAction(task);
+  const stateLabel = task.status === "waiting"
+    ? waitingLabel === "Not assigned" ? "Waiting · next action not assigned" : `Waiting on ${waitingLabel}`
+    : task.status === "in_progress"
+      ? "In progress"
+      : task.status === "blocked"
+        ? "Blocked"
+        : task.status === "review"
+          ? "Ready for review"
+          : undefined;
+
+  return (
+    <button onClick={onClick} aria-label={`${task.title}${isDone ? ", completed" : ""}`}
+      className={cn("w-full rounded-xl border border-border/80 bg-card p-2.5 text-left shadow-[0_1px_5px_rgb(35_41_61_/_0.035)] transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_5px_12px_rgb(35_41_61_/_0.06)]", isDone && "border-success/15 bg-card/85")}>
+      <div className="flex items-start gap-1.5">
+        <span className={cn("mt-0.5", isDone && "opacity-45")}><PriorityDot priority={task.priority} /></span>
+        <p className={cn("min-w-0 flex-1 text-[11px] leading-snug", isDone ? "text-foreground/70" : "text-foreground")}>{task.title}</p>
+      </div>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+        <OrgBadge org={task.org} />
+        {isDone && <DoneChip />}
+      </div>
+      {stateLabel && <p className={cn("mt-1.5 truncate text-[9px]", task.status === "blocked" ? "text-overdue" : task.status === "review" ? "text-review" : task.status === "waiting" ? "text-info" : "text-muted-foreground")}>{stateLabel}</p>}
+    </button>
+  );
+}
+
+function WeeklyPlannerDayCount({ taskCount, doneCount }: { taskCount: number; doneCount: number }) {
+  const taskLabel = `${taskCount} ${taskCount === 1 ? "task" : "tasks"}`;
+  return <p className="mt-1 flex items-center gap-1 text-[10px] font-mono text-muted-foreground">{taskLabel}{doneCount > 0 && <><span>·</span>{doneCount === taskCount ? <span className="inline-flex items-center gap-0.5 text-success">All done <Check className="h-2.5 w-2.5" /></span> : <span>{doneCount} done</span>}</>}</p>;
+}
+
 function LinkIcon({ type }: { type: TaskLink["type"] }) {
-  const configs: Record<TaskLink["type"], { icon: ReactNode; color: string; bg: string }> = {
-    website: { icon: <Globe className="w-3 h-3" />, color: "text-sky-400", bg: "bg-sky-400/10" },
-    sheet: { icon: <BarChart2 className="w-3 h-3" />, color: "text-emerald-400", bg: "bg-emerald-400/10" },
-    figma: { icon: <Layers className="w-3 h-3" />, color: "text-pink-400", bg: "bg-pink-400/10" },
-    github: { icon: <GitBranch className="w-3 h-3" />, color: "text-slate-300", bg: "bg-slate-400/10" },
-    drive: { icon: <FolderKanban className="w-3 h-3" />, color: "text-yellow-400", bg: "bg-yellow-400/10" },
+  const configs: Record<ResourceType, { icon: ReactNode; color: string; bg: string }> = {
+    website: { icon: <Globe className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
+    sheet: { icon: <BarChart2 className="w-3 h-3" />, color: "text-success", bg: "bg-[#edf7f0]" },
+    figma: { icon: <Layers className="w-3 h-3" />, color: "text-review", bg: "bg-[#f4effa]" },
+    github: { icon: <GitBranch className="w-3 h-3" />, color: "text-[#6e7485]", bg: "bg-muted" },
+    drive: { icon: <FolderKanban className="w-3 h-3" />, color: "text-warning", bg: "bg-[#fff9e4]" },
+    doc: { icon: <FileText className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
+    dashboard: { icon: <BarChart2 className="w-3 h-3" />, color: "text-info", bg: "bg-[#edf4fb]" },
+    notion: { icon: <FileText className="w-3 h-3" />, color: "text-foreground", bg: "bg-muted" },
+    other: { icon: <Link2 className="w-3 h-3" />, color: "text-muted-foreground", bg: "bg-muted" },
   };
   const c = configs[type];
   return (
     <span className={cn("inline-flex items-center justify-center w-5 h-5 rounded", c.bg, c.color)}>
       {c.icon}
     </span>
-  );
-}
-
-function SectionHeader({ label, count, color = "bg-indigo-400" }: { label: string; count?: number; color?: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-3">
-      <div className={cn("w-1.5 h-1.5 rounded-full", color)} />
-      <h2 className="text-sm font-semibold text-foreground">{label}</h2>
-      {count !== undefined && (
-        <span className="text-[11px] font-mono text-muted-foreground bg-muted rounded px-1.5 py-0.5 ml-auto">{count}</span>
-      )}
-    </div>
   );
 }
 
@@ -417,31 +1187,40 @@ function BackButton({ label, onClick }: { label: string; onClick: () => void }) 
 
 // ─── TASK CARD ────────────────────────────────────────────────────────────────
 
-function TaskCard({ task, onClick, compact = false }: { task: Task; onClick: () => void; compact?: boolean }) {
+function TaskCard({ task, onClick, compact = false, attentionReasons = [] }: { task: Task; onClick: () => void; compact?: boolean; attentionReasons?: AttentionReason[] }) {
   const isMyAction = task.nextActionBy === "me";
+  const assignees = getTaskAssignees(task);
+  const assigneeNames = taskAssigneeNames(task);
+  const hasAttentionReason = (reason: AttentionReason) => attentionReasons.includes(reason);
   return (
     <button onClick={onClick}
       className={cn(
-        "w-full text-left group rounded-lg border transition-all duration-150",
-        "bg-card border-border hover:border-white/10 hover:bg-white/[0.02]",
-        compact ? "p-3" : "p-4",
-        task.isOverdue && "border-red-500/20 bg-red-500/[0.03]",
-        task.status === "review" && "border-pink-500/20",
+        "w-full text-left group rounded-2xl border border-border bg-card transition-all duration-200 hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_10px_22px_rgb(35_41_61_/_0.065)]",
+        compact ? "p-3.5" : "p-4.5",
+        task.isOverdue && "border-overdue/25 bg-[#fff8f7]",
+        task.status === "waiting" && "border-info/20 bg-[#fbfdff]",
+        task.status === "blocked" && "border-overdue/25 bg-overdue/[0.035]",
+        task.status === "review" && "border-review/25 bg-[#fdfbff]",
+        task.status === "done" && "border-success/20 bg-[#fbfdfb]",
       )}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex-shrink-0"><PriorityDot priority={task.priority} /></div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <p className={cn("text-sm font-medium leading-snug text-foreground", compact && "text-[13px]")}>{task.title}</p>
-            {task.isOverdue && <span className="text-[10px] font-mono text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded flex-shrink-0">OVERDUE</span>}
-            {task.status === "review" && <span className="text-[10px] font-mono text-pink-400 bg-pink-400/10 px-1.5 py-0.5 rounded flex-shrink-0">REVIEW</span>}
+          <div className="flex flex-wrap items-start gap-1.5">
+            <p className={cn("min-w-[12rem] flex-1 text-sm font-medium leading-snug text-foreground", compact && "text-[13px]")}>{task.title}</p>
+            <div className="ml-auto flex flex-wrap justify-end gap-1.5">
+              {task.isOverdue && !hasAttentionReason("overdue") && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Overdue</span>}
+              {task.status === "blocked" && !hasAttentionReason("blocked") && <span className="flex shrink-0 items-center gap-1 rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue"><GitBranch className="h-3 w-3" />Blocked</span>}
+              {task.status === "review" && !hasAttentionReason("review") && <span className="flex-shrink-0 rounded-full bg-review/10 px-2 py-1 text-[10px] font-medium text-review">Ready to review</span>}
+            </div>
           </div>
+          {attentionReasons.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{attentionReasons.map(reason => <span key={reason} className={cn("rounded-full px-2 py-1 text-[10px] font-medium", ATTENTION_REASON_META[reason].className)}>{ATTENTION_REASON_META[reason].label}</span>)}</div>}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <OrgBadge org={task.org} />
             <span className="text-muted-foreground text-[11px]">·</span>
-            <AreaBadge area={task.area} />
+            {isSharedTask(task) ? <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>Lead:</span><AreaBadge area={task.area} /><span>· with {getTaskAreas(task).filter(area => area !== task.area).join(" · ")}</span></span> : <AreaBadge area={task.area} />}
             {task.deadline && (
-              <span className="text-[11px] font-mono text-muted-foreground ml-auto flex items-center gap-1">
+              <span className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
                 <Calendar className="w-3 h-3" />{task.deadline}
               </span>
             )}
@@ -452,57 +1231,61 @@ function TaskCard({ task, onClick, compact = false }: { task: Task; onClick: () 
                 <StatusDot status={task.status} />
                 <span className="text-[11px] text-muted-foreground capitalize">{task.status.replace("_", " ")}</span>
               </div>
-              {task.assignee && (
+              {assigneeNames.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <Avatar name={task.assignee} size="xs" />
-                  <span className="text-[11px] text-muted-foreground">{task.assignee}</span>
+                  <span className="flex -space-x-1.5">{assignees.slice(0, 2).map(person => <Avatar key={person.id} name={person.name} size="xs" />)}</span>
+                  <span className="max-w-44 truncate text-[11px] text-muted-foreground">{assigneeNames.slice(0, 2).join(" · ")}{assigneeNames.length > 2 ? ` · +${assigneeNames.length - 2}` : ""}</span>
                 </div>
               )}
               <div className="ml-auto flex items-center gap-1">
                 <span className="text-[11px] font-mono text-muted-foreground">Next:</span>
-                <span className={cn("text-[11px] font-mono", isMyAction ? "text-amber-400" : "text-slate-400")}>
+                <span className={cn("text-[11px] font-medium", isMyAction ? "text-warning" : "text-muted-foreground")}>
                   {isMyAction ? "Me" : task.nextActionBy}
                 </span>
               </div>
             </div>
           )}
+          {task.blockedBy && !compact && <p className="mt-2 flex items-center gap-1.5 text-[10px] text-overdue"><GitBranch className="h-3 w-3" />Blocked by {task.blockedBy.label}</p>}
+          {!compact && task.parentTask && <p className="mt-2 truncate text-[10px] text-muted-foreground">↳ Subtask of: {task.parentTask.title}</p>}
+          {!compact && task.subtaskProgress?.total ? <p className="mt-2 text-[10px] text-muted-foreground">{task.subtaskProgress.total} subtask{task.subtaskProgress.total === 1 ? "" : "s"} · {task.subtaskProgress.completed} done</p> : null}
         </div>
       </div>
     </button>
   );
 }
 
-// ─── COMPACT TASK ROW (for All Tasks view) ────────────────────────────────────
+// ─── COMPACT TASK ROW ─────────────────────────────────────────────────────────
 
 function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
   const isMyAction = task.nextActionBy === "me";
   const hasResources = (task.links?.length || 0) + (task.files?.length || 0) > 0;
+  const assignees = getTaskAssignees(task);
   return (
     <button onClick={onClick}
       className={cn(
-        "w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-border/50 hover:bg-white/[0.02] transition-colors group",
-        task.isOverdue && "bg-red-500/[0.02]"
+        "w-full text-left flex items-center gap-3 px-4 py-3 border-b border-border/70 transition-colors hover:bg-primary/[0.025] group",
+        task.isOverdue && "bg-[#fffafa]"
       )}>
       <PriorityDot priority={task.priority} />
       <p className="text-[13px] text-foreground flex-1 truncate pr-2">{task.title}</p>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <OrgBadge org={task.org} />
-        <span className="hidden lg:block"><AreaBadge area={task.area} /></span>
-        {task.assignee
-          ? <Avatar name={task.assignee} size="xs" />
-          : <span className="w-5 h-5" />}
+        <span className="hidden sm:inline-flex"><OrgBadge org={task.org} /></span>
+        <span className="hidden lg:inline-flex items-center gap-1"><AreaBadge area={task.area} />{isSharedTask(task) && <span title={`Shared with ${getTaskAreas(task).filter(area => area !== task.area).join(", ")}`} className="text-primary">↔</span>}</span>
+        <span className="hidden sm:inline-flex">{assignees.length
+          ? <span className="flex -space-x-1.5" title={taskAssigneeNames(task).join(", ")}>{assignees.slice(0, 2).map(person => <Avatar key={person.id} name={person.name} size="xs" />)}{assignees.length > 2 && <span className="relative flex h-5 min-w-5 items-center justify-center rounded-full border border-card bg-muted px-1 text-[8px] text-muted-foreground">+{assignees.length - 2}</span>}</span>
+          : <span className="w-5 h-5" />}</span>
         <div className="flex items-center gap-1">
           <StatusDot status={task.status} />
         </div>
         {task.deadline
-          ? <span className={cn("text-[11px] font-mono w-24 text-right", task.isOverdue ? "text-red-400" : "text-muted-foreground")}>{task.deadline}</span>
-          : <span className="w-24 text-[11px] font-mono text-muted-foreground/40 text-right">No date</span>}
-        <span className={cn("text-[11px] font-mono w-20 text-right", isMyAction ? "text-amber-400" : "text-slate-500")}>
+          ? <span className={cn("hidden w-24 text-right text-[11px] font-medium sm:inline", task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{task.deadline}</span>
+          : <span className="hidden w-24 text-right text-[11px] font-mono text-muted-foreground/40 sm:inline">No date</span>}
+        <span className={cn("hidden w-20 text-right text-[11px] font-medium lg:inline", isMyAction ? "text-warning" : "text-muted-foreground")}>
           → {isMyAction ? "Me" : task.nextActionBy.split(" ")[0]}
         </span>
         {hasResources
-          ? <span className="w-3 h-3 rounded-full bg-indigo-400/40 flex-shrink-0" title="Has resources" />
-          : <span className="w-3 h-3 flex-shrink-0" />}
+          ? <span className="hidden h-3 w-3 flex-shrink-0 rounded-full bg-primary/35 sm:inline" title="Has resources" />
+          : <span className="hidden h-3 w-3 flex-shrink-0 sm:inline" />}
       </div>
     </button>
   );
@@ -510,55 +1293,814 @@ function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
 
 // ─── TASK DETAIL DRAWER ───────────────────────────────────────────────────────
 
-function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }) {
+function TaskDetailDrawer({ task, onClose, onOpenTask, onBack, previousTaskId, onOpenOrganization, onOpenPrincipal }: {
+  task: Task;
+  onClose: () => void;
+  onOpenTask?: (taskId: string) => void;
+  onBack?: () => void;
+  previousTaskId?: string;
+  onOpenOrganization?: (organization: OrgName) => void;
+  onOpenPrincipal?: (principal: DirectoryPerson) => void;
+}) {
+  // Task details are a view over the authenticated person's canonical task.  The
+  // drawer never falls back to a display name or role when deciding which
+  // execution actions to offer.
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const [, setRevision] = useState(0);
+  const [effortDraft, setEffortDraft] = useState(task.estimatedMinutes ? String(task.estimatedMinutes) : "");
+  const [savingEffort, setSavingEffort] = useState(false);
+  const [planForDraft, setPlanForDraft] = useState(taskDateInputFromIso(task.startDate));
+  const [deadlineDraft, setDeadlineDraft] = useState(taskDateInputFromIso(task.deadlineDate));
+  const [savingPlannerDates, setSavingPlannerDates] = useState(false);
+  const [waitingCheckOpen, setWaitingCheckOpen] = useState(false);
+  const [blockingKind, setBlockingKind] = useState<DependencyKind>("task");
+  const [areasEditOpen, setAreasEditOpen] = useState(false);
+  const [assigneesEditOpen, setAssigneesEditOpen] = useState(false);
+  const [assigneeDraftIds, setAssigneeDraftIds] = useState(() => getTaskAssigneeIds(task));
+  const [assigneeQuery, setAssigneeQuery] = useState("");
+  const [responsibilityOptions, setResponsibilityOptions] = useState<ResponsibilityOption[]>([]);
+  const [savingAssignees, setSavingAssignees] = useState(false);
+  const [rerouteConfirmOpen, setRerouteConfirmOpen] = useState(false);
+  const [rerouteNote, setRerouteNote] = useState("");
+  const [pendingResponsibilityId, setPendingResponsibilityId] = useState("");
+  const [ownerEditOpen, setOwnerEditOpen] = useState(false);
+  const [ownerQuery, setOwnerQuery] = useState("");
+  const [ownerDraftId, setOwnerDraftId] = useState(task.ownerPrincipalId || "");
+  const [currentStepEditOpen, setCurrentStepEditOpen] = useState(false);
+  const [currentStepDraft, setCurrentStepDraft] = useState(task.currentStep || "");
+  const [completeStepOpen, setCompleteStepOpen] = useState(false);
+  const [completionDecisionOpen, setCompletionDecisionOpen] = useState(false);
+  const [completeStepOutcome, setCompleteStepOutcome] = useState<"finish" | "handoff" | "review">("finish");
+  const [completeStepNext, setCompleteStepNext] = useState("");
+  const [completeStepRecipientId, setCompleteStepRecipientId] = useState("");
+  const [completeStepQuery, setCompleteStepQuery] = useState("");
+  const [completeStepNote, setCompleteStepNote] = useState("");
+  const [updateText, setUpdateText] = useState("");
+  const [updateAttachments, setUpdateAttachments] = useState<File[]>([]);
+  const [reviewDecisionOpen, setReviewDecisionOpen] = useState(false);
+  const [revisionRequestOpen, setRevisionRequestOpen] = useState(false);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [waitingOnEditOpen, setWaitingOnEditOpen] = useState(false);
+  const [waitingOnKind, setWaitingOnKind] = useState<"principal" | "department" | "external">(task.nextActionKind === "department" || task.nextActionKind === "external" ? task.nextActionKind : "principal");
+  const [waitingOnTarget, setWaitingOnTarget] = useState(task.nextActionPrincipalId || task.nextActionDepartmentId || task.nextActionExternalLabel || "");
+  const [waitingOnQuery, setWaitingOnQuery] = useState("");
+  const [waitingReadyPrompt, setWaitingReadyPrompt] = useState(false);
+  const [dependencyOpen, setDependencyOpen] = useState(false);
+  const [dependencyType, setDependencyType] = useState<"start_blocker" | "completion_blocker" | "related">("completion_blocker");
+  const [dependencyTaskId, setDependencyTaskId] = useState("");
+  const [dependencyTaskQuery, setDependencyTaskQuery] = useState("");
+  const [dependencyLabel, setDependencyLabel] = useState("");
+  const [checklistText, setChecklistText] = useState("");
+  const [checklistComposerOpen, setChecklistComposerOpen] = useState(false);
+  const [subtaskText, setSubtaskText] = useState("");
+  const [subtaskComposerOpen, setSubtaskComposerOpen] = useState(false);
+  const [subtaskArea, setSubtaskArea] = useState<AreaName | "">("");
+  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState("");
+  const [subtaskDeadline, setSubtaskDeadline] = useState("");
+  const [recurrenceOpen, setRecurrenceOpen] = useState(false);
+  const [repeatFrequency, setRepeatFrequency] = useState<"daily" | "weekly" | "monthly" | "months">(task.recurrence?.frequency || "weekly");
+  const [repeatInterval, setRepeatInterval] = useState(String(task.recurrence?.interval || 1));
+  const [repeatStart, setRepeatStart] = useState(taskDateInputFromIso(task.recurrence?.startDate || task.startDate || isoDate(getWorkspaceCalendarDate())));
+  const [repeatEnd, setRepeatEnd] = useState(taskDateInputFromIso(task.recurrence?.endDate));
+  const [repeatWeekDays, setRepeatWeekDays] = useState<number[]>(task.recurrence?.weekDays?.length ? task.recurrence.weekDays : [new Date(`${task.recurrence?.startDate || task.startDate || isoDate(getWorkspaceCalendarDate())}T00:00:00Z`).getUTCDay()]);
+  const [repeatMonthDay, setRepeatMonthDay] = useState(String(task.recurrence?.monthDay || new Date(`${task.recurrence?.startDate || task.startDate || isoDate(getWorkspaceCalendarDate())}T00:00:00Z`).getUTCDate()));
+  const [mergeTaskId, setMergeTaskId] = useState("");
+  const [mergeTaskQuery, setMergeTaskQuery] = useState("");
+  const [mergeResolution, setMergeResolution] = useState<{
+    startDate?: "survivor" | "source" | "clear";
+    deadlineDate?: "survivor" | "source" | "clear";
+    priority?: "survivor" | "source";
+    project?: "survivor" | "source";
+    leadDepartment?: "survivor" | "source";
+    currentStep?: "survivor" | "source";
+  }>({});
+  const [mergeReviewOpen, setMergeReviewOpen] = useState(false);
+  const [mergingTask, setMergingTask] = useState(false);
+  const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
+  const [advancedDialog, setAdvancedDialog] = useState<"merge-ui" | "merge" | "archive" | null>(null);
+  const [statusActionsOpen, setStatusActionsOpen] = useState(false);
+  const [quickRescheduleOpen, setQuickRescheduleOpen] = useState(false);
+  const [taskActionsOpen, setTaskActionsOpen] = useState(false);
+  const [effortSaved, setEffortSaved] = useState(false);
+  const [customEffortOpen, setCustomEffortOpen] = useState(false);
+  const [areaPickerOpen, setAreaPickerOpen] = useState(false);
+  const [areaQuery, setAreaQuery] = useState("");
+  const [mergedHistoryOpen, setMergedHistoryOpen] = useState(false);
+  const [dependencySource, setDependencySource] = useState<"task" | "external">("task");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const updateFileInputRef = useRef<HTMLInputElement>(null);
+  const footerActionsRef = useRef<HTMLDivElement>(null);
+  // Kept only so legacy deep interaction state maps to the same resolution
+  // payload while the drawer is mounted. The visible merge flow uses the
+  // clearer, per-difference review above.
+  const mergeDatesFrom = mergeResolution.startDate === "source" || mergeResolution.deadlineDate === "source" ? "source" : "survivor";
+  const setMergeDatesFrom = (value: "survivor" | "source") => setMergeResolution(current => ({ ...current, startDate: value, deadlineDate: value }));
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (advancedDialog) {
+        setAdvancedDialog(null);
+        return;
+      }
+      if (quickRescheduleOpen || taskActionsOpen) {
+        setQuickRescheduleOpen(false);
+        setTaskActionsOpen(false);
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [advancedDialog, onClose, quickRescheduleOpen, taskActionsOpen]);
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!footerActionsRef.current?.contains(event.target as Node)) {
+        setQuickRescheduleOpen(false);
+        setTaskActionsOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  function applyServerTask(result: Awaited<ReturnType<typeof transitionTaskAction>>) {
+    if (!result.ok) { setActionMessage(result.message); return false; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setRevision(value => value + 1);
+    setActionMessage("");
+    return true;
+  }
+
+  async function startTask() {
+    if (taskStoreUsesServer && task.version) {
+      applyServerTask(await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "in_progress" }));
+      return;
+    }
+    Object.assign(task, { status: "in_progress" as TaskStatus, isWaiting: false, lastUpdate: "Started just now" });
+    commitTaskStore();
+    setRevision(value => value + 1);
+  }
+
+  async function resumeTask() {
+    if (taskStoreUsesServer && task.version) {
+      applyServerTask(await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "ready" }));
+      return;
+    }
+    Object.assign(task, { status: "ready" as TaskStatus, isWaiting: false, blockedBy: undefined, lastUpdate: "Ready to move just now" });
+    commitTaskStore();
+    setRevision(value => value + 1);
+  }
+
+  async function requestRevision() {
+    if (taskStoreUsesServer && task.version) {
+      if (!revisionNote.trim()) { setActionMessage("Add a short revision note before sending work back."); return; }
+      const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: false, revisionNote });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(value => value + 1);
+      setRevisionRequestOpen(false);
+      setRevisionNote("");
+      return;
+    }
+    Object.assign(task, { status: "ready" as TaskStatus, isWaiting: false, nextActionBy: task.assignee || "me", lastUpdate: "Revision requested just now" });
+    commitTaskStore();
+    onClose();
+  }
+
+  async function approveReview() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const result = await decideTaskReviewAction({
+      taskId: task.id,
+      expectedVersion: task.version,
+      approve: true,
+      outcome: completeStepOutcome === "handoff" ? "handoff" : "finish",
+      recipientPrincipalId: completeStepOutcome === "handoff" ? completeStepRecipientId : undefined,
+      nextStep: completeStepOutcome === "handoff" ? completeStepNext : undefined,
+      revisionNote: completeStepNote || undefined,
+    });
+    if (!applyServerTask(result)) return;
+    setReviewDecisionOpen(false);
+    if (completeStepOutcome === "finish") onClose();
+  }
+
+  function openFollowUpComposer() {
+    setActionMessage("Use Updates to record the next follow-up.");
+    const updateInput = document.getElementById(`task-update-${task.id}`);
+    updateInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+    updateInput?.focus();
+  }
+
+  async function savePlannerDates() {
+    const planFor = taskDateInputToIso(planForDraft);
+    const deadline = taskDateInputToIso(deadlineDraft);
+    if ((planForDraft.trim() && !planFor) || (deadlineDraft.trim() && !deadline)) return false;
+    if (planFor && deadline && planFor > deadline) return false;
+    if (!taskStoreUsesServer || !task.version) {
+      Object.assign(task, { startDate: planFor, deadlineDate: deadline, deadline: deadline ? taskDateLabel(deadline) : undefined, lastUpdate: "Dates updated just now" });
+      commitTaskStore();
+      return true;
+    }
+    setSavingPlannerDates(true);
+    const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, startDate: planFor || null, deadlineDate: deadline || null });
+    setSavingPlannerDates(false);
+    if (!result.ok) { setActionMessage(result.message); return false; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setPlanForDraft(taskDateInputFromIso(result.data.startDate));
+    setDeadlineDraft(taskDateInputFromIso(result.data.deadlineDate));
+    setRevision(current => current + 1);
+    setActionMessage("");
+    return true;
+  }
+
+  async function saveEstimatedEffort(minutes: number | null) {
+    if (!taskStoreUsesServer || !task.version) {
+      setActionMessage("Estimated effort needs the shared workspace connection.");
+      return;
+    }
+    setSavingEffort(true);
+    const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, estimatedMinutes: minutes });
+    setSavingEffort(false);
+    if (!result.ok) { setActionMessage(result.message); return; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setEffortDraft(result.data.estimatedMinutes ? String(result.data.estimatedMinutes) : "");
+    setCustomEffortOpen(false);
+    setRevision(current => current + 1);
+    setEffortSaved(true);
+    window.setTimeout(() => setEffortSaved(false), 1000);
+  }
+
+  async function markWaiting(canStillMove: boolean) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await transitionTaskAction({
+        taskId: task.id,
+        expectedVersion: task.version,
+        status: canStillMove ? "waiting" : "blocked",
+        blocker: canStillMove ? undefined : { type: "start_blocker", label: blockingKind === "task" ? "A dependent task" : blockingKind === "department" ? "Another department" : blockingKind === "decision" ? "A decision" : blockingKind === "external" ? "An external response" : "Another dependency" },
+      });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setWaitingCheckOpen(false);
+      setRevision(current => current + 1);
+      return;
+    }
+    if (canStillMove) {
+      Object.assign(task, { status: "waiting" as TaskStatus, isWaiting: true, lastUpdate: "Waiting noted just now" });
+    } else {
+      Object.assign(task, {
+        status: "blocked" as TaskStatus,
+        isWaiting: false,
+        blockedBy: task.blockedBy || { kind: blockingKind, type: "blocking", label: blockingKind === "task" ? "A dependent task" : blockingKind === "department" ? "Another department" : blockingKind === "decision" ? "A decision" : blockingKind === "external" ? "An external response" : "Another dependency" },
+        lastUpdate: "Blocker noted just now",
+      });
+    }
+    commitTaskStore();
+    setWaitingCheckOpen(false);
+    setRevision(current => current + 1);
+  }
+
+  async function setLeadArea(area: AreaName) {
+    if (taskStoreUsesServer && task.version) {
+      const leadDepartmentId = getRemoteDepartmentId(task.org, area);
+      if (!leadDepartmentId) { setActionMessage("This department is not configured in the shared workspace yet."); return; }
+      const involvedDepartmentIds = Array.from(new Set([leadDepartmentId, ...(task.involvedDepartmentIds || [])]));
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, leadDepartmentId, involvedDepartmentIds });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(current => current + 1);
+      return;
+    }
+    Object.assign(task, { area, involvedAreas: Array.from(new Set([area, ...(task.involvedAreas || [])])) });
+    commitTaskStore();
+    setRevision(current => current + 1);
+  }
+
+  async function toggleInvolvedArea(area: AreaName) {
+    if (taskStoreUsesServer && task.version) {
+      const departmentId = getRemoteDepartmentId(task.org, area);
+      if (!departmentId) { setActionMessage("This department is not configured in the shared workspace yet."); return; }
+      const currentIds = task.involvedDepartmentIds || [];
+      const nextIds = currentIds.includes(departmentId) ? currentIds.filter(id => id !== departmentId) : [...currentIds, departmentId];
+      const leadDepartmentId = task.leadDepartmentId || getRemoteDepartmentId(task.org, task.area);
+      if (leadDepartmentId && !nextIds.includes(leadDepartmentId)) nextIds.unshift(leadDepartmentId);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, involvedDepartmentIds: nextIds });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      setRevision(current => current + 1);
+      return;
+    }
+    const existing = getTaskAreas(task);
+    const next = existing.includes(area) ? existing.filter(item => item !== area) : [...existing, area];
+    Object.assign(task, { involvedAreas: Array.from(new Set([task.area, ...next])) });
+    commitTaskStore();
+    setRevision(current => current + 1);
+  }
+
+  function openAssigneeEditor() {
+    setAssigneeDraftIds(task.currentResponsibilityId ? [task.currentResponsibilityId] : task.assignments?.find(assignment => assignment.role === "primary_owner")?.principalId ? [task.assignments.find(assignment => assignment.role === "primary_owner")!.principalId] : []);
+    setAssigneeQuery("");
+    setAssigneesEditOpen(true);
+  }
+
+  function toggleAssigneeDraft(id: string) {
+    setAssigneeDraftIds([id]);
+  }
+
+  async function saveAssigneeDraft(confirmReroute = false) {
+    const current = task.currentResponsibilityId || task.assignments?.find(assignment => assignment.role === "primary_owner")?.principalId;
+    const next = assigneeDraftIds[0];
+    const unchanged = current === next;
+    if (unchanged) { setAssigneesEditOpen(false); return; }
+    if (!next) { setActionMessage("Choose who is currently responsible for the next move."); return; }
+    if (!confirmReroute && current && current !== currentUserId) {
+      setPendingResponsibilityId(next);
+      setRerouteConfirmOpen(true);
+      return;
+    }
+    if (taskStoreUsesServer && task.version) {
+      setSavingAssignees(true);
+      const result = await setCurrentResponsibilityAction({
+        taskId: task.id,
+        expectedVersion: task.version,
+        recipientPrincipalId: next,
+        confirmReroute,
+        note: rerouteNote || undefined,
+      });
+      setSavingAssignees(false);
+      if (!applyServerTask(result)) return;
+      setAssigneesEditOpen(false); setRerouteConfirmOpen(false); setPendingResponsibilityId(""); setRerouteNote("");
+      return;
+    }
+    const nextPerson = getDirectoryPerson(next);
+    Object.assign(task, { currentResponsibilityId: next, currentResponsibility: nextPerson ? { id: nextPerson.id, principalId: nextPerson.id, name: nextPerson.name, type: nextPerson.type, role: "primary_owner" as const, assignedAt: new Date().toISOString(), assignedByPrincipalId: currentUserId } : undefined, assignee: nextPerson?.name, assigneeIds: [next], lastUpdate: "Responsibility updated just now" });
+    setRevision(value => value + 1);
+    setAssigneesEditOpen(false);
+  }
+
+  async function saveOwnerDraft() {
+    const unchanged = (task.ownerPrincipalId || "") === ownerDraftId;
+    if (unchanged) { setOwnerEditOpen(false); return; }
+    if (!taskStoreUsesServer || !task.version) return;
+    const result = await setTaskOwnerAction({ taskId: task.id, expectedVersion: task.version, ownerPrincipalId: ownerDraftId || null });
+    if (!applyServerTask(result)) return;
+    setOwnerEditOpen(false);
+  }
+
+  async function saveCurrentStep() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, currentStep: currentStepDraft.trim() || null });
+    if (!applyServerTask(result)) return;
+    setCurrentStepEditOpen(false);
+  }
+
+  function openCompleteStep() {
+    setCompleteStepOutcome("finish");
+    setCompleteStepNext("");
+    setCompleteStepRecipientId("");
+    setCompleteStepQuery("");
+    setCompleteStepNote("");
+    setCompleteStepOpen(false);
+    setCompletionDecisionOpen(true);
+  }
+
+  async function completeStep() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const result = await completeTaskStepAction({
+      taskId: task.id,
+      expectedVersion: task.version,
+      outcome: completeStepOutcome,
+      nextStep: completeStepOutcome === "finish" ? undefined : completeStepNext,
+      recipientPrincipalId: completeStepOutcome === "finish" ? undefined : completeStepRecipientId,
+      note: completeStepNote || undefined,
+    });
+    if (!applyServerTask(result)) return;
+    setCompleteStepOpen(false);
+    setCompletionDecisionOpen(false);
+  }
+
+  async function postUpdate() {
+    if (!updateText.trim()) return;
+    if (taskStoreUsesServer && task.version) {
+      const result = await postTaskUpdateAction({ taskId: task.id, expectedVersion: task.version, text: updateText });
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      const update = result.data.updates.find(item => item.authorId === currentUserId && item.text === updateText.trim());
+      let expectedVersion = result.data.version;
+      if (update && updateAttachments.length) {
+        for (const file of updateAttachments) {
+          const body = new FormData();
+          body.set("taskId", task.id);
+          body.set("updateId", update.id);
+          body.set("expectedVersion", String(expectedVersion));
+          body.set("file", file);
+          const uploaded = await uploadTaskUpdateFileAction(body);
+          if (!uploaded.ok) { setActionMessage(uploaded.message); return; }
+          expectedVersion = uploaded.data.version;
+          Object.assign(task, applyCanonicalTask(uploaded.data, uploaded.revision));
+        }
+      }
+      setUpdateText("");
+      setUpdateAttachments([]);
+      setRevision(value => value + 1);
+      return;
+    }
+    updateTask(task.id, { activity: [...(task.activity || []), { type: "commented", actor: "You", text: updateText.trim(), time: "Just now" }], lastUpdate: "Updated just now" });
+    setUpdateText("");
+    commitTaskStore();
+    setRevision(value => value + 1);
+  }
+
+  async function claimTask() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const teamId = task.currentResponsibility?.type === "team" ? task.currentResponsibility.principalId : undefined;
+    const result = await claimTaskAction({ taskId: task.id, expectedVersion: task.version, teamId });
+    if (!result.ok) { setActionMessage(result.message); return; }
+    Object.assign(task, applyCanonicalTask(result.data, result.revision));
+    setRevision(value => value + 1);
+  }
+
+  function openWaitingOnEditor() {
+    setWaitingOnKind(task.nextActionKind === "department" || task.nextActionKind === "external" ? task.nextActionKind : "principal");
+    setWaitingOnTarget(task.nextActionPrincipalId || task.nextActionDepartmentId || task.nextActionExternalLabel || "");
+    setWaitingOnQuery("");
+    setWaitingReadyPrompt(false);
+    setWaitingOnEditOpen(true);
+  }
+
+  async function saveWaitingOn() {
+    if (!taskStoreUsesServer || !task.version || task.status !== "waiting") return;
+    if (!waitingOnTarget.trim()) { setActionMessage(`Choose ${waitingOnKind === "external" ? "the external party" : waitingOnKind === "department" ? "a department" : "a person or team"} this task is waiting on.`); return; }
+    const nextAction = waitingOnKind === "principal" ? { kind: "principal" as const, principalId: waitingOnTarget }
+      : waitingOnKind === "department" ? { kind: "department" as const, departmentId: waitingOnTarget }
+        : { kind: "external" as const, externalLabel: waitingOnTarget.trim() };
+    if (!applyServerTask(await updateTaskAction({ taskId: task.id, expectedVersion: task.version, nextAction }))) return;
+    setWaitingOnEditOpen(false);
+  }
+
+  async function clearWaitingOn() {
+    if (!taskStoreUsesServer || !task.version || task.status !== "waiting") return;
+    if (!applyServerTask(await updateTaskAction({ taskId: task.id, expectedVersion: task.version, nextAction: { kind: "ready" } }))) return;
+    setWaitingOnEditOpen(false);
+    setWaitingReadyPrompt(!task.dependencyRecords?.some(dependency => dependency.type !== "related" && !dependency.resolvedAt));
+  }
+
+  async function moveWaitingTaskToReady() {
+    if (!taskStoreUsesServer || !task.version) return;
+    if (applyServerTask(await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "ready" }))) setWaitingReadyPrompt(false);
+  }
+
+  async function addDependency() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const prerequisite = TASKS.find(candidate => candidate.id === dependencyTaskId);
+    const label = dependencyLabel.trim() || prerequisite?.title;
+    if (!label) { setActionMessage("Choose related work or describe the dependency."); return; }
+    const result = await addTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependency: { type: dependencyType, label, prerequisiteTaskId: prerequisite?.id } });
+    if (!applyServerTask(result)) return;
+    setDependencyTaskId(""); setDependencyTaskQuery(""); setDependencyLabel(""); setDependencyOpen(false);
+  }
+
+  async function changeDependency(dependencyId: string, resolved: boolean, remove = false) {
+    if (!taskStoreUsesServer || !task.version) return;
+    const result = remove
+      ? await removeTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependencyId })
+      : await resolveTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependencyId, resolved });
+    applyServerTask(result);
+  }
+
+  async function addChecklistItem() {
+    if (!taskStoreUsesServer || !task.version || !checklistText.trim()) return;
+    const result = await addChecklistItemAction({ taskId: task.id, expectedVersion: task.version, title: checklistText });
+    if (!applyServerTask(result)) return;
+    setChecklistText("");
+    setChecklistComposerOpen(false);
+  }
+
+  async function toggleChecklistItem(itemId: string, completed: boolean) {
+    if (!taskStoreUsesServer || !task.version) return;
+    applyServerTask(await toggleChecklistItemAction({ taskId: task.id, expectedVersion: task.version, itemId, completed }));
+  }
+
+  async function addSubtask() {
+    if (!taskStoreUsesServer || !subtaskText.trim()) return;
+    const deadlineDate = taskDateInputToIso(subtaskDeadline);
+    if (subtaskDeadline.trim() && !deadlineDate) return;
+    const leadDepartmentId = subtaskArea ? getRemoteDepartmentId(task.org, subtaskArea) : task.leadDepartmentId;
+    const result = await createSubtaskAction({ parentTaskId: task.id, title: subtaskText, priority: task.priority, leadDepartmentId, projectId: task.projectId, involvedDepartmentIds: leadDepartmentId ? [leadDepartmentId] : task.involvedDepartmentIds, deadlineDate, assignments: subtaskAssigneeId ? [{ principalId: subtaskAssigneeId, role: "primary_owner" as const }] : task.assigneeIds?.length ? task.assigneeIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })) : undefined });
+    if (!result.ok) { setActionMessage(result.message); return; }
+    applyCanonicalTask(result.data, result.revision);
+    const refreshedParent = await getTaskAction({ taskId: task.id });
+    if (refreshedParent.ok) Object.assign(task, applyCanonicalTask(refreshedParent.data, refreshedParent.revision));
+    setSubtaskText(""); setSubtaskArea(""); setSubtaskAssigneeId(""); setSubtaskDeadline(""); setSubtaskComposerOpen(false); setActionMessage(""); setRevision(current => current + 1);
+  }
+
+  async function saveRecurrence() {
+    if (!taskStoreUsesServer || !task.version) return;
+    const interval = Number(repeatInterval);
+    if (!Number.isInteger(interval) || interval < 1) { setActionMessage("Repeat interval must be at least one."); return; }
+    if (repeatFrequency === "weekly" && !repeatWeekDays.length) { setActionMessage("Choose at least one weekday."); return; }
+    if ((repeatFrequency === "monthly" || repeatFrequency === "months") && (!Number.isInteger(Number(repeatMonthDay)) || Number(repeatMonthDay) < 1 || Number(repeatMonthDay) > 31)) { setActionMessage("Choose a valid day of the month."); return; }
+    const repeatStartIso = taskDateInputToIso(repeatStart);
+    const repeatEndIso = taskDateInputToIso(repeatEnd);
+    if (!repeatStartIso || (repeatEnd.trim() && !repeatEndIso)) return;
+    if (repeatEndIso && repeatEndIso < repeatStartIso) { setActionMessage("The end date must be on or after the start date."); return; }
+    const result = await setTaskRecurrenceAction({ taskId: task.id, expectedVersion: task.version, recurrence: { frequency: repeatFrequency, interval, weekDays: repeatFrequency === "weekly" ? repeatWeekDays : [], monthDay: repeatFrequency === "monthly" || repeatFrequency === "months" ? Number(repeatMonthDay) : undefined, startDate: repeatStartIso, endDate: repeatEndIso } });
+    if (!applyServerTask(result)) return;
+    setRecurrenceOpen(false);
+  }
+
+  async function stopRecurrence() {
+    if (!taskStoreUsesServer || !task.version) return;
+    if (applyServerTask(await setTaskRecurrenceAction({ taskId: task.id, expectedVersion: task.version }))) setRecurrenceOpen(false);
+  }
+
+  async function uploadFiles(files: FileList | null) {
+    if (!taskStoreUsesServer || !task.version || !files?.length) return;
+    let expectedVersion = task.version;
+    for (const file of Array.from(files)) {
+      const body = new FormData(); body.set("taskId", task.id); body.set("expectedVersion", String(expectedVersion)); body.set("file", file);
+      const result = await uploadTaskFileAction(body);
+      if (!result.ok) { setActionMessage(result.message); return; }
+      Object.assign(task, applyCanonicalTask(result.data, result.revision));
+      expectedVersion = task.version || expectedVersion;
+    }
+    setRevision(value => value + 1);
+  }
+
+  async function archiveTask() {
+    if (!canArchiveTaskByLifecycle(task.status, Boolean(task.archived))) {
+      setActionMessage("Only completed tasks can be archived.");
+      return;
+    }
+    if (taskStoreUsesServer && task.version) {
+      if (applyServerTask(await archiveTaskAction({ taskId: task.id, expectedVersion: task.version }))) setAdvancedDialog(null);
+      return;
+    }
+    if (archiveCanonicalTask(task.id)) {
+      Object.assign(task, { archived: true, status: "done" as TaskStatus, isWaiting: false, updatedAt: new Date().toISOString(), lastUpdate: "Archived just now" });
+      setAdvancedDialog(null);
+      setRevision(value => value + 1);
+    }
+  }
+
+  async function mergeTask() {
+    if (!taskStoreUsesServer || !task.version || !mergeTaskId) return false;
+    const mergedTask = TASKS.find(candidate => candidate.id === mergeTaskId);
+    setMergingTask(true);
+    const result = await mergeTasksAction({ survivorId: task.id, expectedVersion: task.version, sourceTaskIds: [mergeTaskId], dateResolution: mergeResolution });
+    if (!applyServerTask(result)) { setMergingTask(false); return false; }
+    if (mergedTask) {
+      TASKS = TASKS.filter(candidate => candidate.id !== mergedTask.id);
+      ARCHIVED_TASKS = [{ ...mergedTask, archived: true, mergedIntoTaskId: task.id, mergedIntoTask: { id: task.id, title: task.title } }, ...ARCHIVED_TASKS.filter(candidate => candidate.id !== mergedTask.id)];
+      commitTaskStore();
+    }
+    const refreshedSurvivor = await getTaskAction({ taskId: task.id });
+    if (refreshedSurvivor.ok) Object.assign(task, applyCanonicalTask(refreshedSurvivor.data, refreshedSurvivor.revision));
+    setMergeTaskId("");
+    setMergeTaskQuery("");
+    setMergeResolution({});
+    setMergeReviewOpen(false);
+    setRevision(current => current + 1);
+    setActionMessage(`Merged “${mergedTask?.title || "task"}” into “${task.title}”.`);
+    window.setTimeout(() => setActionMessage(""), 3000);
+    setMergingTask(false);
+    return true;
+  }
+
+  const currentResponsibility = task.currentResponsibility || task.assignments?.find(assignment => assignment.role === "primary_owner");
+  const currentResponsibilityPerson = currentResponsibility ? getDirectoryPerson(currentResponsibility.principalId) : undefined;
+  const currentResponsibilityName = currentResponsibility?.name || currentResponsibilityPerson?.name || "Unassigned";
+  const currentUserIsAssignee = Boolean(currentUserId && currentResponsibility?.principalId === currentUserId);
+  const currentUserHasNextAction = Boolean(currentUserId && task.nextActionPrincipalId === currentUserId);
+  const currentUserIsReviewer = Boolean(currentUserId && task.reviewerPrincipalId === currentUserId);
+  const hasTeamAssignment = currentResponsibility?.type === "team";
+  const hasPersonalAssignment = currentResponsibility?.type === "person";
+  const currentUserCanMoveTask = currentUserIsAssignee || (task.status === "review" && currentUserIsReviewer);
+  const isWaitingTask = task.status === "waiting" || task.status === "blocked" || Boolean(task.isWaiting);
+  // The server action is the authority for a specific permission decision. A
+  // canonical task with a revision is eligible for the same edit controls as
+  // the Plan & deadline section; local fallback tasks retain their existing
+  // local editing behavior.
+  const canEditTask = (!taskStoreUsesServer || Boolean(task.version)) && !task.archived && task.status !== "done";
+  const canFollowUp = isWaitingTask && !currentUserHasNextAction && (task.isDelegated || Boolean(task.followUpDate));
+  const mergeCandidates = TASKS.filter(candidate => candidate.id !== task.id
+    && !candidate.archived
+    && candidate.status !== "done"
+    && candidate.org === task.org
+    && candidate.parentTaskId !== task.id
+    && task.parentTaskId !== candidate.id);
+  const matchingMergeCandidates = mergeTaskQuery.trim()
+    ? mergeCandidates.filter(candidate => `${candidate.title} ${candidate.area} ${candidate.project || ""}`.toLocaleLowerCase().includes(mergeTaskQuery.trim().toLocaleLowerCase()))
+    : mergeCandidates.slice(0, 3);
+  // The selection is always guarded before display/action. Keeping this
+  // compatibility cast prevents an unreachable legacy dialog branch from
+  // widening the current merge flow's calm selected-state rendering.
+  const selectedMergeTask = mergeCandidates.find(candidate => candidate.id === mergeTaskId) as Task;
+  const mergeDifferences = selectedMergeTask ? [
+    task.startDate !== selectedMergeTask.startDate || task.deadlineDate !== selectedMergeTask.deadlineDate ? "Planning" : undefined,
+    task.priority !== selectedMergeTask.priority ? "Priority" : undefined,
+    task.projectId !== selectedMergeTask.projectId ? "Project" : undefined,
+    task.leadDepartmentId !== selectedMergeTask.leadDepartmentId ? "Lead area" : undefined,
+    (task.currentStep || "") !== (selectedMergeTask.currentStep || "") ? "Current step" : undefined,
+  ].filter((value): value is string => Boolean(value)) : [];
+  const primaryAction = getTaskDetailPrimaryAction({
+    status: task.status,
+    isServerTask: taskStoreUsesServer,
+    currentUserIsAssignee,
+    currentUserHasNextAction,
+    currentUserIsReviewer,
+    hasTeamAssignment,
+    hasPersonalAssignment,
+    isWaiting: isWaitingTask,
+  });
+  const hasSecondaryDetails = hasTaskDetailSecondaryContext({
+    targetDate: task.targetDate,
+    followUpDate: task.followUpDate,
+    responseDue: task.responseDue,
+    estimatedMinutes: task.estimatedMinutes,
+    involvedAreaCount: getTaskAreas(task).filter(area => area !== task.area).length,
+    contributorCount: task.contributorIds?.length,
+    dependencyCount: task.dependencyRecords?.length,
+    checklistCount: task.checklistItems?.length,
+    subtaskCount: task.subtaskProgress?.total,
+    recurring: task.recurrence?.active,
+    linkCount: task.links?.length,
+    fileCount: task.files?.length,
+    hasOriginalCapture: Boolean(task.originalCapture),
+    activityCount: task.activity?.length,
+  });
+  const planForIso = taskDateInputToIso(planForDraft);
+  const deadlineIso = taskDateInputToIso(deadlineDraft);
+  const plannerDateError = taskDateInputError(planForDraft)
+    || taskDateInputError(deadlineDraft)
+    || (planForIso && deadlineIso && planForIso > deadlineIso ? "Plan date cannot be after the deadline." : undefined);
+  const plannerDatesDirty = planForIso !== task.startDate || deadlineIso !== task.deadlineDate;
+  const effortMinutes = Number(effortDraft);
+  const effortIsValid = Number.isInteger(effortMinutes) && effortMinutes >= 1 && effortMinutes <= 10_080;
+  const effortIsDirty = effortDraft !== (task.estimatedMinutes ? String(task.estimatedMinutes) : "");
+  const dependencyCandidates = TASKS
+    .filter(candidate => candidate.id !== task.id && !candidate.archived && candidate.status !== "done")
+    .filter(candidate => !dependencyTaskQuery.trim() || `${candidate.title} ${candidate.org} ${candidate.project || ""} ${candidate.area}`.toLocaleLowerCase().includes(dependencyTaskQuery.trim().toLocaleLowerCase()))
+    .slice(0, 6);
+  const subtaskDateError = taskDateInputError(subtaskDeadline);
+  const repeatDateError = taskDateInputError(repeatStart)
+    || (!repeatStart.trim() ? "Please enter a valid date in YYYY/MM/DD format." : undefined)
+    || taskDateInputError(repeatEnd);
+  const actionMessageIsSuccess = actionMessage.startsWith("Merged “");
+  const responsibilityPickerOpen = assigneesEditOpen || ownerEditOpen || completeStepOpen || completionDecisionOpen || reviewDecisionOpen || waitingOnEditOpen;
+  const responsibilityPickerQuery = assigneesEditOpen ? assigneeQuery
+    : ownerEditOpen ? ownerQuery
+      : completeStepOpen || completionDecisionOpen || reviewDecisionOpen ? completeStepQuery
+        : waitingOnQuery;
+  useEffect(() => {
+    if (!taskStoreUsesServer || !responsibilityPickerOpen) return;
+    let cancelled = false;
+    void getTaskResponsibilityOptionsAction({ taskId: task.id, query: responsibilityPickerQuery }).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setResponsibilityOptions(result.data.map((option) => ({
+        id: option.id,
+        name: option.name,
+        type: option.kind === "team" ? "team" : "person",
+        kind: option.kind,
+        subtitle: option.subtitle,
+        memberships: [{ organization: task.org, area: option.kind ? undefined : option.subtitle as AreaName | undefined }],
+        active: true,
+        accountStatus: "no_account",
+      })));
+      else setActionMessage(result.message);
+    });
+    return () => { cancelled = true; };
+  }, [task.id, task.org, responsibilityPickerOpen, responsibilityPickerQuery]);
+  const optionForId = (id: string): ResponsibilityOption | undefined => responsibilityOptions.find((option) => option.id === id)
+    || (currentResponsibility?.principalId === id ? { id, name: currentResponsibilityName, type: currentResponsibility.type, kind: currentResponsibility.type === "team" ? "team" : undefined, memberships: [], active: true, accountStatus: "no_account" } : undefined)
+    || (task.owner?.id === id ? { id, name: task.owner.name, type: "person", memberships: [], active: true, accountStatus: "no_account" } : undefined);
+  const selectedAssigneeDrafts = assigneeDraftIds.map(optionForId).filter((option): option is ResponsibilityOption => Boolean(option));
+  const availablePeople = responsibilityOptions.filter((option) => !option.kind && !assigneeDraftIds.includes(option.id));
+  const availableTeams = responsibilityOptions.filter((option) => option.kind === "team" && !assigneeDraftIds.includes(option.id));
+  const ownerChoices = responsibilityOptions.filter((option) => !option.kind);
+  const completeStepChoices = responsibilityOptions;
+  const waitingOnChoices = responsibilityOptions;
+  const waitingOnLabel = task.nextActionKind === "principal"
+    ? getDirectoryPerson(task.nextActionPrincipalId || "")?.name || (task.nextActionBy === "me" ? "You" : task.nextActionBy)
+    : task.nextActionKind === "department"
+      ? captureOrgAreas(task.org).find(area => getRemoteDepartmentId(task.org, area) === task.nextActionDepartmentId) || "Department"
+      : task.nextActionKind === "external" ? task.nextActionExternalLabel || "External" : "Not set";
+  const reviewerLabel = task.reviewer || getDirectoryPerson(task.reviewerPrincipalId || "")?.name || "Not assigned";
+  const blockedByLabel = task.blockedBy?.label || task.startBlockedBy?.[0]?.label || "A dependency";
+  const openParentTask = () => {
+    if (!task.parentTaskId) return;
+    if (previousTaskId === task.parentTaskId && onBack) onBack();
+    else onOpenTask?.(task.parentTaskId);
+  };
+
+  if (task.mergedIntoTaskId) {
+    const mergedTargetTitle = task.mergedIntoTask?.title || "the task kept after this merge";
+    return <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+      <div className="absolute inset-0 bg-[#293047]/15 backdrop-blur-[2px]" onClick={onClose} />
+      <section role="dialog" aria-modal="true" aria-label={`Merged task: ${task.title}`} className="relative flex h-full w-full max-w-[34rem] flex-col border-l border-border bg-card shadow-[-18px_0_48px_rgb(38_48_71_/_0.12)] sm:w-[32rem]">
+        <div className="flex items-start gap-3 border-b border-border p-5 sm:p-6"><div className="min-w-0 flex-1"><div className="mb-1 flex items-center gap-2"><OrgBadge org={task.org} /><AreaBadge area={task.area} /></div><h2 className="binnie-heading text-lg font-bold text-foreground">{task.title}</h2></div><button aria-label="Close task details" onClick={onClose} className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+        <div className="flex-1 p-5 sm:p-6"><div className="rounded-2xl border border-primary/20 bg-primary/[0.045] p-4"><p className="text-[12px] font-semibold text-foreground">This task was merged into</p><p className="mt-1 text-sm font-medium text-primary">{mergedTargetTitle}</p><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Its history is kept here. The active task contains the current work.</p><button onClick={() => onOpenTask?.(task.mergedIntoTaskId!)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground">Open kept task</button></div></div>
+      </section>
+    </div>;
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-end">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-[460px] h-full bg-[#0f1119] border-l border-border flex flex-col overflow-hidden shadow-2xl">
-        <div className="flex items-start gap-3 p-5 border-b border-border">
+      <div className="absolute inset-0 bg-[#293047]/15 backdrop-blur-[2px]" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label={`Task details: ${task.title}`} className="relative h-full w-full max-w-[34rem] border-l border-border bg-card shadow-[-18px_0_48px_rgb(38_48_71_/_0.12)] sm:w-[32rem]">
+        <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex items-start gap-3 border-b border-border p-5 sm:p-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <PriorityDot priority={task.priority} />
-              <OrgBadge org={task.org} />
-              <AreaBadge area={task.area} />
+              <button onClick={() => onOpenOrganization?.(task.org)} disabled={!onOpenOrganization} className="rounded-full disabled:cursor-default"><OrgBadge org={task.org} /></button>
+              <span className="text-[10px] text-muted-foreground">Lead:</span><AreaBadge area={task.area} />
             </div>
-            <h2 className="text-base font-semibold text-foreground leading-snug">{task.title}</h2>
+            <h2 className="binnie-heading text-lg font-bold leading-snug text-foreground">{task.title}</h2>
+            <p className="mt-1 text-[11px] text-muted-foreground">Owner: {task.owner ? <button onClick={() => onOpenPrincipal?.(getDirectoryPerson(task.owner!.id) || { id: task.owner!.id, name: task.owner!.name, type: "person", active: true, accountStatus: "no_account", memberships: [] })} disabled={!onOpenPrincipal} className="font-medium text-foreground hover:text-primary disabled:cursor-default">{task.owner.name}</button> : <span>Unassigned</span>}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex-shrink-0">
+          <button aria-label="Close task details" onClick={onClose} className="flex-shrink-0 rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Status", value: <div className="flex items-center gap-1.5"><StatusDot status={task.status} /><span className="capitalize text-sm">{task.status.replace("_", " ")}</span></div> },
-              { label: "Priority", value: <PriorityBadge priority={task.priority} /> },
-              { label: "Assignee", value: task.assignee ? <div className="flex items-center gap-1.5"><Avatar name={task.assignee} size="xs" /><span className="text-sm">{task.assignee}</span></div> : <span className="text-sm text-muted-foreground">Unassigned</span> },
-              { label: "Next Action By", value: <span className={cn("text-sm font-mono font-medium", task.nextActionBy === "me" ? "text-amber-400" : "text-indigo-400")}>{task.nextActionBy === "me" ? "You" : task.nextActionBy}</span> },
-              { label: "Deadline", value: <span className={cn("text-sm font-mono", task.isOverdue ? "text-red-400" : "text-foreground")}>{task.deadline || "—"}</span> },
-              { label: "Project", value: <span className="text-sm text-foreground">{task.project || "—"}</span> },
-              { label: "Waiting Since", value: <span className="text-sm font-mono text-muted-foreground">{task.waitingSince || "—"}</span> },
-              { label: "Response Due", value: <span className="text-sm font-mono text-muted-foreground">{task.responseDue || "—"}</span> },
-              { label: "Last Update", value: <span className="text-sm text-muted-foreground">{task.lastUpdate || "—"}</span> },
-              { label: "Est. Time", value: <span className="text-sm font-mono text-muted-foreground">{task.estimatedHours ? `${task.estimatedHours}h` : "—"}</span> },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-muted/40 rounded-lg p-3">
-                <p className="text-[11px] font-mono text-muted-foreground mb-1">{label}</p>
-                {value}
+        <div className="flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
+          {task.parentTask && <section className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-primary/15 bg-primary/[0.035] px-3.5 py-3"><button onClick={openParentTask} className="min-w-0 text-left"><span className="flex items-center gap-1 text-[10px] font-medium text-primary"><ChevronLeft className="h-3.5 w-3.5" />Back to parent</span><span className="mt-1 block text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Subtask of</span><span className="block truncate text-[12px] font-medium text-foreground">{task.parentTask.title}</span></button></section>}
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Status</p>
+                <div className="mt-1 flex items-center gap-1.5"><StatusDot status={task.status} /><span className="capitalize text-sm text-foreground">{task.status.replace("_", " ")}</span><PriorityBadge priority={task.priority} /></div>
               </div>
-            ))}
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Currently with</p>{canEditTask && <button onClick={openAssigneeEditor} className="text-[10px] font-medium text-primary hover:text-primary/80">Edit</button>}</div>
+                <div className="mt-1">{currentResponsibilityPerson ? <button onClick={() => onOpenPrincipal?.(currentResponsibilityPerson)} disabled={!onOpenPrincipal} className="inline-flex items-center gap-1.5 rounded-full bg-muted/55 px-2 py-1 text-[11px] text-foreground hover:text-primary disabled:cursor-default">{currentResponsibilityPerson.type === "person" ? <Avatar name={currentResponsibilityPerson.name} size="xs" /> : <Users className="h-3 w-3 text-primary" />}{currentResponsibilityName}</button> : <span className="text-sm text-muted-foreground">{currentResponsibilityName}</span>}</div>
+              </div>
+              {currentResponsibility?.assignedBy && <div className="min-w-0 border-t border-border pt-3 sm:col-span-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Assigned by</p><p className="mt-1 truncate text-sm text-foreground">{currentResponsibility.assignedBy} · {taskDateLabel(currentResponsibility.assignedAt.slice(0, 10))}</p></div>}
+              {task.status === "waiting" && <div className="min-w-0 border-t border-border pt-3 sm:col-span-2"><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Waiting on</p>{taskStoreUsesServer && canEditTask && <button onClick={openWaitingOnEditor} className="text-[10px] font-medium text-primary hover:text-primary/80">Edit</button>}</div><p className="mt-1 truncate text-sm font-medium text-info">{waitingOnLabel}</p></div>}
+              {task.status === "review" && <div className="min-w-0 border-t border-border pt-3 sm:col-span-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Reviewer</p><p className="mt-1 truncate text-sm font-medium text-review">{reviewerLabel}</p></div>}
+              {task.status === "blocked" && <div className="min-w-0 border-t border-border pt-3 sm:col-span-2"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Blocked by</p><p className="mt-1 truncate text-sm font-medium text-overdue">{blockedByLabel}</p></div>}
+              {task.status === "done" && <div className="grid min-w-0 gap-3 border-t border-border pt-3 sm:col-span-2 sm:grid-cols-2"><div><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Completed by</p><p className="mt-1 truncate text-sm font-medium text-foreground">{task.completedBy?.name || "—"}</p></div><div><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Completed</p><p className="mt-1 text-sm font-medium text-foreground">{task.completedAt ? taskDateLabel(task.completedAt.slice(0, 10)) : "—"}</p></div></div>}
+            </div>
+          </section>
+          {assigneesEditOpen && <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[12px] font-semibold text-foreground">Currently with</p><p className="mt-0.5 text-[10px] text-muted-foreground">Who needs to make the next move.</p></div><div className="flex shrink-0 gap-1"><button onClick={() => setAssigneesEditOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void saveAssigneeDraft()} disabled={savingAssignees || !assigneeDraftIds[0]} className="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingAssignees ? "Saving…" : "Done"}</button></div></div>
+            <input value={assigneeQuery} onChange={event => setAssigneeQuery(event.target.value)} placeholder="Search people or teams…" className="mt-3 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" />
+            <div className="mt-3 border-t border-border pt-3"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Selected</p>{selectedAssigneeDrafts.length ? <div className="mt-2 flex flex-wrap gap-1.5">{selectedAssigneeDrafts.map(person => <span key={person.id} className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{person.name}</span>)}</div> : <p className="mt-2 text-[11px] text-muted-foreground">Choose a person or team</p>}</div>
+            <div className="mt-3 grid min-w-0 gap-3 border-t border-border pt-3 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">People</p><div className="mt-1.5 space-y-1">{availablePeople.length ? availablePeople.map(person => <button key={person.id} onClick={() => toggleAssigneeDraft(person.id)} className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] hover:bg-muted"><Avatar name={person.name} size="xs" /><span className="min-w-0 flex-1 truncate text-foreground">{person.name}</span><span className="truncate text-[9px] text-muted-foreground">Person{getPersonMembership(person, task.org)?.area ? ` · ${getPersonMembership(person, task.org)?.area}` : ""}</span></button>) : <p className="px-2 py-1.5 text-[10px] text-muted-foreground">No people found</p>}</div></div><div className="min-w-0"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Teams</p><div className="mt-1.5 space-y-1">{availableTeams.length ? availableTeams.map(person => <button key={person.id} onClick={() => toggleAssigneeDraft(person.id)} className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] hover:bg-muted"><Users className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate text-foreground">{person.name}</span><span className="truncate text-[9px] text-muted-foreground">Team · {task.org}</span></button>) : <p className="px-2 py-1.5 text-[10px] text-muted-foreground">No teams found</p>}</div></div></div>
+          </section>}
+          {rerouteConfirmOpen && <section className="min-w-0 rounded-2xl border border-warning/25 bg-warning/[0.05] p-3.5"><p className="text-[12px] font-semibold text-foreground">Confirm reroute</p><p className="mt-1 text-[10px] text-muted-foreground">{currentResponsibilityName} currently has this work. Moving it changes who is expected to act next.</p><label className="mt-3 block text-[10px] font-medium text-muted-foreground">Optional note<input value={rerouteNote} onChange={event => setRerouteNote(event.target.value)} placeholder="Why is this work moving?" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><div className="mt-3 flex flex-wrap justify-end gap-2"><button onClick={() => { setRerouteConfirmOpen(false); setPendingResponsibilityId(""); }} className="rounded-lg px-2.5 py-2 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => { setAssigneeDraftIds([pendingResponsibilityId]); void saveAssigneeDraft(true); }} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground">Confirm & reroute</button></div></section>}
+          {ownerEditOpen && <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Transfer ownership</p><p className="mt-0.5 text-[10px] text-muted-foreground">Ownership is accountability; it does not change who has the task now.</p></div><div className="flex gap-1"><button onClick={() => setOwnerEditOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void saveOwnerDraft()} className="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-medium text-primary-foreground">Done</button></div></div><input value={ownerQuery} onChange={event => setOwnerQuery(event.target.value)} placeholder="Search people…" className="mt-3 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-border p-1">{ownerChoices.map(person => <button key={person.id} onClick={() => setOwnerDraftId(person.id)} className={cn("flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px]", ownerDraftId === person.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted")}><Avatar name={person.name} size="xs" /><span className="min-w-0 flex-1 truncate">{person.name}</span><span className="shrink-0 text-[9px] text-muted-foreground">{getPersonMembership(person, task.org)?.area || "Person"}</span></button>)}{!ownerChoices.length && <p className="px-2 py-3 text-[10px] text-muted-foreground">No matching people</p>}</div></section>}
+          {task.currentStep && <section className="rounded-2xl border border-border bg-card p-3.5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{task.status === "done" ? "Final step" : "Current step"}</p>{currentStepEditOpen ? <input value={currentStepDraft} onChange={event => setCurrentStepDraft(event.target.value)} placeholder="What needs to happen now?" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /> : <p className="mt-1 text-sm font-medium text-foreground">{task.currentStep}</p>}</div>{canEditTask && (currentStepEditOpen ? <div className="flex shrink-0 gap-1"><button onClick={() => { setCurrentStepEditOpen(false); setCurrentStepDraft(task.currentStep || ""); }} className="rounded-lg px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void saveCurrentStep()} className="rounded-lg bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground">Save</button></div> : <button onClick={() => setCurrentStepEditOpen(true)} className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Edit</button>)}</div></section>}
+          {taskStoreUsesServer && task.status === "waiting" && waitingOnEditOpen && <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[12px] font-semibold text-foreground">Edit waiting on</p><p className="mt-0.5 text-[10px] text-muted-foreground">Record the response or dependency that is holding this step.</p></div><button onClick={() => setWaitingOnEditOpen(false)} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted">Cancel</button></div>
+            <div className="mt-3 min-w-0 space-y-3 border-t border-border pt-3"><label className="block text-[10px] font-medium text-muted-foreground">Type<select value={waitingOnKind} onChange={event => { setWaitingOnKind(event.target.value as typeof waitingOnKind); setWaitingOnTarget(""); setWaitingOnQuery(""); }} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="principal">Person or team</option><option value="department">Department</option><option value="external">External</option></select></label>{waitingOnKind === "principal" ? <div><input value={waitingOnQuery} onChange={event => setWaitingOnQuery(event.target.value)} placeholder="Search people or teams…" className="w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-1">{waitingOnChoices.length ? waitingOnChoices.map(person => <button key={person.id} onClick={() => setWaitingOnTarget(person.id)} className={cn("flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px]", waitingOnTarget === person.id ? "bg-primary/10 text-primary" : "hover:bg-muted text-foreground")}><span className="min-w-0 flex-1 truncate">{person.name}</span><span className="shrink-0 text-[9px] text-muted-foreground">{person.type === "team" ? `Team · ${task.org}` : `Person${getPersonMembership(person, task.org)?.area ? ` · ${getPersonMembership(person, task.org)?.area}` : ""}`}</span></button>) : <p className="px-2 py-2 text-[10px] text-muted-foreground">No matching people or teams</p>}</div></div> : waitingOnKind === "department" ? <label className="block text-[10px] font-medium text-muted-foreground">Department<select value={waitingOnTarget} onChange={event => setWaitingOnTarget(event.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Select department…</option>{captureOrgAreas(task.org).map(area => <option key={area} value={getRemoteDepartmentId(task.org, area)}>{area}</option>)}</select></label> : <label className="block text-[10px] font-medium text-muted-foreground">External party<input value={waitingOnTarget} onChange={event => setWaitingOnTarget(event.target.value)} placeholder="Bank, supplier, client…" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>}<p className="text-[10px] text-muted-foreground">This records what is holding progress; it does not change the Owner or who currently has the task.</p><div className="flex flex-wrap items-center justify-end gap-2">{task.nextActionKind !== "ready" && <button onClick={() => void clearWaitingOn()} className="mr-auto rounded-lg px-2.5 py-2 text-[10px] font-medium text-muted-foreground hover:bg-muted">Clear waiting on</button>}<button onClick={() => void saveWaitingOn()} disabled={!waitingOnTarget.trim()} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-45">Save</button></div></div>
+          </section>}
+          {task.status === "waiting" && waitingReadyPrompt && <div className="rounded-2xl border border-info/20 bg-info/[0.045] p-3.5"><p className="text-[11px] font-medium text-foreground">Waiting on is cleared. Move this task back to Ready?</p><div className="mt-2 flex flex-wrap justify-end gap-2"><button onClick={() => setWaitingReadyPrompt(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Keep waiting</button><button onClick={() => void moveWaitingTaskToReady()} className="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-medium text-primary-foreground">Move to Ready</button></div></div>}
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div><p className="text-[12px] font-semibold text-foreground">Planning</p><p className="mt-0.5 text-[10px] text-muted-foreground">Plan For is when you intend to work. Deadline is the latest acceptable finish.</p></div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <label className="min-w-0 text-[10px] font-medium text-muted-foreground">Plan For<input inputMode="numeric" maxLength={10} value={planForDraft} onChange={event => setPlanForDraft(event.target.value)} placeholder="YYYY/MM/DD" aria-invalid={Boolean(taskDateInputError(planForDraft) || plannerDateError === "Plan date cannot be after the deadline.")} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>
+              <label className="min-w-0 text-[10px] font-medium text-muted-foreground">Deadline<input inputMode="numeric" maxLength={10} value={deadlineDraft} onChange={event => setDeadlineDraft(event.target.value)} placeholder="YYYY/MM/DD" aria-invalid={Boolean(taskDateInputError(deadlineDraft) || plannerDateError === "Plan date cannot be after the deadline.")} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>
+            </div>
+            {plannerDateError && <p role="alert" className="mt-2 text-[10px] text-overdue">{plannerDateError}</p>}
+            <div className="mt-2 flex justify-end"><button onClick={() => void savePlannerDates()} disabled={savingPlannerDates || !plannerDatesDirty || Boolean(plannerDateError)} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingPlannerDates ? "Saving…" : "Save dates"}</button></div>
+          </section>
+          <div className="rounded-2xl border border-border bg-muted/25 px-3.5 py-3">
+            <button onClick={() => setMoreDetailsOpen(current => !current)} aria-expanded={moreDetailsOpen} className="flex w-full items-center justify-between gap-3 text-left"><span><span className="block text-[12px] font-semibold text-foreground">More details</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{hasSecondaryDetails ? "Optional planning and work structure." : "Add optional task context only when you need it."}</span></span>{moreDetailsOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}</button>
           </div>
+          {moreDetailsOpen && <div className="space-y-4">
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Estimated effort</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.estimatedMinutes ? `${task.estimatedMinutes < 60 ? `${task.estimatedMinutes}m` : task.estimatedMinutes % 60 === 0 ? `${task.estimatedMinutes / 60}h` : `${task.estimatedMinutes}m`} estimated` : "Optional"}</p></div>{task.estimatedMinutes && <button onClick={() => { setEffortDraft(""); setCustomEffortOpen(false); void saveEstimatedEffort(null); }} disabled={savingEffort} className="rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-overdue disabled:opacity-50">Clear</button>}</div>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">{[[15, "15m"], [30, "30m"], [60, "1h"], [120, "2h"], [240, "4h"], [480, "1 day"]].map(([minutes, label]) => <button key={String(minutes)} onClick={() => void saveEstimatedEffort(minutes as number)} disabled={savingEffort} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium disabled:opacity-50", task.estimatedMinutes === minutes && !customEffortOpen ? "border-primary/35 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{label}</button>)}<button onClick={() => { setCustomEffortOpen(true); setEffortSaved(false); }} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", customEffortOpen ? "border-primary/35 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}>Custom</button>{effortSaved && <span role="status" className="text-[10px] font-medium text-success">Saved</span>}</div>
+            {customEffortOpen && <div className="mt-2 flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-[10px] font-medium text-muted-foreground">Minutes<input autoFocus type="number" min="1" max="10080" value={effortDraft} onChange={event => { setEffortDraft(event.target.value); setEffortSaved(false); }} placeholder="e.g. 45" className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>{effortIsDirty && <button onClick={() => void saveEstimatedEffort(effortMinutes)} disabled={savingEffort || !effortIsValid} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingEffort ? "Saving…" : "Save"}</button>}</div>}
+          </section>
+          <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Shared work</p><p className="mt-0.5 truncate text-[10px] text-muted-foreground">{task.area}{getTaskAreas(task).filter(area => area !== task.area).length ? ` · +${getTaskAreas(task).filter(area => area !== task.area).length} area${getTaskAreas(task).filter(area => area !== task.area).length === 1 ? "" : "s"}` : ""}</p></div><button onClick={() => { setAreasEditOpen(current => !current); setAreaPickerOpen(false); setAreaQuery(""); }} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{areasEditOpen ? "Done" : "Edit"}</button></div>
+            {areasEditOpen && <div className="mt-3 min-w-0 space-y-3 border-t border-border pt-3"><label className="block text-[10px] font-medium text-muted-foreground">Lead area<select value={task.leadDepartmentId || getRemoteDepartmentId(task.org, task.area) || ""} onChange={event => { const area = captureOrgAreas(task.org).find(candidate => getRemoteDepartmentId(task.org, candidate) === event.target.value); if (area) void setLeadArea(area); }} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground">{captureOrgAreas(task.org).map(area => <option key={getRemoteDepartmentId(task.org, area) || area} value={getRemoteDepartmentId(task.org, area) || ""}>{area}</option>)}</select></label><div><p className="text-[10px] font-medium text-muted-foreground">Involved areas</p><div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">{getTaskAreas(task).map(area => <button key={getRemoteDepartmentId(task.org, area) || area} onClick={() => void toggleInvolvedArea(area)} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary"> <span className="truncate">{area}</span><X className="h-3 w-3 shrink-0" aria-label={`Remove ${area}`} /></button>)}</div></div><button onClick={() => { setAreaPickerOpen(current => !current); setAreaQuery(""); }} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add area</button>{areaPickerOpen && <div className="min-w-0 rounded-xl border border-border bg-muted/20 p-2"><input autoFocus value={areaQuery} onChange={event => setAreaQuery(event.target.value)} placeholder="Search areas…" className="w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="mt-2 max-h-32 space-y-1 overflow-y-auto">{captureOrgAreas(task.org).filter(area => !getTaskAreas(task).includes(area) && area.toLocaleLowerCase().includes(areaQuery.trim().toLocaleLowerCase())).slice(0, 8).map(area => <button key={getRemoteDepartmentId(task.org, area) || area} onClick={() => { void toggleInvolvedArea(area); setAreaPickerOpen(false); setAreaQuery(""); }} className="flex w-full min-w-0 items-center rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-card"><span className="min-w-0 flex-1 truncate">{area}</span></button>)}{!captureOrgAreas(task.org).some(area => !getTaskAreas(task).includes(area) && area.toLocaleLowerCase().includes(areaQuery.trim().toLocaleLowerCase())) && <p className="px-2.5 py-2 text-[10px] text-muted-foreground">No more areas to add.</p>}</div></div>}</div>}
+          </section>
+          {taskStoreUsesServer && <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center gap-3"><p className="min-w-0 flex-1 text-[12px] font-semibold text-foreground">Dependencies</p><button onClick={() => { setDependencyOpen(current => !current); setDependencySource("task"); setDependencyTaskId(""); setDependencyTaskQuery(""); setDependencyLabel(""); }} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add</button></div>
+            {task.dependencyRecords?.length ? <div className="mt-3 space-y-1.5">{task.dependencyRecords.map(dependency => <div key={dependency.id} className="flex min-w-0 items-center gap-2 rounded-xl bg-muted/45 px-2.5 py-2"><GitBranch className={cn("h-3.5 w-3.5 shrink-0", dependency.type === "related" ? "text-primary" : dependency.type === "completion_blocker" ? "text-info" : "text-overdue")} /><span className="min-w-0 flex-1 truncate text-[11px] text-foreground">[{dependency.type === "start_blocker" ? "Blocked by" : dependency.type === "completion_blocker" ? "Waiting for" : "Related"}] {dependency.label}</span><button onClick={() => void changeDependency(dependency.id, !dependency.resolvedAt)} className="shrink-0 text-[10px] font-medium text-primary">{dependency.resolvedAt ? "Reopen" : "Resolve"}</button><button onClick={() => void changeDependency(dependency.id, false, true)} aria-label={`Remove ${dependency.label}`} className="shrink-0 text-muted-foreground hover:text-overdue"><X className="h-3 w-3" /></button></div>)}</div> : <p className="mt-3 text-[11px] text-muted-foreground">None</p>}
+            {dependencyOpen && <div className="mt-3 min-w-0 space-y-3 border-t border-border pt-3"><p className="text-[12px] font-semibold text-foreground">Add dependency</p><div className="flex w-fit rounded-lg border border-border bg-muted/35 p-1"><button onClick={() => { setDependencySource("task"); setDependencyLabel(""); }} className={cn("rounded-md px-2.5 py-1.5 text-[10px] font-medium", dependencySource === "task" ? "bg-card text-primary shadow-sm" : "text-muted-foreground")}>Existing task</button><button onClick={() => { setDependencySource("external"); setDependencyTaskId(""); setDependencyTaskQuery(""); }} className={cn("rounded-md px-2.5 py-1.5 text-[10px] font-medium", dependencySource === "external" ? "bg-card text-primary shadow-sm" : "text-muted-foreground")}>External</button></div><label className="block text-[10px] font-medium text-muted-foreground">Relationship<select value={dependencyType} onChange={event => setDependencyType(event.target.value as typeof dependencyType)} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="start_blocker">Start blocker</option><option value="completion_blocker">Completion blocker</option><option value="related">Related</option></select></label>{dependencySource === "task" ? <><label className="block text-[10px] font-medium text-muted-foreground">Search task<input value={dependencyTaskQuery} onChange={event => { setDependencyTaskQuery(event.target.value); setDependencyTaskId(""); }} placeholder="Search task…" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>{dependencyTaskQuery.trim() && <div className="max-h-32 overflow-y-auto rounded-xl border border-border bg-muted/20 p-1">{dependencyCandidates.length ? dependencyCandidates.map(candidate => <button key={candidate.id} onClick={() => { setDependencyTaskId(candidate.id); setDependencyTaskQuery(candidate.title); }} className={cn("flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px]", dependencyTaskId === candidate.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-card")}><span className="min-w-0 flex-1 truncate">{candidate.title}</span><span className="shrink-0 text-[9px] text-muted-foreground">{candidate.org}{candidate.project ? ` · ${candidate.project}` : candidate.area ? ` · ${candidate.area}` : ""}</span></button>) : <p className="px-2 py-2 text-[10px] text-muted-foreground">No matching task.</p>}</div>}</> : <label className="block text-[10px] font-medium text-muted-foreground">Describe dependency<input value={dependencyLabel} onChange={event => setDependencyLabel(event.target.value)} placeholder="Finance approval" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label>}<div className="flex justify-end gap-2"><button onClick={() => { setDependencyOpen(false); setDependencyTaskId(""); setDependencyTaskQuery(""); setDependencyLabel(""); }} className="rounded-lg px-2.5 py-2 text-[10px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void addDependency()} disabled={dependencySource === "task" ? !dependencyTaskId : !dependencyLabel.trim()} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-45">Add</button></div></div>}
+          </section>}
+          {taskStoreUsesServer && <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Completion criteria</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional checks for work that needs a clear Done state.</p></div>
+              {task.checklistItems?.length ? <span className="text-[10px] text-muted-foreground">{task.checklistItems.filter(item => item.completedAt).length}/{task.checklistItems.length}</span> : null}
+              {!checklistComposerOpen && <button onClick={() => setChecklistComposerOpen(true)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add</button>}
+            </div>
+            {task.checklistItems?.length ? <div className="mt-3 space-y-1.5">{task.checklistItems.map(item => <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-foreground"><input type="checkbox" checked={Boolean(item.completedAt)} onChange={event => void toggleChecklistItem(item.id, event.target.checked)} className="accent-primary" /> <span className={cn(item.completedAt && "line-through text-muted-foreground")}>{item.title}</span></label>)}</div> : null}
+            {checklistComposerOpen && <div className="mt-3 flex flex-wrap gap-2"><input value={checklistText} onChange={event => setChecklistText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addChecklistItem()} placeholder="Add completion item" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addChecklistItem()} disabled={!checklistText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-45">Add</button><button onClick={() => { setChecklistComposerOpen(false); setChecklistText(""); }} className="rounded-lg px-2 py-2 text-[11px] text-muted-foreground hover:bg-muted">Cancel</button></div>}
+          </section>}
+          {taskStoreUsesServer && <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Subtasks</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.subtaskProgress?.total ? `${task.subtaskProgress.completed} / ${task.subtaskProgress.total} complete` : "None"}</p></div><button onClick={() => setSubtaskComposerOpen(true)} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add subtask</button></div>{task.subtasks?.length ? <div className="mt-3 space-y-1.5">{task.subtasks.map(subtask => <button key={subtask.id} onClick={() => onOpenTask?.(subtask.id)} className="flex w-full min-w-0 items-start gap-2 rounded-xl bg-muted/45 px-2.5 py-2 text-left hover:bg-primary/[0.06]"><span className={cn("mt-0.5 text-[13px]", subtask.status === "done" ? "text-success" : "text-muted-foreground")}>{subtask.status === "done" ? "✓" : "○"}</span><span className="min-w-0 flex-1"><span className={cn("block truncate text-[11px] text-foreground", subtask.status === "done" && "text-muted-foreground line-through")}>{subtask.title}</span><span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{subtask.area}{subtask.assignee ? ` · ${subtask.assignee}` : ""}{subtask.startDate ? ` · ${taskDateLabel(subtask.startDate)}` : subtask.deadlineDate ? ` · ${taskDateLabel(subtask.deadlineDate)}` : " · No date"}</span></span></button>)}</div> : null}{subtaskComposerOpen && <div className="mt-3 grid min-w-0 gap-2 border-t border-border pt-3"><input value={subtaskText} onChange={event => setSubtaskText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addSubtask()} placeholder="Add a distinct deliverable" className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="grid min-w-0 gap-2 sm:grid-cols-3"><select value={subtaskArea} onChange={event => setSubtaskArea(event.target.value as AreaName)} className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent area</option>{captureOrgAreas(task.org).map(area => <option key={area}>{area}</option>)}</select><select value={subtaskAssigneeId} onChange={event => setSubtaskAssigneeId(event.target.value)} className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Parent assignee</option>{getDirectoryAssignees(task.org).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input inputMode="numeric" value={subtaskDeadline} onChange={event => setSubtaskDeadline(event.target.value)} placeholder="Deadline YYYY/MM/DD" aria-invalid={Boolean(subtaskDateError)} className="min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></div>{subtaskDateError && <p role="alert" className="text-[10px] text-overdue">{subtaskDateError}</p>}<div className="flex justify-end gap-2"><button onClick={() => { setSubtaskComposerOpen(false); setSubtaskText(""); setSubtaskDeadline(""); }} className="rounded-lg px-2.5 py-2 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void addSubtask()} disabled={!subtaskText.trim() || Boolean(subtaskDateError)} className="rounded-lg bg-primary/10 px-3 py-2 text-[10px] font-medium text-primary disabled:opacity-45">Add subtask</button></div></div>}</section>}
+          {taskStoreUsesServer && <section className="min-w-0 rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Repeat</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.recurrence?.active ? `Every ${task.recurrence.interval > 1 ? `${task.recurrence.interval} ` : ""}${task.recurrence.frequency}` : "Not repeating"}</p></div><button onClick={() => setRecurrenceOpen(current => !current)} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">{task.recurrence?.active ? "Edit" : "Set repeat"}</button></div>{recurrenceOpen && <div className="mt-3 min-w-0 space-y-3 border-t border-border pt-3"><div className="grid min-w-0 gap-2 sm:grid-cols-2"><label className="min-w-0 text-[10px] font-medium text-muted-foreground">Frequency<select value={repeatFrequency} onChange={event => setRepeatFrequency(event.target.value as typeof repeatFrequency)} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="months">Every N months</option></select></label><label className="min-w-0 text-[10px] font-medium text-muted-foreground">Every<input aria-label="Repeat interval" type="number" min="1" value={repeatInterval} onChange={event => setRepeatInterval(event.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="min-w-0 text-[10px] font-medium text-muted-foreground">Starts<input inputMode="numeric" value={repeatStart} onChange={event => setRepeatStart(event.target.value)} placeholder="YYYY/MM/DD" aria-invalid={Boolean(taskDateInputError(repeatStart))} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="min-w-0 text-[10px] font-medium text-muted-foreground">Ends<input inputMode="numeric" value={repeatEnd} onChange={event => setRepeatEnd(event.target.value)} placeholder="Optional · YYYY/MM/DD" aria-invalid={Boolean(taskDateInputError(repeatEnd))} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label></div>{repeatDateError && <p role="alert" className="text-[10px] text-overdue">{repeatDateError}</p>}{repeatFrequency === "weekly" && <div><p className="mb-1 text-[10px] font-medium text-muted-foreground">Repeat on</p><div className="flex flex-wrap gap-1.5">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, day) => <button key={label} onClick={() => setRepeatWeekDays(current => current.includes(day) ? current.filter(item => item !== day) : [...current, day])} className={cn("rounded-lg border px-2 py-1 text-[10px] font-medium", repeatWeekDays.includes(day) ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{label}</button>)}</div></div>}{(repeatFrequency === "monthly" || repeatFrequency === "months") && <label className="block text-[10px] font-medium text-muted-foreground">Day of month<input aria-label="Day of month" type="number" min="1" max="31" value={repeatMonthDay} onChange={event => setRepeatMonthDay(event.target.value)} className="ml-2 w-16 rounded-lg border border-border bg-background px-2 py-1 text-[11px] text-foreground" /></label>}<div className="flex flex-wrap items-center justify-end gap-2"><button onClick={() => setRecurrenceOpen(false)} className="rounded-lg px-2.5 py-2 text-[10px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void saveRecurrence()} disabled={Boolean(repeatDateError)} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground disabled:opacity-45">Save</button>{task.recurrence?.active && <button onClick={() => void stopRecurrence()} className="text-left text-[10px] font-medium text-overdue">Stop repeating</button>}</div></div>}</section>}
+          {(task.targetDate || task.followUpDate || task.responseDue) && <section className="rounded-2xl border border-border bg-card p-3.5"><p className="text-[12px] font-semibold text-foreground">Additional dates</p><div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">{task.targetDate && <span className="rounded-lg bg-muted/55 px-2.5 py-1.5">Target · {taskDateLabel(task.targetDate)}</span>}{task.followUpDate && <span className="rounded-lg bg-muted/55 px-2.5 py-1.5">Follow up · {taskDateLabel(task.followUpDate)}</span>}{task.responseDue && <span className="rounded-lg bg-muted/55 px-2.5 py-1.5">Response due · {taskDateLabel(task.responseDue)}</span>}</div></section>}
+          {task.mergedHistory?.length ? <section className="rounded-2xl border border-border bg-card p-3.5"><button onClick={() => setMergedHistoryOpen(current => !current)} aria-expanded={mergedHistoryOpen} className="flex w-full items-center gap-3 text-left"><span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold text-foreground">Merged history</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{task.mergedHistory.length} task{task.mergedHistory.length === 1 ? "" : "s"} merged into this task</span></span>{mergedHistoryOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}</button>{mergedHistoryOpen && <div className="mt-3 space-y-1.5 border-t border-border pt-3">{task.mergedHistory.map(item => <p key={item.id} className="truncate rounded-lg bg-muted/45 px-2.5 py-2 text-[11px] text-foreground">{item.title}</p>)}</div>}</section> : null}
           {task.links && task.links.length > 0 && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</h3>
               <div className="space-y-1.5">
-                {task.links.map((link, i) => (
-                  <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2.5 p-2.5 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors group">
-                    <LinkIcon type={link.type} />
-                    <span className="text-sm text-foreground flex-1">{link.label}</span>
-                    <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </a>
+                {task.links.map((link, i) => link.url === "#" ? <div key={i} className="flex items-center gap-2.5 rounded-xl bg-muted/55 p-3"><LinkIcon type={link.type} /><span className="flex-1 text-sm text-foreground">{link.label}</span><span className="text-[10px] text-muted-foreground">Not connected</span></div> : (
+                  <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2.5 rounded-xl bg-muted/55 p-3 transition-colors hover:bg-secondary"><LinkIcon type={link.type} /><span className="flex-1 text-sm text-foreground">{link.label}</span><ExternalLink className="w-3 h-3 text-muted-foreground transition-colors group-hover:text-foreground" /></a>
                 ))}
               </div>
             </div>
@@ -568,27 +2110,45 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Files</h3>
               <div className="space-y-1.5">
                 {task.files.map((file, i) => {
-                  const colors: Record<TaskFile["type"], string> = { pdf: "text-red-400", excel: "text-emerald-400", screenshot: "text-sky-400", doc: "text-blue-400" };
+                  const colors: Record<TaskFile["type"], string> = { pdf: "text-overdue", excel: "text-success", screenshot: "text-info", doc: "text-primary" };
                   return (
-                    <div key={i} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors cursor-pointer group">
+                    <div key={i} className="flex items-center gap-2.5 rounded-xl bg-muted/55 p-3">
                       <FileText className={cn("w-4 h-4 flex-shrink-0", colors[file.type])} />
                       <span className="text-sm text-foreground flex-1 truncate">{file.name}</span>
-                      <Download className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      <span className="text-[10px] text-muted-foreground">Attached</span>
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
-          {task.originalCapture && (
+          {taskStoreUsesServer && <div className="flex items-center gap-2"><input ref={fileInputRef} type="file" multiple className="hidden" onChange={event => void uploadFiles(event.target.files)} /><button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary hover:bg-primary/5"><Paperclip className="h-3.5 w-3.5" />Attach file</button><span className="text-[10px] text-muted-foreground">Up to 5 MB each</span></div>}
+          </div>}
+          {task.notes && (
+            <div>
+              <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Notes</h3>
+              <p className="rounded-xl bg-muted/45 p-3 text-[13px] leading-relaxed text-muted-foreground">{task.notes}</p>
+            </div>
+          )}
+          <section className="rounded-2xl border border-border bg-card p-3.5">
+            <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Updates</p><p className="mt-0.5 text-[10px] text-muted-foreground">Share progress without changing the task status.</p></div></div>
+            {task.updates && task.updates.length > 0 && <div className="mt-3 space-y-2 border-t border-border pt-3">{task.updates.map(update => <div key={update.id} className="rounded-xl bg-muted/45 p-2.5"><p className="text-[12px] text-foreground">{update.text}</p>{update.resources?.length ? <div className="mt-2 flex flex-wrap gap-1.5">{update.resources.map(resource => resource.url ? <a key={resource.id} href={resource.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-primary"><Paperclip className="h-3 w-3" />{resource.fileName || resource.label}</a> : <span key={resource.id} className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground"><Paperclip className="h-3 w-3" />{resource.fileName || resource.label}</span>)}</div> : null}<p className="mt-1 text-[10px] text-muted-foreground">{update.author} · {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(update.createdAt))}</p></div>)}</div>}
+            <div className="mt-3 flex flex-wrap gap-2"><input ref={updateFileInputRef} type="file" multiple className="hidden" onChange={event => setUpdateAttachments(Array.from(event.target.files || []).slice(0, 4))} /><input id={`task-update-${task.id}`} value={updateText} onChange={event => setUpdateText(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void postUpdate(); }} placeholder="Add a short work update…" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><button onClick={() => updateFileInputRef.current?.click()} className="rounded-xl border border-border bg-card px-2.5 py-2 text-[11px] font-medium text-primary"><Paperclip className="h-3.5 w-3.5" /></button><button onClick={() => void postUpdate()} disabled={!updateText.trim()} className="rounded-xl bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Post</button>{updateAttachments.length ? <p className="w-full text-[10px] text-muted-foreground">{updateAttachments.map(file => file.name).join(" · ")}</p> : null}</div>
+          </section>
+          {moreDetailsOpen && task.originalCapture && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Original Capture</h3>
-              <div className="p-3 rounded-lg bg-muted/40 border border-border">
+              <div className="rounded-xl border border-border bg-muted/45 p-3">
                 <p className="text-[13px] text-muted-foreground italic leading-relaxed">&ldquo;{task.originalCapture}&rdquo;</p>
               </div>
             </div>
           )}
-          {task.activity && task.activity.length > 0 && (
+          {task.completionBlockedBy && task.completionBlockedBy.length > 0 && (
+            <div className="rounded-2xl border border-info/20 bg-info/[0.045] p-4">
+              <div className="flex items-start gap-2.5"><GitBranch className="mt-0.5 h-4 w-4 flex-shrink-0 text-info" /><div><p className="text-[12px] font-semibold text-foreground">Can start now</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Final completion is waiting on {task.completionBlockedBy.map(dependency => dependency.label).join(" · ")}. Keep moving the work that is available now.</p></div></div>
+            </div>
+          )}
+          {moreDetailsOpen && task.activity && task.activity.length > 0 && (
             <div>
               <h3 className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Activity</h3>
               <div className="space-y-3">
@@ -598,7 +2158,7 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
                     <div key={i} className="flex gap-2.5">
                       <div className="flex flex-col items-center">
                         <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
-                          style={{ backgroundColor: actorColor + "22", color: actorColor }}>
+                          style={personColorStyle(actorColor)}>
                           {getInitials(act.actor)}
                         </div>
                         {i < (task.activity?.length ?? 0) - 1 && <div className="w-px flex-1 bg-border mt-1" />}
@@ -614,102 +2174,1313 @@ function TaskDetailDrawer({ task, onClose }: { task: Task; onClose: () => void }
             </div>
           )}
         </div>
-        <div className="p-4 border-t border-border flex gap-2">
-          <button className="flex-1 py-2 px-4 rounded-lg bg-primary text-[13px] font-medium text-white hover:bg-primary/80 transition-colors">
-            {task.status === "review" ? "Approve" : "Mark Done"}
-          </button>
-          {task.status === "review" && (
-            <button className="flex-1 py-2 px-4 rounded-lg bg-muted text-[13px] font-medium text-foreground hover:bg-muted/70 transition-colors border border-border">
-              Request Revision
-            </button>
-          )}
-          <button className="p-2 rounded-lg bg-muted border border-border text-muted-foreground hover:text-foreground transition-colors">
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
+        {actionMessage && <p role="status" className={cn("mx-4 mb-2 rounded-xl px-3 py-2 text-[11px] sm:mx-5", actionMessageIsSuccess ? "border border-success/20 bg-success/[0.05] text-success" : "border border-overdue/20 bg-overdue/[0.05] text-overdue")}>{actionMessage}</p>}
+        {completionDecisionOpen && <div className="mx-4 mb-2 rounded-2xl border border-primary/20 bg-primary/[0.045] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Complete current step</p><p className="mt-1 text-[11px] text-muted-foreground">Current: {task.currentStep || task.title}</p><p className="mt-3 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">What happens next?</p><div className="mt-2 flex flex-wrap gap-1.5"><button onClick={() => setCompleteStepOutcome("finish")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "finish" ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground")}>Finish task</button><button onClick={() => setCompleteStepOutcome("handoff")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "handoff" ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground")}>Send onward</button><button onClick={() => setCompleteStepOutcome("review")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "review" ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground")}>Request review</button></div>{completeStepOutcome === "finish" ? <div className="mt-3 rounded-xl border border-primary/15 bg-card/70 px-3 py-2.5"><p className="text-[11px] font-medium text-foreground">Finish task</p><p className="mt-0.5 text-[10px] text-muted-foreground">This will mark the entire task Done.</p></div> : <div className="mt-3 space-y-2"><label className="block text-[10px] font-medium text-muted-foreground">{completeStepOutcome === "review" ? "Review step" : "Next step"}<input value={completeStepNext} onChange={event => setCompleteStepNext(event.target.value)} placeholder="What needs to happen next?" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><label className="block text-[10px] font-medium text-muted-foreground">{completeStepOutcome === "review" ? "Reviewer" : "Send to"}<input value={completeStepQuery} onChange={event => setCompleteStepQuery(event.target.value)} placeholder={completeStepOutcome === "review" ? "Search person…" : "Search people or teams…"} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-border bg-card p-1">{completeStepChoices.filter(person => completeStepOutcome !== "review" || person.type === "person").map(person => <button key={person.id} onClick={() => setCompleteStepRecipientId(person.id)} className={cn("flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px]", completeStepRecipientId === person.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted")}><span className="min-w-0 flex-1 truncate">{person.name}</span><span className="shrink-0 text-[9px] text-muted-foreground">{person.type === "team" ? `Team · ${task.org}` : "Person"}</span></button>)}</div></div>}<label className="mt-3 block text-[10px] font-medium text-muted-foreground">Optional {completeStepOutcome === "finish" ? "final " : ""}note<input value={completeStepNote} onChange={event => setCompleteStepNote(event.target.value)} placeholder={completeStepOutcome === "finish" ? "Add a final note" : "Add context for the handoff"} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><div className="mt-3 flex flex-wrap justify-end gap-2"><button onClick={() => setCompletionDecisionOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void completeStep()} disabled={(completeStepOutcome !== "finish" && (!completeStepNext.trim() || !completeStepRecipientId))} className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-45">{completeStepOutcome === "finish" ? "Mark task done" : completeStepOutcome === "review" ? "Send for review" : "Complete & send"}</button></div></div>}
+        {completeStepOpen && <div className="mx-4 mb-2 rounded-2xl border border-primary/20 bg-primary/[0.045] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Complete current step</p><p className="mt-1 text-[11px] text-muted-foreground">Current: {task.currentStep || task.title}</p><p className="mt-3 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">What happens next?</p><div className="mt-2 flex flex-wrap gap-1.5"><button onClick={() => setCompleteStepOutcome("finish")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "finish" ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground")}>Finish task</button><button onClick={() => setCompleteStepOutcome("handoff")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "handoff" ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground")}>Send to someone</button><button onClick={() => setCompleteStepOutcome("review")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "review" ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground")}>Request review</button></div>{completeStepOutcome !== "finish" && <div className="mt-3 space-y-2"><label className="block text-[10px] font-medium text-muted-foreground">Next step<input value={completeStepNext} onChange={event => setCompleteStepNext(event.target.value)} placeholder="What needs to happen next?" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><input value={completeStepQuery} onChange={event => setCompleteStepQuery(event.target.value)} placeholder={completeStepOutcome === "review" ? "Search reviewer…" : "Search people or teams…"} className="w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /><div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-border bg-card p-1">{completeStepChoices.filter(person => completeStepOutcome !== "review" || person.type === "person").map(person => <button key={person.id} onClick={() => setCompleteStepRecipientId(person.id)} className={cn("flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px]", completeStepRecipientId === person.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted")}><span className="min-w-0 flex-1 truncate">{person.name}</span><span className="shrink-0 text-[9px] text-muted-foreground">{person.type === "team" ? `Team · ${task.org}` : `Person${getPersonMembership(person, task.org)?.area ? ` · ${getPersonMembership(person, task.org)?.area}` : ""}`}</span></button>)}</div></div>}<label className="mt-3 block text-[10px] font-medium text-muted-foreground">Optional note<input value={completeStepNote} onChange={event => setCompleteStepNote(event.target.value)} placeholder="Add context for the handoff" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><div className="mt-3 flex flex-wrap justify-end gap-2"><button onClick={() => setCompleteStepOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void completeStep()} disabled={(completeStepOutcome !== "finish" && (!completeStepNext.trim() || !completeStepRecipientId))} className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-45">{completeStepOutcome === "finish" ? "Finish task" : completeStepOutcome === "review" ? "Complete & request review" : "Complete & send"}</button></div></div>}
+        {reviewDecisionOpen && <div className="mx-4 mb-2 rounded-2xl border border-review/20 bg-review/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Review this work</p><p className="mt-1 text-[11px] text-muted-foreground">Approve and finish the task, or send the same task to its next step.</p><div className="mt-3 flex flex-wrap gap-1.5"><button onClick={() => setCompleteStepOutcome("finish")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome !== "handoff" ? "bg-review text-white" : "border border-border bg-card text-muted-foreground")}>Finish task</button><button onClick={() => setCompleteStepOutcome("handoff")} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium", completeStepOutcome === "handoff" ? "bg-review text-white" : "border border-border bg-card text-muted-foreground")}>Send onward</button></div>{completeStepOutcome === "handoff" && <div className="mt-3 space-y-2"><label className="block text-[10px] font-medium text-muted-foreground">Next step<input value={completeStepNext} onChange={event => setCompleteStepNext(event.target.value)} placeholder="What needs to happen next?" className="mt-1 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></label><input value={completeStepQuery} onChange={event => setCompleteStepQuery(event.target.value)} placeholder="Search people or teams…" className="w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /><div className="max-h-28 space-y-1 overflow-y-auto rounded-xl border border-border bg-card p-1">{completeStepChoices.map(person => <button key={person.id} onClick={() => setCompleteStepRecipientId(person.id)} className={cn("flex w-full rounded-lg px-2 py-1.5 text-left text-[11px]", completeStepRecipientId === person.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted")}>{person.name}</button>)}</div></div>}<div className="mt-3 flex flex-wrap justify-end gap-2"><button onClick={() => { setReviewDecisionOpen(false); setRevisionRequestOpen(true); }} className="mr-auto rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-secondary-foreground hover:bg-muted">Request revision</button><button onClick={() => void approveReview()} disabled={completeStepOutcome === "handoff" && (!completeStepNext.trim() || !completeStepRecipientId)} className="rounded-lg bg-review px-2.5 py-1.5 text-[10px] font-medium text-white disabled:opacity-45">Approve{completeStepOutcome === "handoff" ? " & send" : " & finish"}</button></div></div>}
+        {revisionRequestOpen && <div className="mx-4 mb-2 rounded-2xl border border-warning/20 bg-warning/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">What needs revision?</p><textarea value={revisionNote} onChange={event => setRevisionNote(event.target.value)} rows={2} placeholder="Add a concise revision note…" className="mt-2 w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><div className="mt-2 flex justify-end gap-2"><button onClick={() => setRevisionRequestOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground">Cancel</button><button onClick={() => void requestRevision()} className="rounded-lg bg-warning px-2.5 py-1.5 text-[10px] font-medium text-white">Send back for revision</button></div></div>}
+        {waitingCheckOpen && <div className="mx-4 mb-1 rounded-2xl border border-info/20 bg-info/[0.055] p-3 sm:mx-5"><p className="text-[12px] font-semibold text-foreground">Does this stop the task from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting can still leave room for other progress. Only use Blocked for a real dependency.</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void markWaiting(true)} className="rounded-lg border border-info/20 bg-card px-3 py-2 text-[11px] font-medium text-info">No, I can still continue</button><button onClick={() => void markWaiting(false)} className="rounded-lg bg-overdue px-3 py-2 text-[11px] font-medium text-white">Yes, this task is blocked</button><select value={blockingKind} onChange={event => setBlockingKind(event.target.value as DependencyKind)} aria-label="Blocking dependency type" className="rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-muted-foreground"><option value="task">Another task</option><option value="department">Another department</option><option value="decision">Waiting for approval</option><option value="external">External dependency</option><option value="other">Other</option></select></div></div>}
+        {statusActionsOpen && <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-2xl border border-info/20 bg-info/[0.045] p-3 sm:mx-5"><span className="mr-1 text-[11px] font-medium text-foreground">Change status</span>{(["ready", "in_progress", "waiting", "blocked"] as TaskStatus[]).filter(status => status !== task.status).map(status => <button key={status} onClick={() => { if (status === "blocked") { setStatusActionsOpen(false); setWaitingCheckOpen(true); } else { void transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status }).then(result => { if (applyServerTask(result)) setStatusActionsOpen(false); }); } }} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium capitalize text-foreground hover:bg-muted">{status.replace("_", " ")}</button>)}<button onClick={() => setStatusActionsOpen(false)} className="ml-auto rounded-lg px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Cancel</button></div>}
+        <div ref={footerActionsRef} className="relative border-t border-border">
+          {quickRescheduleOpen && <div role="dialog" aria-label="Quick reschedule" className="absolute bottom-full left-4 right-4 z-30 mb-2 rounded-2xl border border-border bg-card p-3.5 shadow-[0_10px_30px_rgb(38_48_71_/_0.14)] sm:left-5 sm:right-5">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Quick reschedule</p><p className="mt-0.5 text-[10px] text-muted-foreground">Update the same Plan for and Deadline fields used everywhere else.</p></div><button onClick={() => setQuickRescheduleOpen(false)} aria-label="Close quick reschedule" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div>
+            <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2"><label className="min-w-0 text-[10px] font-medium text-muted-foreground">Plan For<input inputMode="numeric" maxLength={10} value={planForDraft} onChange={event => setPlanForDraft(event.target.value)} placeholder="YYYY/MM/DD" aria-invalid={Boolean(taskDateInputError(planForDraft) || plannerDateError === "Plan date cannot be after the deadline.")} disabled={!canEditTask || savingPlannerDates} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground disabled:cursor-not-allowed disabled:opacity-50" /></label><label className="min-w-0 text-[10px] font-medium text-muted-foreground">Deadline<input inputMode="numeric" maxLength={10} value={deadlineDraft} onChange={event => setDeadlineDraft(event.target.value)} placeholder="YYYY/MM/DD" aria-invalid={Boolean(taskDateInputError(deadlineDraft) || plannerDateError === "Plan date cannot be after the deadline.")} disabled={!canEditTask || savingPlannerDates} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground disabled:cursor-not-allowed disabled:opacity-50" /></label></div>{plannerDateError && <p role="alert" className="mt-2 text-[10px] text-overdue">{plannerDateError}</p>}
+            <div className="mt-3 flex justify-end gap-2"><button onClick={() => setQuickRescheduleOpen(false)} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void savePlannerDates().then(saved => { if (saved) setQuickRescheduleOpen(false); })} disabled={!canEditTask || savingPlannerDates || !plannerDatesDirty || Boolean(plannerDateError)} className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{savingPlannerDates ? "Saving…" : "Save dates"}</button></div>
+          </div>}
+          {taskActionsOpen && <div role="menu" aria-label="More task actions" className="absolute bottom-full right-4 z-[60] mb-2 w-56 max-w-[calc(100vw-3rem)] rounded-2xl border border-border bg-card p-1.5 shadow-[0_10px_30px_rgb(38_48_71_/_0.18)] sm:right-5">
+            {!task.archived && task.status !== "done" && <><button role="menuitem" onClick={() => { setTaskActionsOpen(false); setStatusActionsOpen(true); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Change status</button>
+            <button role="menuitem" onClick={() => { setTaskActionsOpen(false); setOwnerDraftId(task.ownerPrincipalId || ""); setOwnerQuery(""); setOwnerEditOpen(true); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Transfer ownership</button>
+            {canFollowUp && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); openFollowUpComposer(); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-info hover:bg-info/[0.08]">Write follow-up</button>}
+            <div className="my-1 border-t border-border" />
+            <button role="menuitem" onClick={() => { setTaskActionsOpen(false); setMergeTaskId(""); setMergeTaskQuery(""); setMergeResolution({}); setMergeReviewOpen(false); setAdvancedDialog("merge-ui"); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted">Merge task</button></>}
+            {canArchiveTaskByLifecycle(task.status, Boolean(task.archived)) && <button role="menuitem" onClick={() => { setTaskActionsOpen(false); setAdvancedDialog("archive"); }} className="flex w-full items-center rounded-xl px-3 py-2 text-left text-[11px] font-medium text-overdue hover:bg-overdue/[0.06]">Archive task</button>}
+          </div>}
+          <div className="flex flex-wrap gap-2 p-4 sm:p-5">
+            {primaryAction === "claim" && <button onClick={() => void claimTask()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Claim task</button>}
+            {primaryAction === "start" && <button onClick={() => void startTask()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Start task</button>}
+            {primaryAction === "complete" && !completeStepOpen && !completionDecisionOpen && <button onClick={openCompleteStep} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Complete step</button>}
+            {primaryAction === "approve" && <button onClick={() => { setCompleteStepOutcome("finish"); setCompleteStepNext(""); setCompleteStepRecipientId(""); setCompleteStepQuery(""); setReviewDecisionOpen(current => !current); }} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Review</button>}
+            {primaryAction === "continue" && <button onClick={() => void resumeTask()} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Continue task</button>}
+            {primaryAction === "update_waiting" && <button onClick={() => canFollowUp ? openFollowUpComposer() : setStatusActionsOpen(current => !current)} className="flex-1 rounded-xl border border-info/20 bg-info/[0.06] px-4 py-2.5 text-[13px] font-medium text-info transition-colors hover:bg-info/10">{canFollowUp ? "Follow up" : "Update status"}</button>}
+            {task.status === "review" && currentUserCanMoveTask && <button onClick={() => taskStoreUsesServer ? setRevisionRequestOpen(current => !current) : void requestRevision()} className="rounded-xl border border-border bg-secondary px-3 py-2.5 text-[11px] font-medium text-secondary-foreground transition-colors hover:bg-primary/10">Request revision</button>}
+            {task.status !== "done" && <button aria-label="Reschedule" title="Reschedule" aria-haspopup="dialog" aria-expanded={quickRescheduleOpen} onClick={() => { setQuickRescheduleOpen(current => !current); setTaskActionsOpen(false); }} disabled={!canEditTask} className="rounded-xl border border-border bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"><Calendar className="w-4 h-4" /></button>}
+            {!task.archived && <button aria-label="More task actions" title="More task actions" aria-haspopup="menu" aria-expanded={taskActionsOpen} onClick={() => { setTaskActionsOpen(current => !current); setQuickRescheduleOpen(false); }} className="rounded-xl border border-border bg-card p-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>}
+          </div>
+        </div>
         </div>
       </div>
+      {advancedDialog === "merge-ui" && <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <button aria-label="Close merge task dialog" onClick={() => setAdvancedDialog(null)} className="absolute inset-0 cursor-default bg-[#293047]/15 backdrop-blur-[2px]" />
+        <section role="dialog" aria-modal="true" aria-label="Merge task" className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_18px_48px_rgb(38_48_71_/_0.18)]">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="binnie-heading text-lg font-bold text-foreground">Merge tasks</h3><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Combine a duplicate task into this one.</p></div><button onClick={() => setAdvancedDialog(null)} aria-label="Close merge task dialog" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+
+          <label className="mt-4 block text-[10px] font-medium text-muted-foreground">Search duplicate task<input autoFocus value={mergeTaskQuery} onChange={event => setMergeTaskQuery(event.target.value)} placeholder="Search tasks…" className="mt-1.5 w-full min-w-0 rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /></label>
+          <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border bg-muted/20 p-1.5">
+            <p className="px-1.5 pb-0.5 text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground">{mergeTaskQuery.trim() ? "Results" : "Suggested"}</p>
+            {matchingMergeCandidates.slice(0, 6).map(candidate => <button key={candidate.id} onClick={() => { setMergeTaskId(candidate.id); setMergeResolution({}); setMergeReviewOpen(false); }} className={cn("flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors", mergeTaskId === candidate.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-card")}><span className="min-w-0 flex-1"><span className="block truncate font-medium">{candidate.title}</span><span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{candidate.org} · {candidate.area}</span></span><span className={cn("h-3.5 w-3.5 shrink-0 rounded-full border", mergeTaskId === candidate.id ? "border-primary bg-primary" : "border-border bg-card")}>{mergeTaskId === candidate.id && <Check className="m-[1px] h-2.5 w-2.5 text-primary-foreground" />}</span></button>)}
+            {!matchingMergeCandidates.length && <p className="px-2.5 py-4 text-center text-[11px] text-muted-foreground">No matching tasks in this organization.</p>}
+          </div>
+
+          {selectedMergeTask && <div className="mt-4 space-y-3 rounded-2xl border border-primary/15 bg-primary/[0.035] p-3.5">
+            <p className="text-[12px] font-semibold text-foreground">Merge “{selectedMergeTask.title}” into “{task.title}”?</p>
+            <div className="grid gap-2 sm:grid-cols-2"><div className="min-w-0 rounded-xl bg-card p-2.5"><p className="text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Keep</p><p className="mt-1 truncate text-[11px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">This task will remain active.</p></div><div className="min-w-0 rounded-xl bg-card p-2.5"><p className="text-[9px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Merge from</p><p className="mt-1 truncate text-[11px] font-medium text-foreground">{selectedMergeTask.title}</p><p className="mt-1 text-[10px] text-muted-foreground">This duplicate will be archived.</p></div></div>
+            <div className="rounded-xl border border-border bg-card p-2.5"><p className="text-[10px] font-medium text-foreground">Will be preserved</p><div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-muted-foreground"><span>✓ Activity &amp; history</span><span>✓ Attachments</span><span>✓ Subtasks</span><span>✓ Dependencies</span><span>✓ Collaborators</span></div></div>
+            {task.projectId !== selectedMergeTask.projectId && <p className="text-[10px] leading-4 text-muted-foreground">These tasks are in different projects. This task&apos;s project will remain.</p>}
+            {mergeDifferences.length > 0 && <button onClick={() => setMergeReviewOpen(value => !value)} className="text-[10px] font-medium text-primary hover:text-primary/80">{mergeReviewOpen ? "Hide differences" : `${mergeDifferences.length} ${mergeDifferences.length === 1 ? "difference" : "differences"} to review`}</button>}
+            {mergeReviewOpen && <div className="space-y-2 border-t border-border pt-3">
+              {mergeDifferences.map(difference => <div key={difference} className="rounded-xl border border-border bg-card p-2.5"><p className="text-[10px] font-medium text-foreground">{difference}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Keep this task by default, or use the duplicate&apos;s value.</p><div className="mt-2 flex flex-wrap gap-1.5"><button onClick={() => setMergeResolution(current => difference === "Planning" ? { ...current, startDate: "survivor", deadlineDate: "survivor" } : difference === "Priority" ? { ...current, priority: "survivor" } : difference === "Project" ? { ...current, project: "survivor" } : difference === "Lead area" ? { ...current, leadDepartment: "survivor" } : { ...current, currentStep: "survivor" })} className="rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-[9px] font-medium text-primary">Keep this task</button><button onClick={() => setMergeResolution(current => difference === "Planning" ? { ...current, startDate: "source", deadlineDate: "source" } : difference === "Priority" ? { ...current, priority: "source" } : difference === "Project" ? { ...current, project: "source" } : difference === "Lead area" ? { ...current, leadDepartment: "source" } : { ...current, currentStep: "source" })} className="rounded-lg border border-border bg-muted px-2 py-1 text-[9px] font-medium text-muted-foreground hover:bg-card">Use duplicate</button></div></div>)}
+            </div>}
+          </div>}
+
+          <div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => { setAdvancedDialog(null); setMergeTaskId(""); setMergeTaskQuery(""); setMergeResolution({}); setMergeReviewOpen(false); }} disabled={mergingTask} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-45">Cancel</button><button onClick={() => void mergeTask().then(merged => { if (merged) setAdvancedDialog(null); })} disabled={!selectedMergeTask || mergingTask} className="rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">{mergingTask ? "Merging…" : "Merge tasks"}</button></div>
+        </section>
+      </div>}
+      {advancedDialog === "archive" && <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <button aria-label="Close archive task dialog" onClick={() => setAdvancedDialog(null)} className="absolute inset-0 cursor-default bg-[#293047]/15 backdrop-blur-[2px]" />
+        <section role="dialog" aria-modal="true" aria-label="Archive completed task" className="relative z-10 w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_18px_48px_rgb(38_48_71_/_0.18)]">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="binnie-heading text-lg font-bold text-foreground">Archive completed task?</h3><p className="mt-2 text-[11px] leading-5 text-muted-foreground">“{task.title}” is already completed. Archiving moves it out of your normal completed-work lists while preserving its history.</p></div><button onClick={() => setAdvancedDialog(null)} aria-label="Close archive task dialog" className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+          <div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setAdvancedDialog(null)} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void archiveTask()} className="rounded-xl bg-overdue px-3.5 py-2 text-[11px] font-medium text-white">Archive task</button></div>
+        </section>
+      </div>}
+      {false && advancedDialog !== "merge-ui" && advancedDialog && selectedMergeTask && <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <button aria-label="Close advanced task dialog" onClick={() => setAdvancedDialog(null)} className="absolute inset-0 cursor-default bg-[#293047]/15 backdrop-blur-[2px]" />
+        <section role="dialog" aria-modal="true" aria-label={advancedDialog === "merge" ? "Merge task" : "Archive task"} className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_18px_48px_rgb(38_48_71_/_0.18)]">
+          {advancedDialog === "merge" && <><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Advanced task action</p><h3 className="binnie-heading mt-1 text-lg font-bold text-foreground">Merge task</h3><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Combine a duplicate into this canonical task. History stays connected to the surviving work.</p></div><button onClick={() => setAdvancedDialog(null)} aria-label="Close merge task dialog" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div><label className="mt-4 block text-[10px] font-medium text-muted-foreground">Find another task<input autoFocus value={mergeTaskQuery} onChange={event => setMergeTaskQuery(event.target.value)} placeholder="Search eligible tasks…" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /></label><div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border bg-muted/20 p-1.5">{matchingMergeCandidates.slice(0, 8).map(candidate => <button key={candidate.id} onClick={() => setMergeTaskId(candidate.id)} className={cn("flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors", mergeTaskId === candidate.id ? "bg-primary/10 text-primary" : "text-foreground hover:bg-card")}><span className="min-w-0 flex-1 truncate">{candidate.title}</span><span className="ml-2 text-[9px] text-muted-foreground">{candidate.org}</span></button>)}{!matchingMergeCandidates.length && <p className="px-2.5 py-4 text-center text-[11px] text-muted-foreground">No eligible task matches this search.</p>}</div>{selectedMergeTask && <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3"><p className="text-[11px] font-medium text-foreground">Merge “{selectedMergeTask.title}” into “{task.title}”</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">The selected duplicate is archived from active work while its history stays linked to this task.</p><label className="mt-3 block text-[10px] font-medium text-muted-foreground">When dates differ<select value={mergeDatesFrom} onChange={event => setMergeDatesFrom(event.target.value as "survivor" | "source")} className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="survivor">Keep this task&apos;s dates</option><option value="source">Use selected task&apos;s dates</option></select></label></div>}<div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => { setAdvancedDialog(null); setMergeTaskId(""); setMergeTaskQuery(""); }} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void mergeTask().then(merged => { if (merged) setAdvancedDialog(null); })} disabled={!mergeTaskId} className="rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Merge task</button></div></>}
+          {advancedDialog === "archive" && <><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-overdue">Advanced task action</p><h3 className="binnie-heading mt-1 text-lg font-bold text-foreground">Archive this task?</h3><p className="mt-1 text-[11px] leading-5 text-muted-foreground">It will disappear from active work views, while its history remains available.</p></div><button onClick={() => setAdvancedDialog(null)} aria-label="Close archive task dialog" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div><div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setAdvancedDialog(null)} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void archiveTask()} className="rounded-xl bg-overdue px-3.5 py-2 text-[11px] font-medium text-white">Archive task</button></div></>}
+        </section>
+      </div>}
     </div>
   );
 }
 
 // ─── HOME VIEW ────────────────────────────────────────────────────────────────
 
-function HomeView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const todayTasks = TASKS.filter(t => t.isToday && t.nextActionBy === "me");
-  const overdueTasks = TASKS.filter(t => t.isOverdue);
-  const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
-  const waitingPeople = [
-    { name: "Bu Desti", outstanding: 3, overdue: 1, oldest: "5 days" },
-    { name: "Purchasing Manager", outstanding: 2, overdue: 1, oldest: "2 days" },
-    { name: "HR Manager", outstanding: 1, overdue: 0, oldest: "4 days" },
-  ];
-  const weekOrgs: { org: OrgName; tasks: number; done: number }[] = [
-    { org: "Villa Khayangan", tasks: 8, done: 3 },
-    { org: "Apotik", tasks: 4, done: 1 },
-    { org: "Personal", tasks: 2, done: 1 },
-  ];
+type CaptureField = "org" | "area";
+type InlineCapturePreview = ParsedTask & { uncertain: CaptureField[]; captureMatch?: CaptureTaskMatch; duplicateOverride?: boolean };
+type CaptureLearning = Record<string, { org?: OrgName; area?: AreaName; assignee?: string }>;
+
+const BINNIE_CAPTURE_LEARNING_STORAGE_KEY = "binnie-capture-learning";
+const CAPTURE_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const CAPTURE_WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const CAPTURE_WEEKDAY_ALIASES: Record<string, string> = { minggu: "sunday", senin: "monday", selasa: "tuesday", rabu: "wednesday", kamis: "thursday", jumat: "friday", jumaat: "friday", sabtu: "saturday" };
+const CAPTURE_MONTH_ALIASES: Record<string, string> = { januari: "january", februari: "february", maret: "march", april: "april", mei: "may", juni: "june", juli: "july", agustus: "august", september: "september", oktober: "october", november: "november", desember: "december" };
+
+function captureKey(raw: string) {
+  return raw.toLowerCase().replace(/https?:\/\/\S+/g, "").replace(/\b(?:marketing|finance|operations|system development|hr|purchasing|deadline|target|due|by|end|of|the|this)\b/g, "").replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(word => word.length > 2).slice(0, 4).join("-");
+}
+
+function readCaptureLearning(raw: string) {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(BINNIE_CAPTURE_LEARNING_STORAGE_KEY) || "{}") as CaptureLearning;
+    return stored[captureKey(raw)];
+  } catch { return undefined; }
+}
+
+function rememberCaptureCorrection(raw: string, patch: { org?: OrgName; area?: AreaName; assignee?: string }) {
+  if (typeof window === "undefined" || !captureKey(raw)) return;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(BINNIE_CAPTURE_LEARNING_STORAGE_KEY) || "{}") as CaptureLearning;
+    stored[captureKey(raw)] = { ...stored[captureKey(raw)], ...patch };
+    window.localStorage.setItem(BINNIE_CAPTURE_LEARNING_STORAGE_KEY, JSON.stringify(stored));
+  } catch { /* Local learning is optional. */ }
+}
+
+function captureOrgAreas(org?: OrgName) {
+  const configuredAreas = Array.from(remoteDepartmentIds.keys()).map(key => {
+    const separator = key.indexOf("::");
+    return { organization: key.slice(0, separator), area: key.slice(separator + 2) as AreaName };
+  });
+  if (org) return configuredAreas.filter(item => item.organization === org).map(item => item.area);
+  return Array.from(new Set(configuredAreas.map(item => item.area)));
+}
+
+function getOrganizationAliases(org?: OrgName) {
+  if (!org) return [];
+  const meta = ORGS_META.find(item => item.name === org);
+  if (typeof window === "undefined") return meta?.aliases || [];
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("binnie-organization-aliases") || "{}") as Record<string, string[]>;
+    return Array.from(new Set([...(meta?.aliases || []), ...(saved[org] || [])]));
+  } catch { return meta?.aliases || []; }
+}
+
+function setOrganizationAliases(org: OrgName, aliases: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("binnie-organization-aliases") || "{}") as Record<string, string[]>;
+    saved[org] = aliases.map(alias => alias.trim().toLowerCase()).filter(Boolean);
+    window.localStorage.setItem("binnie-organization-aliases", JSON.stringify(saved));
+  } catch { /* Aliases make capture smarter but never block the organization settings form. */ }
+}
+
+function getAreaSettings(org?: OrgName, area?: AreaName) {
+  if (!org || !area) return undefined;
+  const meta = ORGS_META.find(item => item.name === org);
+  const defaults = meta?.areaSettings?.[area];
+  if (typeof window === "undefined") return defaults;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("binnie-area-settings") || "{}") as Record<string, Record<string, OrganizationAreaSettings>>;
+    return { ...defaults, ...saved[org]?.[area] };
+  } catch { return defaults; }
+}
+
+function setAreaSettings(org: OrgName, area: AreaName, patch: Partial<OrganizationAreaSettings>) {
+  if (typeof window === "undefined") return;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("binnie-area-settings") || "{}") as Record<string, Record<string, OrganizationAreaSettings>>;
+    saved[org] = { ...(saved[org] || {}), [area]: { ...getAreaSettings(org, area), ...patch } };
+    window.localStorage.setItem("binnie-area-settings", JSON.stringify(saved));
+    // Keep configured aliases in the same local workspace profile as responsibilities.
+    setOrganizationAliases(org, getOrganizationAliases(org));
+  } catch { /* Area settings are an enhancement, not a requirement for work capture. */ }
+}
+
+function getAreaTeam(org?: OrgName, area?: AreaName) {
+  if (!org || !area) return undefined;
+  const configuredAssignee = getAreaSettings(org, area)?.defaultAssignee;
+  const selectedTeam = configuredAssignee ? getDirectoryPerson(configuredAssignee) : undefined;
+  if (selectedTeam?.active && selectedTeam.type === "team" && selectedTeam.memberships.some(membership => membership.organization === org && membership.area === area)) return selectedTeam;
+  const configuredTeam = getAreaSettings(org, area)?.defaultTeamId;
+  const configured = configuredTeam ? PEOPLE_DIRECTORY.find(person => person.id === configuredTeam) : undefined;
+  if (configured?.active && configured.type === "team" && configured.memberships.some(membership => membership.organization === org && membership.area === area)) return configured;
+  return PEOPLE_DIRECTORY.find(person => person.active && person.type === "team" && person.memberships.some(membership => membership.organization === org && membership.area === area));
+}
+
+function captureDateLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+function captureISODate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseCaptureDate(text: string): { label: string; iso: string; kind: CaptureDateKind; confidence: CaptureConfidence } | undefined {
+  const normalized = [...Object.entries(CAPTURE_WEEKDAY_ALIASES), ...Object.entries(CAPTURE_MONTH_ALIASES)].reduce((value, [local, english]) => value.replace(new RegExp(`\\b${local}\\b`, "g"), english), text.toLowerCase()).replace(/\bbesok\b/g, "tomorrow").replace(/\bminggu depan\b/g, "next week");
+  const today = getWorkspaceCalendarDate();
+  const date = new Date(today);
+  let found = false;
+  const isFollowUp = /\b(?:follow\s*up|check in|nudge)\b/.test(normalized);
+  const isStart = !isFollowUp && /\b(?:plan(?:ned)?(?:\s+for)?|schedule[ds]?|start|begin|mulai)\b/.test(normalized);
+  const isTarget = !isFollowUp && !isStart && /\b(?:target|aim for|try by|around|hopefully)\b/.test(normalized);
+  const isDeadline = !isTarget && !isFollowUp && !isStart && /\b(?:deadline|due|must finish(?: by)?|before|latest|by)\b/.test(normalized);
+  // An unqualified date in a task capture means “when I plan to work on it”,
+  // not an implicit deadline or a title-only reminder.
+  const kind: CaptureDateKind = isFollowUp ? "follow_up" : isDeadline ? "deadline" : isTarget ? "target" : "start";
+  const semanticScope = normalized.match(/\b(?:deadline|due|must finish(?: by)?|before|latest|target|aim for|try by|around|hopefully|follow\s*up|check in|nudge|plan(?:ned)?(?:\s+for)?|schedule[ds]?|start|begin|mulai)\b[^.;\n]*/i)?.[0] || normalized;
+  if (/\btomorrow\b/.test(semanticScope)) { date.setUTCDate(date.getUTCDate() + 1); found = true; }
+  else if (/\btoday\b/.test(semanticScope)) found = true;
+  else if (/\bend of (?:this )?(?:month|the month)\b/.test(semanticScope)) { date.setUTCMonth(date.getUTCMonth() + 1, 0); found = true; }
+  else {
+    const endOfMonth = semanticScope.match(/\bend(?:\s+of)?\s+(?:the\s+)?([a-z]{3,9})\b/);
+    const monthIndex = endOfMonth ? CAPTURE_MONTHS.findIndex(month => month.startsWith(endOfMonth[1].slice(0, 3))) : -1;
+    if (monthIndex >= 0) {
+      const year = monthIndex < today.getUTCMonth() ? today.getUTCFullYear() + 1 : today.getUTCFullYear();
+      date.setTime(Date.UTC(year, monthIndex + 1, 0));
+      found = true;
+    } else {
+      const monthFirst = semanticScope.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?\b/i);
+      const dayFirst = semanticScope.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:,?\s*(\d{4}))?\b/i);
+      const monthToken = monthFirst?.[1] || dayFirst?.[2];
+      const dayToken = monthFirst?.[2] || dayFirst?.[1];
+      const yearToken = monthFirst?.[3] || dayFirst?.[3];
+      const explicitMonth = monthToken ? CAPTURE_MONTHS.findIndex(month => month.startsWith(monthToken.slice(0, 3).toLowerCase())) : -1;
+      if (explicitMonth >= 0 && dayToken) {
+        let year = yearToken ? Number(yearToken) : today.getUTCFullYear();
+        const candidate = new Date(Date.UTC(year, explicitMonth, Number(dayToken)));
+        if (!yearToken && candidate.getTime() < today.getTime() && explicitMonth < today.getUTCMonth()) year += 1;
+        date.setTime(Date.UTC(year, explicitMonth, Number(dayToken)));
+        found = true;
+      } else if (/\b(?:this|next) week\b/.test(semanticScope)) {
+        const daysUntilFriday = (5 - date.getUTCDay() + 7) % 7 || 7;
+        date.setUTCDate(date.getUTCDate() + daysUntilFriday + (/\bnext week\b/.test(semanticScope) ? 7 : 0));
+        found = true;
+      } else {
+        const weekdayMatch = semanticScope.match(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+        if (weekdayMatch) {
+          const weekday = CAPTURE_WEEKDAYS.indexOf(weekdayMatch[2]);
+          let days = (weekday - date.getUTCDay() + 7) % 7;
+          if (weekdayMatch[1] || days === 0) days += 7;
+          date.setUTCDate(date.getUTCDate() + days);
+          found = true;
+        }
+      }
+    }
+  }
+  return found ? { label: captureDateLabel(date), iso: captureISODate(date), kind, confidence: "high" } : undefined;
+}
+
+function captureMetadataParts(raw: string) {
+  const commaParts = raw.split(/\s*,\s*/);
+  const useCommas = commaParts.length > 1 && commaParts.slice(1).some(part => /\b(?:deadline|target|due|by|plan(?:ned)?|schedule[ds]?|end of|marketing|finance|operations|hr|purchasing|system development)\b/i.test(part));
+  const parts = (useCommas ? commaParts : raw.split(/\s*(?:→|\||\/|;)\s*/)).map(part => part.trim()).filter(Boolean);
+  // A date often comes first in a quick thought: “deadline tomorrow, ask
+  // Marketing to…”. Treat it as metadata, never as the task's title.
+  if (parts.length > 1 && /^(?:deadline|due|target|before|by|latest|plan(?:ned)?|schedule[ds]?|follow\s*up|start|begin)\b/i.test(parts[0])) {
+    return { description: parts.slice(1).join(" "), metadata: parts[0] };
+  }
+  return { description: parts[0] || raw.trim(), metadata: parts.slice(1).join(" ") };
+}
+
+function splitCaptureTasks(input: string) {
+  const areaNames = Array.from(new Set(ORGS_META.flatMap(org => org.areas))).map(area => area.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((left, right) => right.length - left.length);
+  const actionWords = "prepare|update|confirm|review|check|reconcile|create|draft|fix|finalize|improve|approve|publish|plan|send|coordinate|organize|bikin|buat|urus|cek|cari|catat|design|rancang|follow up";
+  const metadataOnly = /^(?:deadline|due|target|before|by|latest|follow\s*up|start|begin|must finish|end(?:\s+of)?|besok|tomorrow|minggu depan|next week)\b/i;
+  const sentences = splitCaptureActionClauses(input).reduce<string[]>((items, part) => {
+    if (metadataOnly.test(part) && items.length) items[items.length - 1] = `${items[items.length - 1]}; ${part}`;
+    else items.push(part);
+    return items;
+  }, []);
+  if (!areaNames.length) return sentences.slice(0, 6);
+  const areaReference = `(?:${areaNames.join("|")})`;
+  // A coordinated group can precede one action: “Finance dan Purchasing
+  // finalize budget” is one clause, not two department-specific tasks.
+  const actionStart = new RegExp(`\\b${areaReference}(?:\\s*(?:,|dan|and|&)\\s*${areaReference})*\\s+(?:${actionWords})\\b`, "ig");
+  return sentences.flatMap(sentence => {
+    const starts = Array.from(sentence.matchAll(actionStart)).map(match => match.index ?? 0);
+    if (starts.length < 2) return [sentence];
+    return starts.map((start, index) => sentence.slice(start, starts[index + 1]).trim());
+  }).filter(Boolean).slice(0, 6);
+}
+
+function hasCaptureTerm(text: string, term: string) {
+  return new RegExp(`(?:^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^a-z0-9])`, "i").test(text);
+}
+
+function captureMentionedAreas(text: string, org?: OrgName) {
+  const normalized = text.toLowerCase();
+  return captureOrgAreas(org).filter(area => hasCaptureTerm(normalized, area) || Boolean(getAreaSettings(org, area)?.aliases?.some(alias => hasCaptureTerm(normalized, alias))));
+}
+
+function inferCaptureOrganization(text: string, project?: string, contextOrg?: OrgName, assignee?: string): { org?: OrgName; confidence: CaptureConfidence; project?: string; reason?: string } {
+  const normalized = text.toLowerCase();
+  const explicit = ORGS_META.find(org => normalized.includes(org.name.toLowerCase()));
+  if (explicit) return { org: explicit.name, confidence: "high", reason: "Named in your capture" };
+  const aliasedOrg = ORGS_META.find(org => getOrganizationAliases(org.name).some(alias => hasCaptureTerm(normalized, alias)));
+  if (aliasedOrg) return { org: aliasedOrg.name, confidence: "high", reason: `Matched “${getOrganizationAliases(aliasedOrg.name).find(alias => hasCaptureTerm(normalized, alias))}”` };
+  const projectMatch = CANONICAL_PROJECTS.find(item => normalized.includes(item.name.toLowerCase())) || (project ? CANONICAL_PROJECTS.find(item => item.name === project) : undefined);
+  if (projectMatch) return { org: projectMatch.organization as OrgName, project: projectMatch.name, confidence: "high", reason: "Matched the project context" };
+  const areaMatches = ORGS_META.map(org => ({ org: org.name, areas: captureMentionedAreas(normalized, org.name) })).sort((left, right) => right.areas.length - left.areas.length);
+  if (areaMatches[0]?.areas.length && areaMatches[0].areas.length > (areaMatches[1]?.areas.length || 0)) return { org: areaMatches[0].org, confidence: areaMatches[0].areas.length > 1 ? "high" : "medium", reason: `Matched ${areaMatches[0].areas.join(", ")} in this workspace` };
+  const semantic = ORGS_META.map(org => {
+    const description = org.desc.toLowerCase();
+    const score = (/(hospitality|property)/.test(description) && /\b(?:penginapan|lodging|accommodation|hotel|guest)\b/.test(normalized) ? 3 : 0)
+      + (/(pharmacy)/.test(description) && /\b(?:obat|medicine|medication|inventory)\b/.test(normalized) ? 3 : 0)
+      + (/(personal)/.test(description) && /\b(?:personal|home|myself)\b/.test(normalized) ? 3 : 0);
+    return { org: org.name, score };
+  }).sort((left, right) => right.score - left.score);
+  if (semantic[0]?.score >= 3) return { org: semantic[0].org, confidence: "medium", reason: "Suggested from the work described" };
+  if (assignee) {
+    const person = getDirectoryPerson(assignee);
+    if (person?.memberships.length === 1) return { org: person.memberships[0].organization, confidence: "medium", reason: `Suggested from ${person.name}'s membership` };
+    const words = normalized.split(/[^a-z0-9]+/).filter(word => word.length > 3);
+    const relatedOrgs = Array.from(new Set(TASKS.filter(task => task.assignee === assignee && words.some(word => task.title.toLowerCase().includes(word))).map(task => task.org)));
+    if (relatedOrgs.length === 1) return { org: relatedOrgs[0], confidence: "medium", reason: "Suggested from similar assigned work" };
+  }
+  if (contextOrg) return { org: contextOrg, confidence: "high", reason: "Inherited from this workspace" };
+  return { confidence: "unknown" };
+}
+
+function inferCaptureArea(text: string, org?: OrgName, contextArea?: AreaName, involvedAreas: AreaName[] = []): { area?: AreaName; confidence: CaptureConfidence; reason?: string } {
+  const normalized = text.toLowerCase();
+  const areas = captureOrgAreas(org);
+  const explicitAreas = involvedAreas.length ? involvedAreas : captureMentionedAreas(text, org);
+  if (explicitAreas.length === 1) return { area: explicitAreas[0], confidence: "high", reason: "Named in your capture" };
+  if (explicitAreas.length > 1 && /\b(?:budget|cash|payment|invoice|finance)\b/.test(normalized) && explicitAreas.includes("Finance")) return { area: "Finance", confidence: "medium", reason: "Finance usually leads budget work" };
+  if (contextArea) return { area: contextArea, confidence: "high", reason: "Inherited from this area" };
+  const taskType = [
+    { area: "Maintenance", terms: ["ac", "aircon", "electricity", "plumbing", "broken", "repair", "teknisi", "water heater", "lamp"] },
+    { area: "Marketing", terms: ["instagram", "promo", "campaign", "content", "social media"] },
+    { area: "Purchasing", terms: ["supplier", "purchase", "quotation", "procurement"] },
+    { area: "Finance", terms: ["petty cash", "payment", "reconciliation", "invoice"] },
+    { area: "Operations", terms: ["medicine", "obat", "inventory", "sop"] },
+  ].find(candidate => areas.includes(candidate.area) && candidate.terms.some(term => hasCaptureTerm(normalized, term)));
+  if (taskType) return { area: taskType.area, confidence: "medium", reason: "Suggested from similar operational work" };
+  return { confidence: "unknown" };
+}
+
+function inferCaptureAssignee(text: string, org?: OrgName, area?: AreaName, explicitAssignee?: string, learnedAssignee?: string, areaWasExplicit = false): { assignee?: string; confidence: CaptureConfidence; reason?: string } {
+  if (explicitAssignee) return { assignee: explicitAssignee, confidence: "high", reason: "Named in your capture" };
+  const areaTeam = getAreaTeam(org, area);
+  if (areaWasExplicit && areaTeam) return { assignee: areaTeam.name, confidence: "high", reason: `${areaTeam.name} is the linked team for ${area}` };
+  const defaultAssignee = getAreaSettings(org, area)?.defaultAssignee;
+  if (defaultAssignee && getDirectoryAssignees(org).some(person => person.name === defaultAssignee)) return { assignee: defaultAssignee, confidence: "medium", reason: `${defaultAssignee} is the default owner for ${area}` };
+  if (areaTeam) return { assignee: areaTeam.name, confidence: "medium", reason: `${areaTeam.name} is the linked team for ${area}` };
+  if (learnedAssignee) return { assignee: learnedAssignee, confidence: "medium", reason: "Suggested from a previous correction" };
+  if (!org || !area) return { confidence: "unknown" };
+  const terms = text.toLowerCase().split(/[^a-z0-9]+/).filter(term => term.length > 3 && !["deadline", "target", "before", "after"].includes(term));
+  const candidates = TASKS.filter(task => task.org === org && task.area === area && task.assignee)
+    .map(task => ({ assignee: task.assignee!, score: terms.filter(term => task.title.toLowerCase().includes(term)).length }))
+    .filter(candidate => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+  if (candidates[0] && candidates.filter(candidate => candidate.score === candidates[0].score).length === 1) return { assignee: candidates[0].assignee, confidence: "medium", reason: "Suggested from similar previous work" };
+  return { confidence: "unknown" };
+}
+
+function inferCaptureAssignees(text: string, org: OrgName | undefined, leadArea: AreaName | undefined, involvedAreas: AreaName[], explicitIds: string[], learnedAssignee?: string) {
+  // Keep every explicit entity. Area mentions add the configured team, while a
+  // named person remains a separate collaborator rather than replacing it.
+  // Put the lead team's assignment first for compact card display while still
+  // retaining every explicitly involved team and person on the same task.
+  // An inferred lead area is collaboration context, not a silent transfer of
+  // operational responsibility. Only an explicitly named area may select its
+  // linked Team during capture; otherwise personal work starts with its author.
+  const assignmentAreas = Array.from(new Set(involvedAreas));
+  const explicitEntityIds = explicitIds.filter(id => PEOPLE_DIRECTORY.some(person => person.id === id));
+  const explicitAreaTeamIds = assignmentAreas.map(area => getAreaTeam(org, area)?.id).filter((id): id is string => Boolean(id));
+  const assigneeIds = Array.from(new Set([...explicitAreaTeamIds, ...explicitEntityIds]));
+  if (assigneeIds.length) return { assigneeIds, confidence: "high" as const, reason: "Named people and department teams are kept together" };
+
+  const fallback = learnedAssignee
+    ? inferCaptureAssignee(text, org, undefined, undefined, learnedAssignee, false)
+    : { assignee: undefined, confidence: "unknown" as const, reason: undefined };
+  const fallbackId = fallback.assignee ? getDirectoryPerson(fallback.assignee)?.id : undefined;
+  return { assigneeIds: fallbackId ? [fallbackId] : [], confidence: fallback.confidence, reason: fallback.reason };
+}
+
+function cleanCaptureTitle(description: string) {
+  let source = conciseCaptureTitle(description)
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\b(?:ask|assign(?:\s+to)?|follow up with)\s+[^,]+?\s+to\s+/i, "")
+    .replace(/^\s*(?:task\s+for\s+me|my\s+task|remind\s+me\s+to|i\s+need\s+to|i\s+should|need\s+to|please|can\s+you|could\s+you|buat\s+saya|tugas\s+saya|untuk\s+saya|aku\s+harus|saya\s+harus|tolong)\b[\s,:-]*/i, "")
+    .replace(/^\s*(?:today|tomorrow|besok|this\s+week|next\s+week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s,:-]*/i, "")
+    .replace(/\b(?:for\s+)?(?:deadline|target)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,;:→|/\-]+|[\s,;:→|/\-]+$/g, "")
+    .trim();
+  source = source
+    .replace(/\bfinish\s+finali[sz]ing\b/i, "finalize")
+    .replace(/\b(?:with|sama|bersama)\s+(?:(?:[a-z]+\s+)?team|marketing|finance|purchasing|operations|hr|design)(?:\s*(?:,|and|dan|&)\s*(?:(?:[a-z]+\s+)?team|marketing|finance|purchasing|operations|hr|design))*\b/gi, "")
+    .replace(/\b(?:today|tomorrow|besok|this\s+week|next\s+week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  PEOPLE_DIRECTORY.forEach(person => { source = source.replace(new RegExp(`^${person.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+`, "i"), ""); });
+  const departmentPrefix = Array.from(new Set(ORGS_META.flatMap(org => org.areas))).sort((left, right) => right.length - left.length).map(area => area.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  if (departmentPrefix) source = source.replace(new RegExp(`^(?:${departmentPrefix})(?:\\s+team)?\\s+`, "i"), "");
+  for (let index = 0; index < 3; index += 1) {
+    source = source.replace(/^(?:and|dan|&|,)\s*/i, "");
+    PEOPLE_DIRECTORY.forEach(person => { source = source.replace(new RegExp(`^${person.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+`, "i"), ""); });
+  }
+  const normalized = source.toLowerCase();
+  const monthAlias = Object.entries(CAPTURE_MONTH_ALIASES).find(([local]) => hasCaptureTerm(normalized, local))?.[1] || CAPTURE_MONTHS.find(month => hasCaptureTerm(normalized, month) || hasCaptureTerm(normalized, month.slice(0, 3)));
+  if (/\breview\s+marketing\s+proposal\b/.test(normalized)) return "Review the marketing proposal";
+  if (/\b(?:finalize|finalise|selesaikan)\b/.test(normalized) && /\bbudget\b/.test(normalized)) return `Finalize the ${monthAlias ? `${monthAlias[0].toUpperCase()}${monthAlias.slice(1)} ` : ""}budget`;
+  if (/\b(?:finalize|finalise)\b/.test(normalized) && /\bsignage\b/.test(normalized)) return "Finalize the signage";
+  if (/\b(?:finalize|finalise)\b/.test(normalized) && /\bmarketing\b/.test(normalized) && /\bproposal\b/.test(normalized)) return "Finalize the marketing proposal";
+  if (/\b(?:bikin|buat|create|prepare)\b/.test(normalized) && /\bposter\b/.test(normalized) && /\b(?:promo|promotion)\b/.test(normalized)) return /\bweekend\b/.test(normalized) ? "Create weekend promotional poster" : "Create the promotional poster";
+  if (/\b(?:bikin|buat|create|prepare|design)\b/.test(normalized) && /\bbanner\b/.test(normalized) && /\b(?:promo|promotion)\b/.test(normalized)) return "Create the promotional banner";
+  if (/\b(?:bikin|buat|create|prepare)\b/.test(normalized) && /\b(?:promo|campaign)\b/.test(normalized)) return "Create the promotion campaign";
+  if (/\b(?:design|create|buat|bikin)\b/.test(normalized) && /\bsignage\b/.test(normalized) && /\b(?:penginapan|accommodation|villa)\b/.test(normalized)) return "Design the accommodation signage";
+  if (/\b(?:penginapan|accommodation)\b/.test(normalized) && /\b(?:list barang|inventory|tempel|wall)\b/.test(normalized)) return "Create an inventory display for each accommodation unit";
+  if (/\bwifi\b/.test(normalized) && /\b(?:info|information)\b/.test(normalized)) return /\b(?:penginapan|lodging|accommodation|hotel|guest)\b/.test(normalized) ? "Update lodging Wi-Fi information" : "Update Wi-Fi information";
+  if (/\bwifi\b/.test(normalized)) return /\b(?:penginapan|lodging|accommodation|hotel|guest)\b/.test(normalized) ? "Improve lodging Wi-Fi" : "Improve Wi-Fi";
+  if (/\b(?:fix|repair)\b/.test(normalized) && /\b(?:ac|aircon)\b/.test(normalized) || /\b(?:ac|aircon)\b/.test(normalized) && /\b(?:room|kamar)\b/.test(normalized)) {
+    const room = normalized.match(/\b(?:room|kamar)\s*(\d+)\b/);
+    if (room) return `Fix AC in Room ${room[1]}`;
+    if (/\bkhayangan\b/.test(normalized)) return "Fix AC in Khayangan room";
+    return "Fix room AC";
+  }
+  if (/\b(?:expired|expiry)\b/.test(normalized) && /\b(?:medicine|medication|obat)\b/.test(normalized)) return "Check expired medicine inventory";
+  if (/\bpetty cash\b/.test(normalized)) {
+    const month = CAPTURE_MONTHS.find(value => normalized.includes(value)) || CAPTURE_MONTHS.find(value => normalized.includes(value.slice(0, 3)));
+    return `Reconcile ${month ? `${month[0].toUpperCase()}${month.slice(1)} ` : ""}petty cash`;
+  }
+  if (/\b(?:harga|price|pricing)\b/.test(normalized) && /\b(?:website|kamar|room)\b/.test(normalized)) return /\bupdate\b/.test(normalized) ? "Update website pricing" : /\b(?:kamar|room)\b/.test(normalized) ? "Check room prices" : /\breview\b/.test(normalized) ? "Review website accommodation prices" : "Check website accommodation prices";
+  if (/^call\s+supplier\b/i.test(source)) return "Call the supplier";
+  source = source.replace(/\b(?:after|once|waiting for|depends on|cannot start until|blocked by)\b.*$/i, "").replace(/\b(?:by|on)\s+(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today)\b.*$/i, "").trim();
+  if (!source) {
+    const fallback = description.replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim();
+    return fallback ? fallback[0].toUpperCase() + fallback.slice(1) : "";
+  }
+  source = source
+    .replace(/^bikin\b/i, "Create")
+    .replace(/^buat\b/i, "Create")
+    .replace(/^cek\b/i, "Check")
+    .replace(/^cari\b/i, "Find")
+    .replace(/^urus\b/i, "Coordinate")
+    .replace(/^catat\b/i, "Record")
+    .replace(/^design\b/i, "Design")
+    .replace(/^buatkan\b/i, "Create");
+  // “Review” is a valid action when the capture says it. It is never a generic
+  // fallback for a raw thought: Binnie's review UI must not leak into task names.
+  const title = source;
+  return title[0].toUpperCase() + title.slice(1);
+}
+
+function captureIsForCurrentUser(raw: string) {
+  return /\b(?:for\s+me|my\s+task|i\s+need\s+to|remind\s+me\s+to|i\s+should|buat\s+saya|tugas\s+saya|untuk\s+saya|aku\s+harus|saya\s+harus)\b/i.test(raw);
+}
+
+function formatCaptureAreas(areas: AreaName[]) {
+  if (areas.length < 2) return areas[0] || "";
+  if (areas.length === 2) return `${areas[0]} and ${areas[1]}`;
+  return `${areas.slice(0, -1).join(", ")}, and ${areas[areas.length - 1]}`;
+}
+
+function captureNotesForAreas(areas: AreaName[]) {
+  return areas.length > 1 ? `Coordinate with ${formatCaptureAreas(areas)}.` : undefined;
+}
+
+function createCapturePreviews(input: string, organization?: OrgName, defaultArea?: AreaName, project?: string, currentUserId?: string): InlineCapturePreview[] {
+  return splitCaptureTasks(input).map(raw => {
+    const { description, metadata } = captureMetadataParts(raw);
+    const text = `${raw} ${metadata}`;
+    const learned = readCaptureLearning(raw);
+    const assignmentMatch = raw.match(/\b(?:assign(?:\s+to)?|ask|follow up with)\s+(.+?)\s+to\b/i);
+    const namedAssigneeIds = PEOPLE_DIRECTORY.filter(person => hasCaptureTerm(raw, person.name)).map(person => person.id);
+    const askedAssignee = resolveDirectoryAssignee(assignmentMatch?.[1]);
+    const unmatchedAssigneeName = assignmentMatch?.[1]?.trim() && !askedAssignee ? assignmentMatch[1].trim() : undefined;
+    const askedAssigneeId = askedAssignee ? getDirectoryPerson(askedAssignee)?.id : undefined;
+    const explicitAssigneeIds = Array.from(new Set([
+      ...namedAssigneeIds,
+      ...(askedAssigneeId ? [askedAssigneeId] : []),
+      ...(captureIsForCurrentUser(raw) && currentUserId ? [currentUserId] : []),
+    ]));
+    const explicitAssignee = directoryNames(explicitAssigneeIds)[0] || askedAssignee;
+    const inferredOrg = inferCaptureOrganization(text, project, organization, explicitAssignee);
+    const org = learned?.org || inferredOrg.org;
+    const orgConfidence = learned?.org ? "medium" as const : inferredOrg.confidence;
+    const explicitInvolvedAreas = captureMentionedAreas(text, org);
+    const inferredArea = inferCaptureArea(text, org, defaultArea, explicitInvolvedAreas);
+    const area = learned?.area || inferredArea.area;
+    const areaConfidence = learned?.area ? "medium" as const : inferredArea.confidence;
+    const involvedAreas = Array.from(new Set([...(explicitInvolvedAreas.length ? explicitInvolvedAreas : area ? [area] : []), ...(area && !explicitInvolvedAreas.includes(area) ? [area] : [])]));
+    const inferredAssignees = inferCaptureAssignees(text, org, area, explicitInvolvedAreas, explicitAssigneeIds, learned?.assignee);
+    const assigneeIds = inferredAssignees.assigneeIds.length || !currentUserId
+      ? inferredAssignees.assigneeIds
+      : [currentUserId];
+    const assigneeNames = directoryNames(assigneeIds);
+    const date = parseCaptureDate(text);
+    const dependencyMatch = raw.match(/\b(?:after|once|waiting for|depends on|cannot start until|blocked by)\s+(.+)$/i);
+    const blockedByTitle = dependencyMatch ? cleanCaptureTitle(dependencyMatch[1]) : undefined;
+    const prioritySuggestion = inferCapturePriority(raw);
+    const priorityExplicit = prioritySuggestion.explicit;
+    const priority: Priority = prioritySuggestion.priority;
+    const explicitEstimatedMinutes = explicitCaptureEstimatedMinutes(raw);
+    const title = cleanCaptureTitle(description);
+    const currentStep = currentUserId && assigneeIds[0] && assigneeIds[0] !== currentUserId ? title : undefined;
+    const confidence = [orgConfidence, areaConfidence].includes("low") ? "low" : [orgConfidence, areaConfidence, inferredAssignees.confidence].includes("medium") ? "medium" : "high";
+    return {
+      title, org, area, involvedAreas, assignee: assigneeNames[0], assigneeIds, currentStep, priority, priorityExplicit, originalText: raw,
+      project: inferredOrg.project || project,
+      suggestedStatus: blockedByTitle ? "blocked" as TaskStatus : "ready" as TaskStatus,
+      blockedByTitle, link: raw.match(/https?:\/\/\S+/i)?.[0],
+      notes: captureNotesForAreas(involvedAreas),
+      deadline: date?.kind === "deadline" ? date.label : undefined,
+      deadlineDate: date?.kind === "deadline" ? date.iso : undefined,
+      targetDate: date?.kind === "target" ? date.label : undefined,
+      targetDateISO: date?.kind === "target" ? date.iso : undefined,
+      startDate: date?.kind === "start" ? date.iso : undefined,
+      followUpDate: date?.kind === "follow_up" ? date.iso : undefined,
+      dateISO: date?.iso, dateKind: date?.kind,
+      orgConfidence, areaConfidence, assigneeConfidence: inferredAssignees.confidence, dateConfidence: date?.confidence || "unknown", overallConfidence: confidence,
+      orgReason: learned?.org ? "Suggested from a previous correction" : inferredOrg.reason,
+      areaReason: learned?.area ? "Suggested from a previous correction" : inferredArea.reason,
+      assigneeReason: inferredAssignees.reason,
+      unmatchedAssigneeName,
+      estimatedMinutes: explicitEstimatedMinutes,
+      suggestedEstimatedMinutes: explicitEstimatedMinutes ? undefined : suggestCaptureEstimatedMinutes(description),
+      uncertain: [],
+    };
+  });
+}
+
+function captureCandidateFromTask(task: Task): CaptureTaskCandidate {
+  return {
+    id: task.id,
+    version: task.version,
+    title: task.title,
+    status: task.status,
+    organizationId: task.organizationId || remoteOrganizationIds.get(task.org),
+    organization: task.org,
+    projectId: task.projectId,
+    project: task.project,
+    currentResponsibilityPrincipalId: task.currentResponsibility?.principalId || task.assigneeIds?.[0],
+    currentResponsibilityName: task.currentResponsibility?.name || task.assignee,
+    currentStep: task.currentStep,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    completedAt: task.completedAt,
+    archivedAt: task.archivedAt,
+  };
+}
+
+/** One shared enrichment pass for Home capture and Smart Inbox. The server
+ * retrieves only tasks the actor can already view; local mode uses the same
+ * classifier over its in-memory canonical snapshot. */
+async function addCaptureTaskMatches(previews: InlineCapturePreview[]) {
+  return Promise.all(previews.map(async preview => {
+    const organizationId = preview.org ? remoteOrganizationIds.get(preview.org) : undefined;
+    const projectId = preview.project ? CANONICAL_PROJECTS.find(project => project.name === preview.project)?.id : undefined;
+    const currentResponsibilityPrincipalId = preview.assigneeIds?.[0];
+    if (taskStoreUsesServer) {
+      const result = await findCaptureTaskMatchesAction({
+        title: preview.title,
+        originalText: preview.originalText,
+        organizationId,
+        organization: preview.org,
+        projectId,
+        currentResponsibilityPrincipalId,
+      });
+      return result.ok ? { ...preview, captureMatch: result.data[0] } : preview;
+    }
+    const match = findCaptureTaskMatches({
+      title: preview.title,
+      originalText: preview.originalText,
+      organizationId,
+      organization: preview.org,
+      projectId,
+      currentResponsibilityPrincipalId,
+    }, TASKS.map(captureCandidateFromTask))[0];
+    return { ...preview, captureMatch: match };
+  }));
+}
+
+function filesFromCapture(names: string[]): TaskFile[] | undefined {
+  if (!names.length) return undefined;
+  return names.map(name => ({
+    name,
+    type: /\.(xlsx?|csv)$/i.test(name) ? "excel" : /\.(png|jpe?g|webp|gif)$/i.test(name) ? "screenshot" : /\.pdf$/i.test(name) ? "pdf" : "doc",
+  }));
+}
+
+function saveCapturedTask(capture: ParsedTask, attachments: string[] = [], context?: { project?: string; area?: AreaName }, createdBy = DEFAULT_CURRENT_USER_ID) {
+  const taskOrg = capture.org || (context?.project ? CANONICAL_PROJECTS.find(project => project.name === context.project)?.organization : undefined) || "Uncategorized";
+  // Explicitly parsed lead area always wins over the page context. The context is
+  // only a fallback for a capture that did not identify an owning department.
+  const taskArea = capture.area || context?.area || (capture.involvedAreas?.length === 1 ? capture.involvedAreas[0] : "Unassigned");
+  const taskInvolvedAreas = Array.from(new Set([...(taskArea !== "Unassigned" ? [taskArea] : []), ...(capture.involvedAreas || [])].filter(Boolean)));
+  const legacyAssigneeId = capture.assignee ? getDirectoryPerson(capture.assignee)?.id : undefined;
+  const taskAssigneeIds = Array.from(new Set([...(capture.assigneeIds || []), ...(legacyAssigneeId ? [legacyAssigneeId] : [])]));
+  const assignedNames = directoryNames(taskAssigneeIds);
+  const primaryAssignee = assignedNames[0] || capture.assignee;
+  const isDelegated = taskAssigneeIds.some(id => id !== createdBy);
+  const dependencyTask = capture.blockedByTitle ? TASKS.find(task => task.title.toLowerCase().includes(capture.blockedByTitle!.toLowerCase()) || capture.blockedByTitle!.toLowerCase().includes(task.title.toLowerCase())) : undefined;
+  return createTask({
+    title: capture.title,
+    org: taskOrg,
+    area: taskArea,
+    involvedAreas: taskInvolvedAreas.length ? taskInvolvedAreas : undefined,
+    assigneeIds: taskAssigneeIds,
+    project: context?.project || capture.project,
+    priority: capture.priority,
+    currentStep: capture.currentStep,
+    status: capture.suggestedStatus || "ready",
+    assignee: primaryAssignee,
+    nextActionBy: primaryAssignee || "Unassigned",
+    deadline: capture.deadline,
+    deadlineDate: capture.deadlineDate,
+    startDate: capture.startDate,
+    targetDate: capture.targetDateISO,
+    responseDue: capture.followUpDate,
+    estimatedMinutes: capture.estimatedMinutes,
+    isDelegated,
+    isWaiting: capture.suggestedStatus === "waiting",
+    blockedBy: capture.suggestedStatus === "blocked" ? dependencyTask ? { kind: "task", type: "blocking", label: dependencyTask.title, taskId: dependencyTask.id, owner: dependencyTask.area } : { kind: "decision", type: "blocking", label: capture.blockedByTitle || "A decision or approval" } : undefined,
+    isToday: capture.dateISO === captureISODate(getWorkspaceCalendarDate()),
+    files: filesFromCapture(attachments),
+    links: capture.link ? [{ label: "Captured link", url: capture.link, type: "website" }] : undefined,
+    originalCapture: capture.originalText,
+    description: capture.notes,
+    notes: capture.notes,
+    createdBy,
+    lastUpdate: "Just now",
+    activity: [{ type: "assigned", actor: "You", text: assignedNames.length ? `Created from Smart Inbox and sent to ${assignedNames.join(" · ")}` : "Created from Smart Inbox", time: "Just now" }],
+  });
+}
+
+async function saveCapturedTaskToServer(capture: ParsedTask, context?: { project?: string; projectId?: string; org?: OrgName; area?: AreaName }, attachments: File[] = []) {
+  const org = capture.org || context?.org;
+  const leadArea = capture.area || context?.area;
+  const leadDepartmentId = leadArea && org ? getRemoteDepartmentId(org, leadArea) : undefined;
+  const involvedDepartmentIds = (capture.involvedAreas || []).map(area => org ? getRemoteDepartmentId(org, area) : undefined).filter((id): id is string => Boolean(id));
+  const assigneeIds = Array.from(new Set(capture.assigneeIds || []));
+  const result = await createTaskAction({
+    title: capture.title,
+    description: capture.notes,
+    organizationId: org ? remoteOrganizationIds.get(org) : undefined,
+    leadDepartmentId,
+    projectId: context?.projectId,
+    involvedDepartmentIds,
+    assignments: assigneeIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })),
+    currentStep: capture.currentStep,
+    nextAction: assigneeIds[0] ? { kind: "principal" as const, principalId: assigneeIds[0] } : { kind: "ready" as const },
+    priority: capture.priority,
+    startDate: capture.startDate,
+    targetDate: capture.targetDateISO,
+    deadlineDate: capture.deadlineDate,
+    followUpDate: capture.followUpDate,
+    estimatedMinutes: capture.estimatedMinutes,
+    dependencies: capture.suggestedStatus === "blocked" && capture.blockedByTitle ? [{ type: "start_blocker" as const, label: capture.blockedByTitle }] : undefined,
+    originalCapture: capture.originalText,
+  });
+  if (result.ok) {
+    const saved = applyCanonicalTask(result.data, result.revision);
+    if (capture.link) {
+      const linked = await addTaskLinkAction({ taskId: saved.id, expectedVersion: saved.version, url: capture.link, label: "Captured link" });
+      if (linked.ok) applyCanonicalTask(linked.data, linked.revision);
+    }
+    let current = TASKS.find(task => task.id === saved.id) || saved;
+    for (const file of attachments) {
+      const formData = new FormData();
+      formData.set("taskId", saved.id);
+      formData.set("expectedVersion", String(current.version));
+      formData.set("file", file);
+      const uploaded = await uploadTaskFileAction(formData);
+      if (uploaded.ok) current = applyCanonicalTask(uploaded.data, uploaded.revision);
+    }
+    if (capture.suggestedStatus === "blocked") {
+      const transition = await transitionTaskAction({ taskId: saved.id, expectedVersion: current.version, status: "blocked" });
+      if (transition.ok) return applyCanonicalTask(transition.data, transition.revision);
+    }
+    return saved;
+  }
+  throw new Error(result.message);
+}
+
+function CapturedWorkReviewCard({
+  preview,
+  editing,
+  currentUserId,
+  onChange,
+  onConfirm,
+  onDiscard,
+  onToggleEdit,
+  onOpenExisting,
+  onAddAsContext,
+  onAddAsCriterion,
+  onCreateAnyway,
+}: {
+  preview: InlineCapturePreview;
+  editing: boolean;
+  currentUserId?: string;
+  onChange: (patch: Partial<InlineCapturePreview>) => void;
+  onConfirm: () => void;
+  onDiscard: () => void;
+  onToggleEdit: () => void;
+  onOpenExisting?: (taskId: string) => void;
+  onAddAsContext?: (taskId: string) => void;
+  onAddAsCriterion?: (taskId: string) => void;
+  onCreateAnyway?: () => void;
+}) {
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [areaPickerOpen, setAreaPickerOpen] = useState(false);
+  const [areaQuery, setAreaQuery] = useState("");
+  const [customEffortOpen, setCustomEffortOpen] = useState(false);
+  const availableAreas = captureOrgAreas(preview.org);
+  const candidateOrganizations = preview.involvedAreas?.length
+    ? ORGS_META.filter(org => preview.involvedAreas?.every(area => org.areas.includes(area)))
+    : [];
+  const assignees = (preview.assigneeIds || [])
+    .map(id => getDirectoryPerson(id))
+    .filter((person): person is DirectoryPerson => Boolean(person))
+    .map(person => person.id === currentUserId ? "You" : person.name);
+  const statusLabel = PLANNING_COLUMNS.find(column => column.id === (preview.suggestedStatus || "ready"))?.label || "Ready";
+  const captureMatch = preview.captureMatch;
+  const updateDate = (kind: CaptureDateKind, iso: string) => onChange({
+    // The date currently being parsed is kept for backwards-compatible capture
+    // rendering, but editing one date must never erase the other date meanings.
+    dateKind: kind,
+    dateISO: iso || undefined,
+    deadline: kind === "deadline" ? (iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined) : preview.deadline,
+    deadlineDate: kind === "deadline" ? (iso || undefined) : preview.deadlineDate,
+    targetDate: kind === "target" ? (iso ? captureDateLabel(new Date(`${iso}T00:00:00Z`)) : undefined) : preview.targetDate,
+    targetDateISO: kind === "target" ? (iso || undefined) : preview.targetDateISO,
+    startDate: kind === "start" ? (iso || undefined) : preview.startDate,
+    followUpDate: kind === "follow_up" ? (iso || undefined) : preview.followUpDate,
+  });
+  const chooseOrganization = (org: OrgName) => onChange({ org, orgConfidence: "high" });
+  const toggleArea = (area: AreaName) => {
+    const involvedAreas = preview.involvedAreas?.includes(area)
+      ? preview.involvedAreas.filter(item => item !== area)
+      : [...(preview.involvedAreas || []), area];
+    onChange({ involvedAreas, area: preview.area || area });
+  };
+  const setCurrentResponsibility = (id: string) => {
+    if (!id) return;
+    const assigneeIds = [id];
+    onChange({ assigneeIds, assignee: directoryNames(assigneeIds)[0], assigneeConfidence: "high" });
+  };
+  const addUnmatchedPerson = async () => {
+    const name = preview.unmatchedAssigneeName?.trim();
+    if (!name || !taskStoreUsesServer) return onToggleEdit();
+    const organizationId = preview.org ? remoteOrganizationIds.get(preview.org) : undefined;
+    const departmentId = preview.org && preview.area ? getRemoteDepartmentId(preview.org, preview.area) : undefined;
+    const result = await createPrincipalAction({ name, type: "person", memberships: organizationId ? [{ organizationId, departmentId }] : undefined });
+    if (!result.ok) return;
+    const person = applyCanonicalDirectoryPerson(result.data);
+    setCurrentResponsibility(person.id);
+    onChange({ unmatchedAssigneeName: undefined, assigneeIds: [person.id], assignee: person.name, assigneeConfidence: "high" });
+  };
+
   return (
-    <div className="p-8 max-w-[1400px] mx-auto">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Monday, 12 August 2024</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Good morning, Bos.</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          You have <span className="text-amber-400 font-medium">{todayTasks.length} tasks</span> today,{" "}
-          <span className="text-red-400 font-medium">{overdueTasks.length} overdue</span>, and{" "}
-          <span className="text-pink-400 font-medium">{reviewTasks.length} awaiting your review.</span>
-        </p>
+    <article className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/25">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-3.5 w-3.5" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-foreground">{preview.title}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[11px] text-muted-foreground">
+            {preview.org && <span title={preview.orgConfidence === "medium" ? preview.orgReason : undefined} className="inline-flex items-center gap-1"><OrgBadge org={preview.org} />{preview.orgConfidence === "medium" && <span className="text-primary">✦</span>}</span>}
+            {preview.project && <span className="inline-flex items-center gap-1"><FolderKanban className="h-3 w-3" />{preview.project}</span>}
+            {assignees.length > 0 && <span title={preview.assigneeConfidence === "medium" ? preview.assigneeReason : undefined}>Currently with {assignees.join(" + ")}{preview.assigneeConfidence === "medium" && <span className="ml-1 text-primary">✦</span>}</span>}
+            {preview.currentStep && <span>Current step: {preview.currentStep}</span>}
+            {(preview.involvedAreas?.length || 0) > 1 && <span>Involved: {preview.involvedAreas?.join(" · ")}</span>}
+            {!preview.org && assignees.length === 0 && <span>Inbox</span>}
+            <span>{statusLabel}</span>
+            {preview.priorityExplicit && preview.priority !== "medium" && <span>{PRIORITY_CONFIG[preview.priority].label}</span>}
+            {preview.deadline && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />Deadline: {preview.deadline}</span>}
+            {preview.startDate && <span className="inline-flex items-center gap-1 font-mono"><Calendar className="h-3 w-3" />{captureDateLabel(new Date(`${preview.startDate}T00:00:00Z`))}</span>}
+            {preview.estimatedMinutes && <span>{formatEstimatedMinutes(preview.estimatedMinutes)}</span>}
+            {!preview.estimatedMinutes && preview.suggestedEstimatedMinutes && <button onClick={() => onChange({ estimatedMinutes: preview.suggestedEstimatedMinutes })} className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary hover:bg-primary/15">Suggested ~{formatEstimatedMinutes(preview.suggestedEstimatedMinutes)} · Use</button>}
+            {preview.suggestedStatus === "blocked" && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Blocked by {preview.blockedByTitle || "a dependency"}</span>}
+            {preview.link && <span className="inline-flex items-center gap-1 text-info"><Link2 className="h-3 w-3" />Link attached</span>}
+          </div>
+
+          {!preview.org && candidateOrganizations.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-medium text-muted-foreground">Which organization is this for?</span>
+              {candidateOrganizations.map(org => <button key={org.name} onClick={() => chooseOrganization(org.name)} className="rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary">{org.name}</button>)}
+            </div>
+          )}
+
+          {preview.unmatchedAssigneeName && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-warning/20 bg-warning/[0.05] px-2.5 py-2 text-[10px] text-muted-foreground"><span><strong className="text-foreground">{preview.unmatchedAssigneeName}</strong> isn&apos;t in Binnie yet.</span><button onClick={() => onChange({ unmatchedAssigneeName: undefined, assigneeIds: [], assignee: undefined })} className="font-medium text-primary">Leave unassigned</button><button onClick={() => void addUnmatchedPerson()} className="font-medium text-primary">Add person</button></div>
+          )}
+
+          {captureMatch?.kind === "likely_duplicate" && (
+            <div className="mt-3 rounded-xl border border-warning/25 bg-warning/[0.055] px-3 py-2.5 text-[10px] leading-4">
+              <p className="font-medium text-foreground">This may already exist</p>
+              <p className="mt-1 text-muted-foreground"><span className="font-medium text-foreground">{captureMatch.title}</span>{captureMatch.currentResponsibilityName ? ` · ${captureMatch.currentResponsibilityName}` : ""}{captureMatch.organization ? ` · ${captureMatch.organization}` : ""}</p>
+              <p className="mt-0.5 text-muted-foreground">{captureMatch.status.replace("_", " ")}{captureMatch.createdAt ? ` · Created ${captureDateLabel(new Date(captureMatch.createdAt))}` : ""}</p>
+              <div className="mt-2 flex flex-wrap gap-2"><button onClick={() => onOpenExisting?.(captureMatch.id)} disabled={!onOpenExisting} className="rounded-lg bg-card px-2.5 py-1.5 font-medium text-primary shadow-sm disabled:opacity-45">Open existing</button>{captureMatch.canAddAsContext && <button onClick={() => onAddAsContext?.(captureMatch.id)} disabled={!onAddAsContext} className="rounded-lg px-2.5 py-1.5 font-medium text-primary hover:bg-card disabled:opacity-45">Add as context</button>}{!preview.duplicateOverride && <button onClick={onCreateAnyway} className="rounded-lg px-2.5 py-1.5 font-medium text-muted-foreground hover:bg-card">Create anyway</button>}</div>
+            </div>
+          )}
+
+          {captureMatch?.kind === "related" && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+              <span>{captureMatch.isContinuation ? "Looks related to:" : "Related task found:"}</span><span className="font-medium text-foreground">{captureMatch.title}</span><button onClick={() => onOpenExisting?.(captureMatch.id)} disabled={!onOpenExisting} className="font-medium text-primary disabled:opacity-45">View</button>
+              {captureMatch.isContinuation && <><button onClick={() => onAddAsContext?.(captureMatch.id)} disabled={!onAddAsContext} className="font-medium text-primary disabled:opacity-45">Add as context</button><button onClick={() => onAddAsCriterion?.(captureMatch.id)} disabled={!onAddAsCriterion} className="font-medium text-primary disabled:opacity-45">Add as criterion</button></>}
+            </div>
+          )}
+
+          {captureMatch?.kind === "similar_completed" && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+              <span>Similar task completed recently:</span><span className="font-medium text-foreground">{captureMatch.title}</span><button onClick={() => onOpenExisting?.(captureMatch.id)} disabled={!onOpenExisting} className="font-medium text-primary disabled:opacity-45">View completed</button><button onClick={onConfirm} className="font-medium text-primary">Create new</button>
+            </div>
+          )}
+
+          {editing && (
+            <div className="mt-4 grid gap-2 border-t border-border pt-3 sm:grid-cols-2">
+              <label className="sm:col-span-2 text-[10px] font-medium text-muted-foreground">Task title<input value={preview.title} onChange={event => onChange({ title: event.target.value })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Organization<select value={preview.org || ""} onChange={event => chooseOrganization(event.target.value as OrgName)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No organization</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Lead area<select value={preview.area || ""} onChange={event => { const area = event.target.value as AreaName; onChange({ area: area || undefined, areaConfidence: "high", involvedAreas: area ? Array.from(new Set([...(preview.involvedAreas || []), area])) : preview.involvedAreas }); }} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No lead area</option>{availableAreas.map(area => <option key={area}>{area}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Currently with<select value={preview.assigneeIds?.[0] || ""} onChange={event => setCurrentResponsibility(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">Unassigned</option>{getDirectoryAssignees(preview.org).map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Project<select value={preview.project || ""} onChange={event => onChange({ project: event.target.value || undefined })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground"><option value="">No project</option>{CANONICAL_PROJECTS.filter(project => project.status !== "archived" && (!preview.org || project.organization === preview.org)).map(project => <option key={project.id} value={project.name}>{project.name}</option>)}</select></label>
+              {showMoreOptions && <label className="text-[10px] font-medium text-muted-foreground">Status<select value={preview.suggestedStatus || "ready"} onChange={event => onChange({ suggestedStatus: event.target.value as TaskStatus })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{PLANNING_COLUMNS.map(column => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label>}
+              <label className="text-[10px] font-medium text-muted-foreground">Priority<select value={preview.priority} onChange={event => onChange({ priority: event.target.value as Priority, priorityExplicit: true })} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground">{Object.entries(PRIORITY_CONFIG).map(([value, config]) => <option key={value} value={value}>{config.label}</option>)}</select></label>
+              <div className="text-[10px] font-medium text-muted-foreground">Estimated effort<div className="mt-1 flex flex-wrap gap-1.5">{[[15, "15m"], [30, "30m"], [60, "1h"], [120, "2h"], [240, "4h"], [480, "1 day"]].map(([minutes, label]) => <button key={String(minutes)} onClick={() => { onChange({ estimatedMinutes: minutes as number }); setCustomEffortOpen(false); }} className={cn("rounded-full border px-2 py-1 text-[10px]", preview.estimatedMinutes === minutes && !customEffortOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}>{label}</button>)}<button onClick={() => setCustomEffortOpen(true)} className={cn("rounded-full border px-2 py-1 text-[10px]", customEffortOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}>Custom</button></div>{customEffortOpen && <input autoFocus type="number" min="1" max="10080" value={preview.estimatedMinutes && ![15, 30, 60, 120, 240, 480].includes(preview.estimatedMinutes) ? preview.estimatedMinutes : ""} onChange={event => onChange({ estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} placeholder="Custom minutes" className="mt-2 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" />}</div>
+              {showMoreOptions && <label className="text-[10px] font-medium text-muted-foreground">Target Date<input type="date" value={preview.targetDateISO || ""} onChange={event => updateDate("target", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>}
+              <label className="text-[10px] font-medium text-muted-foreground">Deadline <span className="font-normal">(latest completion)</span><input type="date" value={preview.deadlineDate || ""} onChange={event => updateDate("deadline", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Plan For <span className="font-normal">(when to work on it)</span><input type="date" value={preview.startDate || ""} onChange={event => updateDate("start", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              {(showMoreOptions && (preview.suggestedStatus === "waiting" || preview.followUpDate)) && <label className="text-[10px] font-medium text-muted-foreground">Follow-up date<input type="date" value={preview.dateKind === "follow_up" ? preview.dateISO || "" : preview.followUpDate || ""} onChange={event => updateDate("follow_up", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>}
+              {(showMoreOptions && preview.suggestedStatus === "blocked") && <label className="text-[10px] font-medium text-muted-foreground">Blocked by<input value={preview.blockedByTitle || ""} onChange={event => onChange({ blockedByTitle: event.target.value || undefined })} placeholder="Add blocker" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>}
+              <label className="text-[10px] font-medium text-muted-foreground">Notes <span className="font-normal">(optional)</span><input value={preview.notes || ""} onChange={event => onChange({ notes: event.target.value || undefined })} placeholder="Add context" className="mt-1 w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] text-foreground" /></label>
+              <div className="sm:col-span-2"><button onClick={() => setShowMoreOptions(current => !current)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">More options <ChevronDown className={cn("h-3 w-3 transition-transform", showMoreOptions && "rotate-180")} /></button>{showMoreOptions && <div className="mt-2 min-w-0 rounded-xl border border-border bg-muted/20 p-3"><p className="text-[10px] font-medium text-muted-foreground">Involved areas</p><div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">{(preview.involvedAreas || []).map(area => <button key={area} onClick={() => toggleArea(area)} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] text-primary"><span className="truncate">{area}</span><X className="h-3 w-3 shrink-0" /></button>)}</div><button onClick={() => { setAreaPickerOpen(current => !current); setAreaQuery(""); }} className="mt-1.5 rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">+ Add area</button>{areaPickerOpen && <div className="mt-1.5 min-w-0 rounded-lg border border-border bg-card p-2"><input autoFocus value={areaQuery} onChange={event => setAreaQuery(event.target.value)} placeholder="Search areas…" className="w-full min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-[11px] text-foreground" /><div className="mt-1 max-h-28 overflow-y-auto">{availableAreas.filter(area => !preview.involvedAreas?.includes(area) && area.toLocaleLowerCase().includes(areaQuery.toLocaleLowerCase())).slice(0, 8).map(area => <button key={area} onClick={() => { toggleArea(area); setAreaPickerOpen(false); }} className="block w-full truncate rounded px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-muted">{area}</button>)}</div></div>}</div>}</div>
+            </div>
+          )}
+          <button onClick={() => setShowOriginal(current => !current)} className="mt-3 text-[10px] text-muted-foreground transition-colors hover:text-foreground">{showOriginal ? "Hide original" : "View original"}</button>
+          {showOriginal && <p className="mt-1 text-[10px] italic text-muted-foreground">Original capture: {preview.originalText}</p>}
+        </div>
+        <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1">
+          <button onClick={onConfirm} disabled={!preview.title.trim() || (captureMatch?.kind === "likely_duplicate" && !preview.duplicateOverride)} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-45">Confirm task</button>
+          <button onClick={onToggleEdit} className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{editing ? "Hide details" : "Edit details"}</button>
+          <button onClick={onDiscard} aria-label={`Discard ${preview.title}`} className="rounded-lg px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-overdue/10 hover:text-overdue">Discard</button>
+        </div>
       </div>
-      <div className="grid grid-cols-4 gap-4 mb-8">
+    </article>
+  );
+}
+
+function QuickCapture({ organization, project, area, onSaved, onOpenTask }: { organization?: OrgName; project?: string; area?: AreaName; onSaved?: () => void; onOpenTask?: (task: Task) => void }) {
+  const currentUserId = useContext(CurrentUserContext);
+  const [input, setInput] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [previews, setPreviews] = useState<InlineCapturePreview[]>([]);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [message, setMessage] = useState("");
+  const [undoTaskIds, setUndoTaskIds] = useState<string[]>([]);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const captureInputRef = useRef<HTMLTextAreaElement>(null);
+
+  function organize() {
+    if (!input.trim()) return;
+    setProcessing(true);
+    setMessage("");
+    setTimeout(() => {
+      const next = createCapturePreviews(input, organization, area, project, currentUserId);
+      if (!next.length || next.every(preview => !preview.title.trim())) {
+        if (taskStoreUsesServer) void saveInboxCaptureAction({ rawText: input }).then(result => {
+          if (result.ok) {
+            applyCanonicalInboxCapture(result.data.capture, result.revision);
+            setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+          } else setMessage(result.message);
+        });
+        else setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+        setProcessing(false);
+        return;
+      }
+      void addCaptureTaskMatches(next).then((withMatches) => {
+        setPreviews(withMatches);
+        setEditing(null);
+        setProcessing(false);
+      }).catch(() => {
+        // Similar-work guidance is optional; capture remains available if a
+        // read-only suggestion request is temporarily unavailable.
+        setPreviews(next);
+        setEditing(null);
+        setProcessing(false);
+      });
+    }, 700);
+  }
+
+  function showSaveMessage(notice: string, taskIds: string[]) {
+    setMessage(notice);
+    setUndoTaskIds(taskIds);
+    window.setTimeout(() => {
+      setMessage("");
+      setUndoTaskIds([]);
+    }, 5000);
+  }
+
+  async function undoSave() {
+    if (taskStoreUsesServer && undoTaskIds.length) {
+      const result = await undoCaptureAction({ taskIds: undoTaskIds });
+      if (!result.ok) { setMessage(result.message); return; }
+      const removed = new Set(result.data.deletedTaskIds);
+      TASKS = TASKS.filter(task => !removed.has(task.id));
+      ARCHIVED_TASKS = ARCHIVED_TASKS.filter(task => !removed.has(task.id));
+      taskStoreServerRevision = result.revision || taskStoreServerRevision;
+      publishTaskStore();
+    } else {
+    undoTaskIds.forEach(deleteTask);
+    }
+    onSaved?.();
+    setUndoTaskIds([]);
+    setMessage("Undone");
+    window.setTimeout(() => setMessage(""), 1800);
+  }
+
+  function updatePreview(index: number, patch: Partial<InlineCapturePreview>) {
+    setPreviews(current => current.map((preview, previewIndex) => previewIndex === index ? { ...preview, ...patch } : preview));
+  }
+
+  async function addPreviewAsContext(index: number, taskId: string) {
+    const preview = previews[index];
+    const existing = TASKS.find(task => task.id === taskId);
+    if (!preview || !existing) { setMessage("That task is no longer available."); return; }
+    const text = preview.notes?.trim() || preview.originalText.trim();
+    if (!text) return;
+    if (taskStoreUsesServer) {
+      const result = await postTaskUpdateAction({ taskId, expectedVersion: existing.version, text });
+      if (!result.ok) { setMessage(result.message); return; }
+      applyCanonicalTask(result.data, result.revision);
+    } else {
+      updateTask(taskId, { notes: [existing.notes, text].filter(Boolean).join("\n") });
+    }
+    setPreviews(current => current.filter((_, previewIndex) => previewIndex !== index));
+    setEditing(null);
+    setMessage("Added as context to the existing task.");
+  }
+
+  async function addPreviewAsCriterion(index: number, taskId: string) {
+    const preview = previews[index];
+    const existing = TASKS.find(task => task.id === taskId);
+    if (!preview || !existing) { setMessage("That task is no longer available."); return; }
+    const title = preview.title.trim();
+    if (!title) return;
+    if (taskStoreUsesServer) {
+      const result = await addChecklistItemAction({ taskId, expectedVersion: existing.version, title });
+      if (!result.ok) { setMessage(result.message); return; }
+      applyCanonicalTask(result.data, result.revision);
+    } else {
+      updateTask(taskId, { checklistItems: [...(existing.checklistItems || []), { id: `criterion-context-${taskId}-${existing.checklistItems?.length || 0}`, title, position: existing.checklistItems?.length || 0 }] });
+    }
+    setPreviews(current => current.filter((_, previewIndex) => previewIndex !== index));
+    setEditing(null);
+    setMessage("Added as a completion criterion.");
+  }
+
+  async function save(index: number) {
+    const preview = previews[index];
+    if (!preview?.title.trim()) return;
+    if (preview.captureMatch?.kind === "likely_duplicate" && !preview.duplicateOverride) {
+      setMessage("Choose Open existing, Add as context, or Create anyway first.");
+      return;
+    }
+    rememberCaptureCorrection(preview.originalText, { org: preview.org, area: preview.area, assignee: preview.assignee });
+    let created: Task;
+    try {
+      created = taskStoreUsesServer ? await saveCapturedTaskToServer(preview, { project, area }, attachmentFiles) : saveCapturedTask(preview, attachments, { project, area }, currentUserId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Binnie could not save this task yet.");
+      return;
+    }
+    onSaved?.();
+    setPreviews(current => current.filter((_, previewIndex) => previewIndex !== index));
+    setEditing(null);
+    showSaveMessage(`Added to Binnie${preview.org ? ` · ${preview.org}` : " · Inbox"}${preview.area ? ` · ${preview.area}` : ""}`, [created.id]);
+  }
+
+  async function saveAll() {
+    if (previews.some(preview => preview.captureMatch?.kind === "likely_duplicate" && !preview.duplicateOverride)) {
+      setMessage("Review the likely duplicate before confirming all tasks.");
+      return;
+    }
+    const confirmable = previews.filter(preview => preview.title.trim());
+    const created: Task[] = [];
+    for (const preview of confirmable) {
+      rememberCaptureCorrection(preview.originalText, { org: preview.org, area: preview.area, assignee: preview.assignee });
+      try { created.push(taskStoreUsesServer ? await saveCapturedTaskToServer(preview, { project, area }, attachmentFiles) : saveCapturedTask(preview, attachments, { project, area }, currentUserId)); onSaved?.(); }
+      catch (error) { setMessage(error instanceof Error ? error.message : "Binnie could not save every task yet."); break; }
+    }
+    setPreviews([]);
+    setInput("");
+    setEditing(null);
+    showSaveMessage(`${confirmable.length} tasks added to your workspace.`, created.map(task => task.id));
+  }
+
+  function addAttachments(files: FileList | null) {
+    if (!files?.length) return;
+    const next = Array.from(files).slice(0, 4);
+    setAttachments(current => [...current, ...next.map(file => file.name)].slice(0, 4));
+    setAttachmentFiles(current => [...current, ...next].slice(0, 4));
+  }
+
+  function addLink() {
+    const link = linkDraft.trim();
+    if (!link) return;
+    setInput(current => [current.trim(), link].filter(Boolean).join(" "));
+    setLinkDraft("");
+    setShowLinkInput(false);
+    captureInputRef.current?.focus();
+  }
+
+  return (
+    <section className="relative overflow-hidden rounded-[1.5rem] border border-[var(--theme-capture-border)] bg-[var(--theme-capture)] p-4 shadow-[0_10px_28px_rgb(35_41_61_/_0.055)] sm:p-5">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-[var(--theme-capture-input)] opacity-75 blur-2xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute bottom-0 right-24 h-16 w-16 rounded-full bg-[var(--theme-hero-accent)] blur-xl" />
+      <div className="relative">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/12 text-primary"><Sparkles className="h-3.5 w-3.5" /></span>
+            <div>
+              <h2 className="binnie-heading text-[15px] font-bold text-foreground">Quick Capture</h2>
+              <p className="text-[11px] text-muted-foreground">A thought is enough. Binnie handles the structure.</p>
+            </div>
+            {organization && <OrgBadge org={organization} />}{project && <span className="rounded-full bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground">{project}</span>}
+          </div>
+          {message && <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">{message}{undoTaskIds.length > 0 && <button onClick={() => void undoSave()} className="font-semibold underline underline-offset-2">Undo</button>}</span>}
+        </div>
+        <textarea
+          ref={captureInputRef}
+          value={input}
+          onChange={event => setInput(event.target.value)}
+          rows={previews.length ? 2 : 3}
+          placeholder="What do you need to remember or do?"
+          className="w-full resize-none rounded-2xl border border-[var(--theme-capture-secondary-border)] bg-[var(--theme-capture-input)] px-3.5 py-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground/80 focus:border-primary/45"
+        />
+        {attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {attachments.map((attachment, index) => <span key={`${attachment}-${index}`} className="rounded-full bg-[var(--theme-capture-input)] px-2 py-1 text-[10px] text-muted-foreground shadow-sm">{attachment}</span>)}
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-[var(--theme-capture-input)] hover:text-foreground">
+            <Paperclip className="h-3.5 w-3.5" /> Attach file
+            <input className="sr-only" type="file" multiple onChange={event => addAttachments(event.target.files)} />
+          </label>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-[var(--theme-capture-input)] hover:text-foreground">
+            <ImagePlus className="h-3.5 w-3.5" /> Screenshot
+            <input className="sr-only" type="file" accept="image/*" multiple onChange={event => addAttachments(event.target.files)} />
+          </label>
+          <button onClick={() => setShowLinkInput(current => !current)} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-[var(--theme-capture-input)] hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> Add link</button>
+          <button onClick={organize} disabled={!input.trim() || processing} className={cn("ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-medium transition-colors", input.trim() && !processing ? "binnie-capture-organize bg-primary text-primary-foreground hover:bg-primary/85" : "cursor-not-allowed bg-[var(--theme-capture-input)] text-muted-foreground") }>
+            <Sparkles className="h-3.5 w-3.5" /> {processing ? "Organizing…" : "Organize with Binnie"}
+          </button>
+        </div>
+        {showLinkInput && <div className="mt-2 flex items-center gap-2 rounded-xl border border-[var(--theme-capture-secondary-border)] bg-[var(--theme-capture-input)] px-3 py-2"><Link2 className="h-3.5 w-3.5 flex-shrink-0 text-info" /><input autoFocus value={linkDraft} onChange={event => setLinkDraft(event.target.value)} onKeyDown={event => event.key === "Enter" && addLink()} placeholder="Paste a link" className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground" /><button onClick={addLink} disabled={!linkDraft.trim()} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary disabled:opacity-45">Add</button></div>}
+        {previews.length > 0 && (
+          <div className="mt-4 space-y-2.5 border-t border-[var(--theme-capture-divider)] pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-medium text-secondary-foreground">Binnie found {previews.length} {previews.length === 1 ? "task" : "tasks"}</p>
+              {previews.length > 1 && <button onClick={() => void saveAll()} className="text-[11px] font-medium text-primary hover:text-primary/80">Confirm All</button>}
+            </div>
+            {previews.map((preview, index) => <CapturedWorkReviewCard
+              key={`${preview.originalText}-${index}`}
+              preview={preview}
+              editing={editing === index}
+              currentUserId={currentUserId}
+              onChange={patch => updatePreview(index, patch)}
+              onConfirm={() => void save(index)}
+              onDiscard={() => setPreviews(current => current.filter((_, previewIndex) => previewIndex !== index))}
+              onToggleEdit={() => setEditing(editing === index ? null : index)}
+              onOpenExisting={taskId => { const task = TASKS.find(candidate => candidate.id === taskId); if (task) onOpenTask?.(task); }}
+              onAddAsContext={taskId => void addPreviewAsContext(index, taskId)}
+              onAddAsCriterion={taskId => void addPreviewAsCriterion(index, taskId)}
+              onCreateAnyway={() => updatePreview(index, { duplicateOverride: true })}
+            />)}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+type HomeCardId =
+  | "today" | "needs-attention" | "agenda" | "waiting-on-people" | "needs-my-review"
+  | "follow-up" | "this-week" | "strategic-projects" | "recent-work" | "recently-completed" | "organization-workload";
+
+interface HomeCardConfig { id: HomeCardId; visible: boolean }
+
+const BINNIE_HOME_LAYOUT_STORAGE_KEY = "binnie-home-layout";
+const BINNIE_SIDEBAR_COLLAPSED_STORAGE_KEY = "binnie-sidebar-collapsed";
+const BINNIE_WORKSPACE_THEME_STORAGE_KEY = "binnie-workspace-theme";
+
+// Compatibility migration for preferences saved before the Binnie rename.
+const LEGACY_LUMA_STORAGE_KEYS = {
+  homeLayout: "luma-home-layout",
+  sidebarCollapsed: "luma-sidebar-collapsed",
+  workspaceTheme: "luma-workspace-theme",
+} as const;
+
+function getStoredPreference(storageKey: string, legacyStorageKey: string) {
+  const currentValue = window.localStorage.getItem(storageKey);
+  if (currentValue !== null) return currentValue;
+
+  const legacyValue = window.localStorage.getItem(legacyStorageKey);
+  if (legacyValue === null) return null;
+
+  window.localStorage.setItem(storageKey, legacyValue);
+  window.localStorage.removeItem(legacyStorageKey);
+  return legacyValue;
+}
+
+const HOME_CARD_META: { id: HomeCardId; label: string; description: string }[] = [
+  { id: "today", label: "Today", description: "The work that is yours to move forward." },
+  { id: "needs-attention", label: "Needs Attention", description: "Dates and decisions worth a gentle revisit." },
+  { id: "agenda", label: "Agenda", description: "Time-based commitments for the day." },
+  { id: "waiting-on-people", label: "Waiting on People", description: "Delegated work that needs a response." },
+  { id: "needs-my-review", label: "Needs My Review", description: "Work that is ready for your decision." },
+  { id: "follow-up", label: "Follow-Up", description: "People and conversations to nudge." },
+  { id: "this-week", label: "This Week", description: "A quiet view of progress across organizations." },
+  { id: "strategic-projects", label: "Strategic Projects", description: "Projects to continue when you have space." },
+  { id: "recent-work", label: "Recent Work", description: "Tasks, projects, files, and links you opened recently." },
+  { id: "recently-completed", label: "Recently Completed", description: "A small record of what is already handled." },
+  { id: "organization-workload", label: "Organization Workload", description: "Where active work is currently sitting." },
+];
+const DEFAULT_HOME_CARDS: HomeCardConfig[] = HOME_CARD_META.map(card => ({ id: card.id, visible: true }));
+
+function normalizeHomeCards(value: unknown): HomeCardConfig[] {
+  if (!Array.isArray(value)) return DEFAULT_HOME_CARDS;
+  const cards = value.reduce<HomeCardConfig[]>((result, item) => {
+    if (!item || typeof item !== "object") return result;
+    const candidate = item as { id?: unknown; visible?: unknown };
+    if (!HOME_CARD_META.some(card => card.id === candidate.id) || result.some(card => card.id === candidate.id)) return result;
+    result.push({ id: candidate.id as HomeCardId, visible: typeof candidate.visible === "boolean" ? candidate.visible : true });
+    return result;
+  }, []);
+  return [...cards, ...DEFAULT_HOME_CARDS.filter(defaultCard => !cards.some(card => card.id === defaultCard.id))];
+}
+
+function HomeLayoutDrawer({
+  open, cards, onToggle, onMove, onReset, onClose,
+}: {
+  open: boolean; cards: HomeCardConfig[]; onToggle: (id: HomeCardId) => void;
+  onMove: (id: HomeCardId, direction: -1 | 1) => void; onReset: () => void; onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70] flex justify-end" role="dialog" aria-modal="true" aria-label="Customize Home">
+      <button aria-label="Close customize home" onClick={onClose} className="absolute inset-0 cursor-default bg-foreground/10 backdrop-blur-[1px]" />
+      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-border bg-[#fcfcff] shadow-[-20px_0_50px_rgb(44_43_78_/_0.10)]">
+        <div className="flex items-start justify-between border-b border-border px-5 py-5 sm:px-6">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Your workspace</p>
+            <h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Customize Home</h2>
+            <p className="mt-1 text-[12px] leading-5 text-muted-foreground">Choose the cards that help you orient quickly, then arrange their order.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+          <div className="space-y-2">
+            {cards.map((card, index) => {
+              const meta = HOME_CARD_META.find(item => item.id === card.id)!;
+              return (
+                <div key={card.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{meta.description}</p>
+                  </div>
+                  <label className="flex flex-shrink-0 cursor-pointer items-center gap-2 rounded-lg px-1.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
+                    <span className="hidden sm:inline">Visible</span>
+                    <input type="checkbox" checked={card.visible} onChange={() => onToggle(card.id)} className="h-4 w-4 cursor-pointer rounded border-border accent-primary" aria-label={`Show ${meta.label} on Home`} />
+                  </label>
+                  <div className="flex flex-col rounded-lg border border-border bg-muted/30">
+                    <button onClick={() => onMove(card.id, -1)} disabled={index === 0} className="rounded-t-lg p-1 text-muted-foreground transition-colors hover:bg-white hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${meta.label} up`}><ChevronUp className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => onMove(card.id, 1)} disabled={index === cards.length - 1} className="rounded-b-lg border-t border-border p-1 text-muted-foreground transition-colors hover:bg-white hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Move ${meta.label} down`}><ChevronDown className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center justify-between border-t border-border px-5 py-4 sm:px-6">
+          <button onClick={onReset} className="rounded-lg px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Reset layout</button>
+          <button onClick={onClose} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">Save layout</button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function HomeView({
+  onTaskClick, onNavigate, onProjectClick, onOrgClick, userName,
+}: {
+  onTaskClick: (task: Task) => void; onNavigate: (view: NavView) => void;
+  onProjectClick: (projectId: string) => void; onOrgClick: (org: OrgName) => void; userName: string;
+}) {
+  useTaskStoreVersion();
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const workspaceDate = getWorkspaceCalendarDate();
+  const todayTasks = getTasksForToday(TASKS, currentUserId);
+  const todayWorkloadLabel = formatTodayWorkload(todayTasks, currentUserId);
+  const overdueTasks = getOverdueTasks(TASKS);
+  const reviewTasks = getReviewTasks(TASKS, currentUserId);
+  const delegatedTasks = getDelegatedTasks(TASKS, currentUserId);
+  const waitingTasks = getWaitingTasks(TASKS, currentUserId);
+  const waitingPeople = Array.from(new Map(waitingTasks.map(task => [readableTaskNextAction(task), task] as const)).entries()).map(([name, task]) => ({ name, outstanding: waitingTasks.filter(item => readableTaskNextAction(item) === name).length, overdue: waitingTasks.filter(item => readableTaskNextAction(item) === name && isTaskOverdue(item)).length, oldest: humanizeWaitingSince(task.waitingSince) }));
+  const weeklyTasks = getTasksForWeek(TASKS);
+  const strategicProjects = CANONICAL_PROJECTS.filter(project => project.status !== "archived").map(project => {
+    const progress = getProjectProgress(TASKS, project.id);
+    return { id: project.id, name: project.name, org: project.organization as OrgName, progress: progress.progress, tasks: progress.total, done: progress.done };
+  });
+  const weekOrgs: { org: OrgName; tasks: number; done: number }[] = ORGS_META.map(({ name: org }) => {
+    const orgTasks = weeklyTasks.filter(task => task.org === org);
+    return { org, tasks: orgTasks.length, done: orgTasks.filter(task => task.status === "done").length };
+  });
+  const [homeCards, setHomeCards] = useState<HomeCardConfig[]>(DEFAULT_HOME_CARDS);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const [isCustomizing, setIsCustomizing] = useState(false);
+  const completedTasks = TASKS.filter(task => task.status === "done");
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      try {
+        const savedLayout = getStoredPreference(BINNIE_HOME_LAYOUT_STORAGE_KEY, LEGACY_LUMA_STORAGE_KEYS.homeLayout);
+        if (savedLayout) setHomeCards(normalizeHomeCards(JSON.parse(savedLayout)));
+      } catch {
+        // A saved layout is optional; the default workspace is always usable.
+      } finally {
+        setLayoutLoaded(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(loadTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!layoutLoaded) return;
+    window.localStorage.setItem(BINNIE_HOME_LAYOUT_STORAGE_KEY, JSON.stringify(homeCards));
+  }, [homeCards, layoutLoaded]);
+
+  const cardClass = (id: HomeCardId, base: string) => cn(base, !homeCards.find(card => card.id === id)?.visible && "hidden");
+  const cardStyle = (id: HomeCardId) => ({ order: homeCards.findIndex(card => card.id === id) });
+  const toggleCard = (id: HomeCardId) => setHomeCards(cards => cards.map(card => card.id === id ? { ...card, visible: !card.visible } : card));
+  const moveCard = (id: HomeCardId, direction: -1 | 1) => setHomeCards(cards => {
+    const index = cards.findIndex(card => card.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= cards.length) return cards;
+    const reordered = [...cards];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    return reordered;
+  });
+  return (
+    <div className="mx-auto max-w-[1400px] p-5 sm:p-8 lg:p-10">
+      <div className="relative mb-6 overflow-hidden rounded-[1.75rem] border border-border bg-[var(--theme-hero)] px-5 py-6 shadow-[0_4px_18px_rgb(35_41_61_/_0.035)] sm:px-7">
+        <div aria-hidden="true" className="absolute -right-10 top-0 h-40 w-40 rounded-full bg-[var(--theme-hero-glow)] blur-3xl" />
+        <div aria-hidden="true" className="absolute bottom-0 right-32 h-20 w-20 rounded-full bg-[var(--theme-hero-accent)] blur-2xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{formatWorkspaceDate(workspaceDate, { weekday: "long", day: "numeric", month: "long" })}</p>
+            <h1 className="binnie-heading text-3xl font-bold text-foreground sm:text-[2rem]">Welcome Back, {userName}</h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">Here’s what needs your attention today. Everything else is safely organized for later.</p>
+          </div>
+          <button onClick={() => setIsCustomizing(true)} className="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl border border-primary/20 bg-white/80 px-3.5 py-2 text-[12px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/10">
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Customize Home
+          </button>
+        </div>
+      </div>
+      <QuickCapture onOpenTask={onTaskClick} />
+      <div className="mb-8 mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {[
-          { label: "Today", value: todayTasks.length, sub: "~5h estimated", color: "text-indigo-400", icon: <CalendarDays className="w-4 h-4" /> },
-          { label: "Overdue", value: overdueTasks.length, sub: "Needs immediate action", color: "text-red-400", icon: <AlertTriangle className="w-4 h-4" /> },
-          { label: "Delegated", value: TASKS.filter(t => t.isDelegated).length, sub: "Across 3 people", color: "text-emerald-400", icon: <Users className="w-4 h-4" /> },
-          { label: "Waiting", value: TASKS.filter(t => t.isWaiting).length, sub: "For responses", color: "text-amber-400", icon: <Hourglass className="w-4 h-4" /> },
-        ].map(({ label, value, sub, color, icon }) => (
-          <div key={label} className="bg-card rounded-xl border border-border p-5">
+          { label: "Today", value: todayTasks.length, sub: todayWorkloadLabel.replace(/^\d+ tasks? · /, ""), color: "text-primary", surface: "binnie-summary-today bg-[#eae6ff]/55", icon: <CalendarDays className="w-4 h-4" />, view: "today" as NavView },
+          { label: "Needs attention", value: overdueTasks.length, sub: "A gentle nudge", color: "text-overdue", surface: "binnie-summary-attention bg-[#f7dde6]/45", icon: <AlertTriangle className="w-4 h-4" />, view: "overdue" as NavView },
+          { label: "Delegated", value: delegatedTasks.length, sub: "Across your teams", color: "text-success", surface: "binnie-summary-delegated bg-[#dcede7]/55", icon: <Users className="w-4 h-4" />, view: "delegated" as NavView },
+          { label: "Waiting", value: waitingTasks.length, sub: "For a response", color: "text-info", surface: "binnie-summary-waiting bg-[#ddebfa]/55", icon: <Hourglass className="w-4 h-4" />, view: "waiting" as NavView },
+        ].map(({ label, value, sub, color, surface, icon, view }) => (
+          <button key={label} onClick={() => onNavigate(view)} className={cn("binnie-card binnie-card-hover p-4 text-left sm:p-5", surface)}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wide">{label}</span>
+              <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</span>
               <span className={cn(color, "opacity-60")}>{icon}</span>
             </div>
-            <p className={cn("text-3xl font-bold", color)} style={{ fontFamily: "var(--font-display)" }}>{value}</p>
+            <p className={cn("binnie-heading text-3xl font-bold", color)}>{value}</p>
             <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>
-          </div>
+          </button>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-6">
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+          <div className={cardClass("today", "binnie-card overflow-hidden lg:col-span-2")} style={cardStyle("today")}>
+            <div className="binnie-summary-today flex items-center justify-between border-b border-border bg-[#eae6ff]/35 px-5 py-4">
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                <h2 className="text-sm font-semibold text-foreground">Today — Must Do</h2>
+                <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <h2 className="binnie-heading text-[15px] font-bold text-foreground">Today</h2>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] font-mono text-muted-foreground">
                   <Timer className="w-3 h-3 inline mr-1" />
-                  ~{todayTasks.reduce((a, t) => a + (t.estimatedHours || 0), 0)}h estimated
+                  {todayWorkloadLabel}
                 </span>
-                <span className="text-[11px] font-mono text-muted-foreground bg-muted rounded px-1.5 py-0.5">{todayTasks.length} tasks</span>
+                <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">{todayTasks.length} tasks</span>
               </div>
             </div>
             <div className="p-3 space-y-1.5">
               {todayTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} compact />)}
               {todayTasks.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500/40" />All done for today.
+                  <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-success/45" />Nothing urgent right now.
                 </div>
               )}
             </div>
           </div>
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={cardClass("needs-attention", "binnie-card overflow-hidden")} style={cardStyle("needs-attention")}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <div className="h-1.5 w-1.5 rounded-full bg-warning" />
               <h2 className="text-sm font-semibold text-foreground">Needs Attention</h2>
             </div>
             <div className="divide-y divide-border">
               {overdueTasks.length > 0 && (
                 <div className="p-4">
-                  <p className="text-[11px] font-mono text-red-400 uppercase tracking-wider mb-2">Overdue</p>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.09em] text-overdue">Target dates to revisit</p>
                   <div className="space-y-1.5">
                     {overdueTasks.map(t => <TaskCard key={t.id} task={t} onClick={() => onTaskClick(t)} compact />)}
                   </div>
@@ -720,15 +3491,12 @@ function HomeView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                   <p className="text-[11px] font-mono text-pink-400 uppercase tracking-wider mb-2">Submitted for Review</p>
                   <div className="space-y-1.5">
                     {reviewTasks.map(t => (
-                      <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg bg-pink-500/[0.04] border border-pink-500/10">
+                      <div key={t.id} className="flex items-center gap-3 rounded-xl border border-review/20 bg-review/[0.045] p-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground">{t.title}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">{t.assignee} submitted · {t.org} · {t.area}</p>
                         </div>
-                        <div className="flex gap-1.5">
-                          <button onClick={() => onTaskClick(t)} className="px-3 py-1.5 rounded-md bg-emerald-500/10 text-emerald-400 text-[11px] font-medium hover:bg-emerald-500/20 transition-colors">Approve</button>
-                          <button onClick={() => onTaskClick(t)} className="px-3 py-1.5 rounded-md bg-muted text-muted-foreground text-[11px] hover:text-foreground transition-colors">Review</button>
-                        </div>
+                        <button onClick={() => onTaskClick(t)} className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-medium text-secondary-foreground shadow-sm transition-colors hover:bg-secondary">Open review</button>
                       </div>
                     ))}
                   </div>
@@ -736,145 +3504,384 @@ function HomeView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
               )}
             </div>
           </div>
-        </div>
-        <div className="space-y-6">
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={cardClass("recent-work", "binnie-card overflow-hidden")} style={cardStyle("recent-work")}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary" /><h2 className="text-sm font-semibold text-foreground">Recent Work</h2></div>
+              <button onClick={() => onNavigate("all-tasks")} className="text-[11px] font-medium text-primary hover:text-primary/80">View All</button>
+            </div>
+            <div className="p-2.5">
+              {TASKS.slice(0, 5).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="group flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-muted/55"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary"><ListTodo className="h-3.5 w-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="block truncate text-[11px] text-muted-foreground">{task.org} · {task.area}</span></span><ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></button>)}
+            </div>
+          </div>
+          <div className={cardClass("waiting-on-people", "binnie-card overflow-hidden")} style={cardStyle("waiting-on-people")}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <div className="h-1.5 w-1.5 rounded-full bg-info" />
               <h2 className="text-sm font-semibold text-foreground">Waiting on People</h2>
             </div>
             <div className="p-3 space-y-2">
               {waitingPeople.map(person => {
                 const color = getPersonColor(person.name);
                 return (
-                  <div key={person.name} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
+                  <button key={person.name} onClick={() => onNavigate("delegated")} className="flex w-full items-center gap-3 rounded-xl bg-muted/55 p-3 text-left transition-colors hover:bg-secondary">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                      style={personColorStyle(color)}>
                       {getInitials(person.name)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{person.name}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{person.outstanding} outstanding · Oldest: {person.oldest}</p>
                     </div>
-                    {person.overdue > 0 && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-400/10 text-red-400">{person.overdue} OD</span>}
-                  </div>
+                    {person.overdue > 0 && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">{person.overdue} due</span>}
+                  </button>
                 );
               })}
             </div>
           </div>
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={cardClass("this-week", "binnie-card overflow-hidden")} style={cardStyle("this-week")}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <div className="h-1.5 w-1.5 rounded-full bg-success" />
               <h2 className="text-sm font-semibold text-foreground">This Week</h2>
             </div>
             <div className="p-4 space-y-3">
               {weekOrgs.map(({ org, tasks, done }) => {
-                const c = ORG_COLORS[org];
-                const pct = Math.round((done / tasks) * 100);
+                const c = ORG_COLORS[org] || DEFAULT_ORG_COLOR;
+                const pct = tasks ? Math.round((done / tasks) * 100) : 0;
                 return (
-                  <div key={org}>
+                  <button key={org} onClick={() => onOrgClick(org)} className="block w-full rounded-lg p-1 text-left transition-colors hover:bg-muted/55">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={cn("text-[12px] font-medium", c.text)}>{org}</span>
                       <span className="text-[11px] font-mono text-muted-foreground">{done}/{tasks}</span>
                     </div>
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full transition-all", c.dot)} style={{ width: `${pct}%` }} />
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={cardClass("strategic-projects", "binnie-card overflow-hidden")} style={cardStyle("strategic-projects")}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
-              <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+              <div className="h-1.5 w-1.5 rounded-full bg-review" />
               <h2 className="text-sm font-semibold text-foreground">Strategic Projects</h2>
             </div>
             <div className="p-3 space-y-2">
-              {STRATEGIC_PROJECTS.map(proj => {
-                const c = ORG_COLORS[proj.org];
+              {strategicProjects.map(proj => {
+                const c = ORG_COLORS[proj.org] || DEFAULT_ORG_COLOR;
                 return (
-                  <div key={proj.id} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
+                  <button key={proj.id} onClick={() => onProjectClick(proj.id)} className="w-full rounded-lg bg-muted/30 p-3 text-left transition-colors hover:bg-muted/50">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <p className="text-[13px] font-medium text-foreground leading-snug">{proj.name}</p>
                       <span className={cn("text-[10px] font-mono px-1.5 py-0.5 rounded", c.bg, c.text)}>{proj.progress}%</span>
                     </div>
                     <div className="h-1 bg-muted rounded-full overflow-hidden mb-2">
-                      <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${proj.progress}%` }} />
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${proj.progress}%` }} />
                     </div>
                     <div className="flex items-center gap-2">
                       <OrgBadge org={proj.org} />
                       <span className="text-[11px] text-muted-foreground ml-auto">{proj.tasks - proj.done} remaining</span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
+          <div className={cardClass("agenda", "binnie-card overflow-hidden")} style={cardStyle("agenda")}>
+            <div className="flex items-center gap-2 border-b border-border px-5 py-4"><div className="h-1.5 w-1.5 rounded-full bg-info" /><div><h2 className="text-sm font-semibold text-foreground">Agenda</h2><p className="text-[10px] text-muted-foreground">Time-based commitments · Today</p></div></div>
+            <div className="divide-y divide-border px-4 py-1">
+              {getTasksForToday(TASKS, currentUserId).slice(0, 4).map(task => (
+                <button key={task.id} onClick={() => onTaskClick(task)} className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/45">
+                  <span className="w-12 flex-shrink-0 text-[11px] font-medium text-info">{task.startDate ? "Today" : "All day"}</span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="block truncate text-[11px] text-muted-foreground">{task.org} · {task.area}</span></span><ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={cardClass("needs-my-review", "binnie-card overflow-hidden")} style={cardStyle("needs-my-review")}>
+            <div className="flex items-center gap-2 border-b border-border px-5 py-4"><div className="h-1.5 w-1.5 rounded-full bg-review" /><h2 className="text-sm font-semibold text-foreground">Needs My Review</h2></div>
+            <div className="p-3 space-y-1.5">
+              {reviewTasks.length ? reviewTasks.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="flex w-full items-center gap-3 rounded-xl bg-review/[0.05] p-3 text-left transition-colors hover:bg-review/[0.10]"><span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-review/15 text-review"><Eye className="h-3.5 w-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="block truncate text-[11px] text-muted-foreground">{task.assignee} · {task.org}</span></span><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /></button>) : <p className="px-2 py-5 text-center text-[12px] text-muted-foreground">Nothing waiting for your review.</p>}
+            </div>
+          </div>
+          <div className={cardClass("follow-up", "binnie-card overflow-hidden")} style={cardStyle("follow-up")}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-warning" /><h2 className="text-sm font-semibold text-foreground">Follow-Up</h2></div><button onClick={() => onNavigate("followup")} className="text-[11px] font-medium text-primary hover:text-primary/80">View Follow-Ups</button></div>
+            <div className="p-3 space-y-2">
+              {FOLLOWUP_DATA.slice(0, 3).map(person => { const overdue = person.items.filter(item => item.status === "overdue").length; const oldest = Math.max(...person.items.map(item => item.daysWaiting)); return <button key={person.person} onClick={() => onNavigate("followup")} className="flex w-full items-center gap-3 rounded-xl bg-muted/45 p-3 text-left transition-colors hover:bg-muted/75"><Avatar name={person.person} size="sm" /><span className="min-w-0 flex-1"><span className="block text-[13px] font-medium text-foreground">{person.person}</span><span className="block text-[11px] text-muted-foreground">{person.items.length} items · Oldest waiting: {oldest} days</span></span>{overdue > 0 && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">{overdue} overdue</span>}</button>; })}
+            </div>
+          </div>
+          <div className={cardClass("recently-completed", "binnie-card overflow-hidden")} style={cardStyle("recently-completed")}>
+            <div className="flex items-center gap-2 border-b border-border px-5 py-4"><div className="h-1.5 w-1.5 rounded-full bg-success" /><h2 className="text-sm font-semibold text-foreground">Recently Completed</h2></div>
+            <div className="p-3 space-y-1.5">
+              {completedTasks.length ? completedTasks.slice(0, 3).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-success/[0.06]"><CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" /><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="block text-[11px] text-muted-foreground">{task.org} · {task.area}</span></span><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /></button>) : <p className="px-2 py-5 text-center text-[12px] text-muted-foreground">Nothing to show just yet.</p>}
+            </div>
+          </div>
+          <div className={cardClass("organization-workload", "binnie-card overflow-hidden")} style={cardStyle("organization-workload")}>
+            <div className="flex items-center gap-2 border-b border-border px-5 py-4"><div className="h-1.5 w-1.5 rounded-full bg-primary" /><h2 className="text-sm font-semibold text-foreground">Organization Workload</h2></div>
+            <div className="p-4 space-y-3">
+              {ORGS_META.map(meta => { const org = meta.name; const active = TASKS.filter(task => task.org === org && task.status !== "done").length; const total = TASKS.filter(task => task.org === org).length; const color = ORG_COLORS[org] || DEFAULT_ORG_COLOR; return <button key={org} onClick={() => onOrgClick(org)} className="block w-full rounded-xl p-1 text-left transition-colors hover:bg-muted/55"><div className="mb-1.5 flex items-center justify-between"><span className={cn("text-[12px] font-medium", color.text)}>{org}</span><span className="text-[11px] text-muted-foreground">{active} active</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${total ? Math.round((active / total) * 100) : 0}%` }} /></div></button>; })}
+            </div>
+          </div>
         </div>
-      </div>
+      <HomeLayoutDrawer open={isCustomizing} cards={homeCards} onToggle={toggleCard} onMove={moveCard} onReset={() => setHomeCards(DEFAULT_HOME_CARDS)} onClose={() => setIsCustomizing(false)} />
     </div>
   );
 }
 
 // ─── SMART INBOX VIEW ─────────────────────────────────────────────────────────
 
-interface ParsedTask { title: string; org: OrgName; area: AreaName; assignee?: string; deadline?: string; priority: Priority; originalText: string; link?: string }
+type CaptureConfidence = "high" | "medium" | "low" | "unknown";
+type CaptureDateKind = "deadline" | "target" | "follow_up" | "start";
+interface ParsedTask {
+  title: string;
+  org?: OrgName;
+  area?: AreaName;
+  involvedAreas?: AreaName[];
+  assignee?: string;
+  assigneeIds?: string[];
+  contributorIds?: string[];
+  currentStep?: string;
+  deadline?: string;
+  deadlineDate?: string;
+  targetDate?: string;
+  targetDateISO?: string;
+  startDate?: string;
+  followUpDate?: string;
+  estimatedMinutes?: number;
+  suggestedEstimatedMinutes?: number;
+  dateISO?: string;
+  dateKind?: CaptureDateKind;
+  priority: Priority;
+  priorityExplicit?: boolean;
+  originalText: string;
+  link?: string;
+  project?: string;
+  suggestedStatus?: TaskStatus;
+  blockedByTitle?: string;
+  notes?: string;
+  orgConfidence: CaptureConfidence;
+  areaConfidence: CaptureConfidence;
+  assigneeConfidence: CaptureConfidence;
+  dateConfidence: CaptureConfidence;
+  overallConfidence: CaptureConfidence;
+  orgReason?: string;
+  areaReason?: string;
+  assigneeReason?: string;
+  unmatchedAssigneeName?: string;
+}
 
-const DEMO_PARSED: ParsedTask[] = [
-  { title: "Review website accommodation prices", org: "Villa Khayangan", area: "Marketing", assignee: "Bu Desti", deadline: "Wednesday", priority: "high", originalText: "ask Bu Desti to check website prices by Wednesday https://example.com", link: "https://example.com" },
-  { title: "Fix purchasing settlement receipt flow", org: "Villa Khayangan", area: "System Development", priority: "high", deadline: "Tomorrow", originalText: "fix purchasing receipt flow because finance needs to calculate money return" },
-  { title: "Check expired medicine inventory", org: "Apotik", area: "Operations", priority: "urgent", deadline: "Tomorrow", originalText: "tomorrow check apotik expired medicine issue" },
-];
-
-function InboxView() {
+function InboxView({ projectContext, onOpenTask }: { projectContext?: ProjectDTO; onOpenTask?: (task: Task) => void }) {
+  const currentUserId = useContext(CurrentUserContext);
   const [input, setInput] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [parsed, setParsed] = useState<ParsedTask[]>([]);
-  const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
+  const [parsed, setParsed] = useState<InlineCapturePreview[]>([]);
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [message, setMessage] = useState("");
+  const [undoTaskIds, setUndoTaskIds] = useState<string[]>([]);
 
   function handleProcess() {
     if (!input.trim()) return;
     setProcessing(true);
-    setTimeout(() => { setProcessing(false); setParsed(DEMO_PARSED); }, 1800);
+    setTimeout(() => {
+      const previews = createCapturePreviews(input, projectContext?.organization as OrgName | undefined, projectContext?.leadArea as AreaName | undefined, projectContext?.name, currentUserId);
+      if (!previews.length || previews.every(preview => !preview.title.trim())) {
+        if (taskStoreUsesServer) void saveInboxCaptureAction({ rawText: input }).then(result => {
+          if (result.ok) {
+            applyCanonicalInboxCapture(result.data.capture, result.revision);
+            setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+          } else setMessage(result.message);
+        });
+        else setMessage("Saved to Inbox. Binnie couldn't fully organize this yet.");
+        setProcessing(false);
+        return;
+      }
+      void addCaptureTaskMatches(previews).then((withMatches) => {
+        setParsed(withMatches);
+        setEditing(null);
+        setProcessing(false);
+      }).catch(() => {
+        setParsed(previews);
+        setEditing(null);
+        setProcessing(false);
+      });
+    }, 700);
+  }
+
+  function showSaveMessage(notice: string, taskIds: string[]) {
+    setMessage(notice);
+    setUndoTaskIds(taskIds);
+    window.setTimeout(() => {
+      setMessage("");
+      setUndoTaskIds([]);
+    }, 5000);
+  }
+
+  async function undoSave() {
+    if (taskStoreUsesServer && undoTaskIds.length) {
+      const result = await undoCaptureAction({ taskIds: undoTaskIds });
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      const deleted = new Set(result.data.deletedTaskIds);
+      TASKS = TASKS.filter(task => !deleted.has(task.id));
+      publishTaskStore();
+    } else {
+      undoTaskIds.forEach(deleteTask);
+    }
+    setUndoTaskIds([]);
+    setMessage("Undone");
+    window.setTimeout(() => setMessage(""), 1800);
+  }
+
+  function addAttachments(files: FileList | null) {
+    if (!files?.length) return;
+    const next = Array.from(files).slice(0, 4);
+    setAttachments(current => [...current, ...next.map(file => file.name)].slice(0, 4));
+    setAttachmentFiles(current => [...current, ...next].slice(0, 4));
+  }
+
+  function addLink() {
+    const link = linkDraft.trim();
+    if (!link) return;
+    setAttachments(current => [...current, link].slice(0, 4));
+    setLinkDraft("");
+    setShowLinkInput(false);
+  }
+
+  function updateParsed(index: number, patch: Partial<InlineCapturePreview>) {
+    setParsed(current => current.map((task, taskIndex) => taskIndex === index ? { ...task, ...patch } : task));
+  }
+
+  async function addParsedAsContext(index: number, taskId: string) {
+    const preview = parsed[index];
+    const existing = TASKS.find(task => task.id === taskId);
+    if (!preview || !existing) { setMessage("That task is no longer available."); return; }
+    const text = preview.notes?.trim() || preview.originalText.trim();
+    if (!text) return;
+    if (taskStoreUsesServer) {
+      const result = await postTaskUpdateAction({ taskId, expectedVersion: existing.version, text });
+      if (!result.ok) { setMessage(result.message); return; }
+      applyCanonicalTask(result.data, result.revision);
+    } else {
+      updateTask(taskId, { notes: [existing.notes, text].filter(Boolean).join("\n") });
+    }
+    setParsed(current => current.filter((_, taskIndex) => taskIndex !== index));
+    setEditing(null);
+    setMessage("Added as context to the existing task.");
+  }
+
+  async function addParsedAsCriterion(index: number, taskId: string) {
+    const preview = parsed[index];
+    const existing = TASKS.find(task => task.id === taskId);
+    if (!preview || !existing) { setMessage("That task is no longer available."); return; }
+    const title = preview.title.trim();
+    if (!title) return;
+    if (taskStoreUsesServer) {
+      const result = await addChecklistItemAction({ taskId, expectedVersion: existing.version, title });
+      if (!result.ok) { setMessage(result.message); return; }
+      applyCanonicalTask(result.data, result.revision);
+    } else {
+      updateTask(taskId, { checklistItems: [...(existing.checklistItems || []), { id: `criterion-context-${taskId}-${existing.checklistItems?.length || 0}`, title, position: existing.checklistItems?.length || 0 }] });
+    }
+    setParsed(current => current.filter((_, taskIndex) => taskIndex !== index));
+    setEditing(null);
+    setMessage("Added as a completion criterion.");
+  }
+
+  async function confirmTask(index: number) {
+    const task = parsed[index];
+    if (!task?.title.trim()) return;
+    if (task.captureMatch?.kind === "likely_duplicate" && !task.duplicateOverride) {
+      setMessage("Choose Open existing, Add as context, or Create anyway first.");
+      return;
+    }
+    rememberCaptureCorrection(task.originalText, { org: task.org, area: task.area, assignee: task.assignee });
+    let created: Task;
+    try { created = taskStoreUsesServer ? await saveCapturedTaskToServer(task, projectContext ? { projectId: projectContext.id, project: projectContext.name, org: projectContext.organization as OrgName, area: projectContext.leadArea as AreaName | undefined } : undefined, attachmentFiles) : saveCapturedTask(task, attachments, projectContext ? { project: projectContext.name, area: projectContext.leadArea as AreaName | undefined } : undefined, currentUserId); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Binnie could not save this task yet."); return; }
+    if (taskStoreUsesServer && CANONICAL_INBOX_CAPTURES.some(capture => capture.rawText === task.originalText)) {
+      const capture = CANONICAL_INBOX_CAPTURES.find(item => item.rawText === task.originalText);
+      if (capture) {
+        const resolved = await resolveInboxCaptureAction({ captureId: capture.id });
+        if (resolved.ok) removeCanonicalInboxCapture(capture.id, resolved.revision);
+      }
+    }
+    setParsed(current => current.filter((_, taskIndex) => taskIndex !== index));
+    setEditing(null);
+    showSaveMessage(`Added to Binnie${task.org ? ` · ${task.org}` : " · Inbox"}${task.area ? ` · ${task.area}` : ""}`, [created.id]);
+  }
+
+  async function confirmAll() {
+    if (parsed.some(task => task.captureMatch?.kind === "likely_duplicate" && !task.duplicateOverride)) {
+      setMessage("Review the likely duplicate before confirming all tasks.");
+      return;
+    }
+    const tasks = parsed.filter(task => task.title.trim());
+    const created: Task[] = [];
+    for (const task of tasks) {
+      rememberCaptureCorrection(task.originalText, { org: task.org, area: task.area, assignee: task.assignee });
+      try { created.push(taskStoreUsesServer ? await saveCapturedTaskToServer(task, projectContext ? { projectId: projectContext.id, project: projectContext.name, org: projectContext.organization as OrgName, area: projectContext.leadArea as AreaName | undefined } : undefined, attachmentFiles) : saveCapturedTask(task, attachments, projectContext ? { project: projectContext.name, area: projectContext.leadArea as AreaName | undefined } : undefined, currentUserId)); }
+      catch (error) { setMessage(error instanceof Error ? error.message : "Binnie could not save every task yet."); break; }
+    }
+    setParsed([]);
+    setInput("");
+    setEditing(null);
+    if (taskStoreUsesServer && created.length) {
+      const relatedCaptures = CANONICAL_INBOX_CAPTURES.filter(capture => tasks.some(task => task.originalText === capture.rawText));
+      for (const capture of relatedCaptures) {
+        const resolved = await resolveInboxCaptureAction({ captureId: capture.id });
+        if (resolved.ok) removeCanonicalInboxCapture(capture.id, resolved.revision);
+      }
+    }
+    showSaveMessage(`${tasks.length} tasks added to your workspace.`, created.map(task => task.id));
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Smart Inbox</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Capture Anything</h1>
-        <p className="text-sm text-muted-foreground mt-1">Type it messy. AI will organize it.</p>
+    <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
+      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+        <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Smart Inbox</p>
+        <h1 className="binnie-heading text-3xl font-bold text-foreground">A place to set it down.</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Write whatever is on your mind. Tasks, reminders, ideas, follow-ups, or anything you want to remember. Binnie will turn it into clear next steps.</p>
+        {projectContext && <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary"><FolderKanban className="h-3 w-3" />Adding work to {projectContext.name}</p>}
+        </div>
+        {message && <span role="status" className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success">{message}{undoTaskIds.length > 0 && <button onClick={() => void undoSave()} className="font-semibold underline underline-offset-2">Undo</button>}</span>}
       </div>
-      <div className="bg-card rounded-2xl border border-border overflow-hidden mb-6 focus-within:border-primary/40 transition-colors">
+      {taskStoreUsesServer && CANONICAL_INBOX_CAPTURES.length > 0 && <section className="mb-5 rounded-2xl border border-info/20 bg-info/[0.035] p-4"><div className="flex items-start gap-3"><Inbox className="mt-0.5 h-4 w-4 text-info" /><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">Saved thoughts</p><p className="mt-0.5 text-[10px] text-muted-foreground">Binnie kept these exactly as written until you are ready to organize them.</p></div></div><div className="mt-3 space-y-2">{CANONICAL_INBOX_CAPTURES.slice(0, 5).map(capture => <div key={capture.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"><p className="min-w-0 flex-1 truncate text-[11px] text-foreground">{capture.rawText}</p><button onClick={() => { setInput(capture.rawText); setMessage("Thought opened. Edit it if needed, then organize it when ready."); }} className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary">Open</button></div>)}</div></section>}
+      <div className="binnie-card mb-6 overflow-hidden focus-within:border-primary/40">
         <textarea value={input} onChange={e => setInput(e.target.value)}
-          placeholder={"Dump anything you need to remember or do…\n\nTry: \"ask Bu Desti to check website prices by Wednesday https://example.com\"\nOr: \"fix purchasing receipt flow because finance needs to calculate money return\""}
-          className="w-full bg-transparent text-foreground text-sm leading-relaxed p-6 resize-none outline-none placeholder-muted-foreground min-h-[160px]" />
+          placeholder="Write whatever is on your mind…"
+          className="min-h-[180px] w-full resize-none bg-transparent p-5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground sm:p-6" />
+        {attachments.length > 0 && <div className="flex flex-wrap gap-1.5 px-4 pb-3 sm:px-6">{attachments.map((attachment, index) => <span key={`${attachment}-${index}`} className="inline-flex max-w-full truncate rounded-full bg-secondary px-2.5 py-1 text-[10px] text-secondary-foreground">{attachment}</span>)}</div>}
         <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
           <div className="flex items-center gap-1">
-            {[{ icon: <Paperclip className="w-3.5 h-3.5" />, label: "File" }, { icon: <Link2 className="w-3.5 h-3.5" />, label: "Link" }, { icon: <FileText className="w-3.5 h-3.5" />, label: "Doc" }].map(({ icon, label }) => (
-              <button key={label} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">{icon} {label}</button>
-            ))}
+            <label className="flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Paperclip className="w-3.5 h-3.5" /> File<input className="sr-only" type="file" multiple onChange={event => addAttachments(event.target.files)} /></label>
+            <button onClick={() => setShowLinkInput(current => !current)} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Link2 className="w-3.5 h-3.5" /> Link</button>
+            <label className="flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><FileText className="w-3.5 h-3.5" /> Doc<input className="sr-only" type="file" accept=".pdf,.doc,.docx,.txt,.md" multiple onChange={event => addAttachments(event.target.files)} /></label>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {input && <span className="text-[11px] font-mono text-muted-foreground">{input.length} chars</span>}
             <button onClick={handleProcess} disabled={!input.trim() || processing}
               className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                input.trim() && !processing ? "bg-primary text-white hover:bg-primary/80 shadow-lg shadow-primary/20" : "bg-muted text-muted-foreground cursor-not-allowed")}>
-              {processing ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Organizing…</> : <><Sparkles className="w-3.5 h-3.5" />Organize with AI</>}
+                input.trim() && !processing ? "binnie-capture-organize bg-primary text-primary-foreground hover:bg-primary/85" : "cursor-not-allowed bg-muted text-muted-foreground")}>
+              {processing ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Organizing…</> : <><Sparkles className="w-3.5 h-3.5" />Organize with Binnie</>}
             </button>
           </div>
         </div>
+        {showLinkInput && <div className="flex items-center gap-2 border-t border-border bg-muted/25 px-4 py-3 sm:px-6"><Link2 className="h-3.5 w-3.5 flex-shrink-0 text-info" /><input autoFocus value={linkDraft} onChange={event => setLinkDraft(event.target.value)} onKeyDown={event => event.key === "Enter" && addLink()} placeholder="Paste a link" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" /><button onClick={addLink} disabled={!linkDraft.trim()} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary disabled:opacity-45">Add link</button></div>}
       </div>
       {processing && (
-        <div className="bg-card rounded-xl border border-primary/20 p-6 mb-6">
+        <div className="binnie-card mb-6 border-primary/20 p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <Zap className="w-4 h-4 text-primary animate-pulse" />
+              <Sparkles className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">AI is reading your input…</p>
-              <p className="text-[11px] text-muted-foreground">Detecting tasks, people, deadlines, and context</p>
+              <p className="text-sm font-medium text-foreground">Put it down. Binnie sorts it out.</p>
+              <p className="text-[11px] text-muted-foreground">Looking for tasks, people, dates, and helpful context</p>
             </div>
           </div>
           <div className="space-y-2">
@@ -890,43 +3897,24 @@ function InboxView() {
       {parsed.length > 0 && !processing && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider">AI Found {parsed.length} Tasks</p>
-            <button onClick={() => setConfirmed(new Set(parsed.map((_, i) => i)))} className="text-[11px] text-primary hover:text-primary/80 transition-colors">Confirm All</button>
+            <p className="text-[11px] font-medium text-muted-foreground">Binnie found {parsed.length} {parsed.length === 1 ? "task" : "tasks"}</p>
+            {parsed.length > 1 && <button onClick={() => void confirmAll()} className="text-[11px] font-medium text-primary transition-colors hover:text-primary/80">Confirm All</button>}
           </div>
           <div className="space-y-3">
-            {parsed.map((pt, i) => {
-              const isConfirmed = confirmed.has(i);
-              return (
-                <div key={i} className={cn("rounded-xl border transition-all duration-300", isConfirmed ? "bg-emerald-500/5 border-emerald-500/20 opacity-60" : "bg-card border-border hover:border-white/10")}>
-                  <div className="p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                          <OrgBadge org={pt.org} /><AreaBadge area={pt.area} /><PriorityBadge priority={pt.priority} />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">{pt.title}</p>
-                        <div className="flex items-center gap-4 mt-2 flex-wrap">
-                          {pt.assignee && <div className="flex items-center gap-1.5"><Avatar name={pt.assignee} size="xs" /><span className="text-[11px] text-muted-foreground">Assigned to {pt.assignee}</span></div>}
-                          {pt.deadline && <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" />Due {pt.deadline}</span>}
-                          {pt.link && <span className="text-[11px] text-sky-400 flex items-center gap-1"><Globe className="w-3 h-3" />Website attached</span>}
-                        </div>
-                        <div className="mt-2 px-2 py-1.5 rounded bg-muted/40 border-l-2 border-muted">
-                          <p className="text-[11px] text-muted-foreground italic">&ldquo;{pt.originalText}&rdquo;</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1.5 flex-shrink-0">
-                        {isConfirmed
-                          ? <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[11px] font-medium"><Check className="w-3 h-3" /> Saved</div>
-                          : <>
-                            <button onClick={() => setConfirmed(prev => new Set([...prev, i]))} className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/20 transition-colors">Confirm</button>
-                            <button className="px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-[11px] hover:text-foreground transition-colors">Edit</button>
-                          </>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {parsed.map((preview, index) => <CapturedWorkReviewCard
+              key={`${preview.originalText}-${index}`}
+              preview={preview}
+              editing={editing === index}
+              currentUserId={currentUserId}
+              onChange={patch => updateParsed(index, patch)}
+              onConfirm={() => void confirmTask(index)}
+              onDiscard={() => setParsed(current => current.filter((_, taskIndex) => taskIndex !== index))}
+              onToggleEdit={() => setEditing(editing === index ? null : index)}
+              onOpenExisting={taskId => { const task = TASKS.find(candidate => candidate.id === taskId); if (task) onOpenTask?.(task); }}
+              onAddAsContext={taskId => void addParsedAsContext(index, taskId)}
+              onAddAsCriterion={taskId => void addParsedAsCriterion(index, taskId)}
+              onCreateAnyway={() => updateParsed(index, { duplicateOverride: true })}
+            />)}
           </div>
         </div>
       )}
@@ -936,51 +3924,58 @@ function InboxView() {
 
 // ─── DELEGATED VIEW ───────────────────────────────────────────────────────────
 
-function DelegatedView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const delegated = TASKS.filter(t => t.isDelegated && t.assignee);
+function DelegatedView({ onTaskClick, onFollowUp, onPrincipalClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; onFollowUp: () => void; onPrincipalClick: (principal: DirectoryPerson) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const delegationOwnerId = principalId || currentUserId;
+  const delegated = getDelegatedTasks(tasks || TASKS, delegationOwnerId);
   const byPerson: Record<string, Task[]> = {};
-  delegated.forEach(t => { if (t.assignee) { byPerson[t.assignee] = [...(byPerson[t.assignee] || []), t]; } });
+  delegated.forEach(task => {
+    task.assignments
+      ?.filter(assignment => assignment.assignedByPrincipalId === delegationOwnerId && assignment.principalId !== delegationOwnerId)
+      .forEach(assignment => { byPerson[assignment.name] = [...(byPerson[assignment.name] || []), task]; });
+  });
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
+    <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">
+      {!embedded && <div className="mb-8">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Delegated</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Delegated Work</h1>
-        <p className="text-sm text-muted-foreground mt-1">{delegated.length} tasks across {Object.keys(byPerson).length} people</p>
-      </div>
+        <p className="text-sm text-muted-foreground mt-1">{delegated.length} tasks across {Object.keys(byPerson).length} recipients</p>
+      </div>}
       <div className="space-y-6">
         {Object.entries(byPerson).map(([person, tasks]) => {
           const color = getPersonColor(person);
-          const overdue = tasks.filter(t => t.isOverdue).length;
+          const overdue = tasks.filter(isTaskOverdue).length;
+          const principal = getDirectoryPerson(person);
           return (
-            <div key={person} className="bg-card rounded-xl border border-border overflow-hidden">
+            <div key={person} className="binnie-card overflow-hidden">
               <div className="flex items-center gap-4 px-5 py-4 border-b border-border">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                  style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                  style={personColorStyle(color)}>
                   {getInitials(person)}
                 </div>
-                <div className="flex-1">
+                <button onClick={() => principal && onPrincipalClick(principal)} disabled={!principal} className="flex-1 text-left disabled:cursor-default">
                   <h2 className="text-sm font-semibold text-foreground">{person}</h2>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{tasks.length} active · Last update: {tasks[0]?.lastUpdate || "Unknown"}</p>
-                </div>
+                </button>
                 <div className="flex items-center gap-2">
-                  {overdue > 0 && <span className="text-[10px] font-mono px-2 py-1 rounded-md bg-red-400/10 text-red-400">{overdue} overdue</span>}
-                  <span className="text-[10px] font-mono px-2 py-1 rounded-md bg-muted text-muted-foreground">{tasks.length} tasks</span>
-                  <button className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"><Send className="w-3.5 h-3.5" /></button>
+                  {overdue > 0 && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">{overdue} to revisit</span>}
+                  <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{tasks.length} tasks</span>
+                  <button onClick={onFollowUp} aria-label={`Follow up with ${person}`} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"><Send className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
               <div className="p-3 space-y-1.5">
                 {tasks.map(task => (
                   <button key={task.id} onClick={() => onTaskClick(task)}
-                    className={cn("w-full text-left flex items-center gap-3 p-3 rounded-lg border transition-all hover:border-white/10 hover:bg-white/[0.02]", task.isOverdue ? "bg-red-500/[0.04] border-red-500/15" : "bg-muted/20 border-transparent")}>
+                    className={cn("flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/25 hover:bg-primary/[0.025]", task.isOverdue ? "border-overdue/20 bg-overdue/[0.035]" : "border-transparent bg-muted/45")}>
                     <PriorityDot priority={task.priority} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium text-foreground truncate">{task.title}</p>
                       <div className="flex items-center gap-2 mt-0.5"><OrgBadge org={task.org} /><span className="text-muted-foreground text-[11px]">·</span><AreaBadge area={task.area} /></div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      {task.waitingSince && <p className="text-[11px] font-mono text-muted-foreground">Waiting {task.waitingSince}</p>}
-                      {task.isOverdue && <p className="text-[10px] font-mono text-red-400">Response overdue</p>}
+                      {task.waitingSince && <p className="text-[11px] text-muted-foreground">{humanizeWaitingSince(task.waitingSince)}</p>}
+                      {task.isOverdue && <p className="text-[10px] font-medium text-overdue">Response due for a check-in</p>}
                       {task.deadline && !task.isOverdue && <p className="text-[11px] font-mono text-muted-foreground">Due {task.deadline}</p>}
                     </div>
                   </button>
@@ -996,20 +3991,46 @@ function DelegatedView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── NEEDS MY REVIEW VIEW ─────────────────────────────────────────────────────
 
-function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const reviewTasks = TASKS.filter(t => t.status === "review" && t.nextActionBy === "me");
+function ReviewView({ onTaskClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
+  const [, setRevision] = useState(0);
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const reviewTasks = getReviewTasks(tasks || TASKS, principalId || currentUserId);
+  async function approve(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: true });
+      if (result.ok) applyCanonicalTask(result.data, result.revision);
+      setRevision(current => current + 1);
+      return;
+    }
+    markTaskDone(task, "Approved just now");
+    commitTaskStore();
+    setRevision(current => current + 1);
+  }
+  async function requestRevision(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const note = window.prompt("What needs revision?")?.trim();
+      if (!note) return;
+      const result = await decideTaskReviewAction({ taskId: task.id, expectedVersion: task.version, approve: false, revisionNote: note });
+      if (result.ok) applyCanonicalTask(result.data, result.revision);
+      setRevision(current => current + 1);
+      return;
+    }
+    Object.assign(task, { status: "ready" as TaskStatus, isWaiting: false, nextActionBy: task.assignee || "me", lastUpdate: "Revision requested just now" });
+    commitTaskStore();
+    setRevision(current => current + 1);
+  }
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-8">
+    <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
+      {!embedded && <div className="mb-8">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Review Queue</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Needs My Review</h1>
         <p className="text-sm text-muted-foreground mt-1">{reviewTasks.length} submissions waiting for your response</p>
-      </div>
+      </div>}
       <div className="space-y-4">
         {reviewTasks.map(task => {
           const submitActivity = task.activity?.find(a => a.type === "submitted");
           return (
-            <div key={task.id} className="bg-card rounded-xl border border-pink-500/15 overflow-hidden hover:border-pink-500/25 transition-colors">
+            <div key={task.id} className="binnie-card overflow-hidden border-review/20">
               <div className="p-5">
                 <div className="flex items-start gap-3 mb-3">
                   {task.assignee && <Avatar name={task.assignee} size="md" />}
@@ -1033,17 +4054,15 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 )}
                 {task.links && (
                   <div className="flex gap-2 mb-4">
-                    {task.links.map((l, i) => (
-                      <a key={i} href={l.url} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-muted/40 border border-border text-[11px] text-sky-400 hover:text-sky-300 transition-colors">
-                        <LinkIcon type={l.type} />{l.label}
-                      </a>
+                    {task.links.map((l, i) => l.url === "#" ? <span key={i} className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground"><LinkIcon type={l.type} />{l.label} · not connected</span> : (
+                      <a key={i} href={l.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] text-info transition-colors hover:text-foreground"><LinkIcon type={l.type} />{l.label}</a>
                     ))}
                   </div>
                 )}
                 <div className="flex gap-2">
-                  <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 text-[13px] font-medium hover:bg-emerald-500/20 transition-colors"><Check className="w-4 h-4" /> Approve</button>
-                  <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 text-[13px] font-medium hover:bg-amber-500/20 transition-colors"><RotateCcw className="w-4 h-4" /> Request Revision</button>
-                  <button onClick={() => onTaskClick(task)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-muted text-muted-foreground text-[13px] hover:text-foreground transition-colors ml-auto"><Eye className="w-4 h-4" /> Open Details</button>
+                  <button onClick={() => void approve(task)} className="flex items-center gap-1.5 rounded-xl bg-success/10 px-4 py-2 text-[13px] font-medium text-success transition-colors hover:bg-success/15"><Check className="w-4 h-4" /> Approve</button>
+                  <button onClick={() => void requestRevision(task)} className="flex items-center gap-1.5 rounded-xl bg-warning/10 px-4 py-2 text-[13px] font-medium text-warning transition-colors hover:bg-warning/15"><RotateCcw className="w-4 h-4" /> Request Revision</button>
+                  <button onClick={() => onTaskClick(task)} className="ml-auto flex items-center gap-1.5 rounded-xl bg-muted px-4 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Eye className="w-4 h-4" /> Open Details</button>
                 </div>
               </div>
             </div>
@@ -1052,7 +4071,7 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
         {reviewTasks.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500/30" />
-            <p className="text-sm">No submissions waiting for review.</p>
+            <p className="text-sm">Nothing waiting for your review.</p>
           </div>
         )}
       </div>
@@ -1062,57 +4081,106 @@ function ReviewView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── WAITING VIEW ─────────────────────────────────────────────────────────────
 
-function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const [tab, setTab] = useState<"others" | "me" | "blocked" | "external">("others");
-  const tabs = [
-    { id: "others" as const, label: "Waiting on Others", tasks: TASKS.filter(t => t.isWaiting && t.isDelegated) },
-    { id: "me" as const, label: "Waiting on Me", tasks: TASKS.filter(t => t.status === "review" && t.nextActionBy === "me") },
-    { id: "blocked" as const, label: "Blocked", tasks: [] },
-    { id: "external" as const, label: "External", tasks: TASKS.filter(t => !t.isDelegated && t.isWaiting) },
+function WaitingView({ onTaskClick, embedded = false, tasks, attentionFilters, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; attentionFilters?: Pick<AttentionFilterState, "search" | "waitingKinds" | "followUpDueOnly">; principalId?: string }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [kindFilters, setKindFilters] = useState<WaitingFilterKey[]>([]);
+  const [organizationFilter, setOrganizationFilter] = useState<OrgName | "all">("all");
+  const [principalFilter, setPrincipalFilter] = useState("");
+  const [followUpDueOnly, setFollowUpDueOnly] = useState(false);
+  const sourceTasks = tasks || TASKS;
+  const waiting = getWaitingWork(sourceTasks, principalId || currentUserId);
+  const activeQuery = attentionFilters?.search ?? query;
+  const activeKindFilters = attentionFilters?.waitingKinds ?? kindFilters;
+  const activeFollowUpDueOnly = attentionFilters?.followUpDueOnly ?? followUpDueOnly;
+  const today = isoDate(getWorkspaceCalendarDate());
+  const filterOptions: Array<{ id: WaitingFilterKey; label: string; tasks: Task[] }> = [
+    { id: "others", label: "Waiting on others", tasks: waiting.waitingOnOthers },
+    { id: "me", label: "Waiting on me", tasks: waiting.waitingOnMe },
+    { id: "blocked", label: "Blocked", tasks: waiting.blocked },
+    { id: "external", label: "External", tasks: waiting.external },
   ];
-  const current = tabs.find(t => t.id === tab)!;
+  const kindsByTaskId = new Map<string, WaitingFilterKey[]>();
+  const addKind = (tasks: Task[], kind: WaitingFilterKey) => tasks.forEach(task => {
+    const current = kindsByTaskId.get(task.id) || [];
+    if (!current.includes(kind)) current.push(kind);
+    kindsByTaskId.set(task.id, current);
+  });
+  addKind(waiting.waitingOnOthers, "others");
+  addKind(waiting.waitingOnMe, "me");
+  addKind(waiting.blocked, "blocked");
+  addKind(waiting.external, "external");
+  const toggleKindFilter = (kind: WaitingFilterKey) => setKindFilters(current => current.includes(kind) ? current.filter(item => item !== kind) : [...current, kind]);
+  const isFollowUpDue = (task: Task) => Boolean(task.followUpDate && task.followUpDate <= today);
+  const downstreamBlockedCount = (task: Task) => sourceTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length;
+  const visibleTasks = waiting.all.filter(task => {
+    const kinds = kindsByTaskId.get(task.id) || [];
+    const searchable = [task.title, task.org, task.area, readableTaskNextAction(task), ...taskAssigneeNames(task)].join(" ").toLowerCase();
+    if (activeQuery.trim() && !searchable.includes(activeQuery.trim().toLowerCase())) return false;
+    if (activeKindFilters.length && !activeKindFilters.some(kind => kinds.includes(kind))) return false;
+    if (!attentionFilters && organizationFilter !== "all" && task.org !== organizationFilter) return false;
+    if (!attentionFilters && principalFilter && task.nextActionPrincipalId !== principalFilter && !getTaskAssigneeIds(task).includes(principalFilter)) return false;
+    if (activeFollowUpDueOnly && !isFollowUpDue(task)) return false;
+    return true;
+  }).sort((left, right) => {
+    const rank = (task: Task) => {
+      const kinds = kindsByTaskId.get(task.id) || [];
+      if (kinds.includes("me")) return 0;
+      if (kinds.includes("blocked") && downstreamBlockedCount(task) > 0) return 1;
+      if (isFollowUpDue(task)) return 2;
+      if (isTaskOverdue(task)) return 3;
+      if (kinds.includes("others")) return 4;
+      return 5;
+    };
+    const rankDifference = rank(left) - rank(right);
+    if (rankDifference) return rankDifference;
+    return (left.deadlineDate || "9999-12-31").localeCompare(right.deadlineDate || "9999-12-31");
+  });
+  const activeFilterCount = activeKindFilters.length + Number(organizationFilter !== "all") + Number(Boolean(principalFilter)) + Number(activeFollowUpDueOnly);
+  const clearFilters = () => { setKindFilters([]); setOrganizationFilter("all"); setPrincipalFilter(""); setFollowUpDueOnly(false); };
+
+  function waitingChips(task: Task) {
+    const kinds = kindsByTaskId.get(task.id) || [];
+    const chips: Array<{ label: string; className: string }> = [];
+    if (kinds.includes("me")) chips.push({ label: "Waiting on you", className: "bg-primary/10 text-primary" });
+    if (kinds.includes("blocked")) chips.push({ label: downstreamBlockedCount(task) ? `Blocked · ${downstreamBlockedCount(task)} downstream` : "Blocked", className: "bg-overdue/10 text-overdue" });
+    if (kinds.includes("external")) chips.push({ label: `Waiting on ${readableTaskNextAction(task)}`, className: "bg-info/10 text-info" });
+    if (kinds.includes("others")) chips.push({ label: `Waiting on ${readableTaskNextAction(task)}`, className: "bg-warning/10 text-warning" });
+    if (isFollowUpDue(task)) chips.push({ label: `Follow-up ${taskDateLabel(task.followUpDate)}`, className: "bg-info/10 text-info" });
+    if (isTaskOverdue(task)) chips.push({ label: "Overdue", className: "bg-overdue/10 text-overdue" });
+    return chips;
+  }
+
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
       <div className="mb-6">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Status Board</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Waiting</h1>
+        {!embedded && <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest">Status Board</p>}
+        <h2 className={cn("font-bold text-foreground", embedded ? "binnie-heading text-xl" : "mt-1 text-2xl")} style={{ fontFamily: embedded ? undefined : "var(--font-display)" }}>Waiting</h2>
+        <p className="mt-1 text-[12px] text-muted-foreground">Work that cannot move until something happens.</p>
       </div>
-      <div className="flex gap-1 mb-6 p-1 bg-muted/30 rounded-lg border border-border">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn("flex-1 py-2 px-3 rounded-md text-[12px] font-medium transition-all", tab === t.id ? "bg-card text-foreground shadow-sm border border-border" : "text-muted-foreground hover:text-foreground")}>
-            {t.label}
-            {t.tasks.length > 0 && <span className={cn("ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full", tab === t.id ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground")}>{t.tasks.length}</span>}
-          </button>
-        ))}
+      {!attentionFilters && <><div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search waiting work…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{query && <button onClick={() => setQuery("")} aria-label="Clear waiting search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div>
+        <button onClick={() => setFiltersOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filter · ${activeFilterCount}` : "Filter"}</button>
       </div>
+      {filtersOpen && <section className="mb-5 rounded-2xl border border-border bg-card p-3.5"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-semibold text-foreground">Refine waiting work</p>{activeFilterCount > 0 && <button onClick={clearFilters} className="text-[10px] font-medium text-muted-foreground hover:text-foreground">Clear all</button>}</div><div className="mt-3 grid gap-3 sm:grid-cols-2"><div><p className="mb-1.5 text-[10px] font-medium text-muted-foreground">Waiting context</p><div className="space-y-1.5">{filterOptions.map(option => <label key={option.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-foreground"><input type="checkbox" checked={kindFilters.includes(option.id)} onChange={() => toggleKindFilter(option.id)} className="accent-primary" /><span className="flex-1">{option.label}</span><span className="text-muted-foreground">{option.tasks.length}</span></label>)}<label className="flex cursor-pointer items-center gap-2 text-[11px] text-foreground"><input type="checkbox" checked={followUpDueOnly} onChange={event => setFollowUpDueOnly(event.target.checked)} className="accent-primary" /><span>Follow-up due</span></label></div></div><div className="space-y-2"><label className="block text-[10px] font-medium text-muted-foreground">Organization<select value={organizationFilter} onChange={event => setOrganizationFilter(event.target.value as OrgName | "all")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">All organizations</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label><label className="block text-[10px] font-medium text-muted-foreground">Person or team<select value={principalFilter} onChange={event => setPrincipalFilter(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{PEOPLE_DIRECTORY.filter(person => person.active).map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div></div></section>}</>}
       <div className="space-y-3">
-        {current.tasks.map(task => (
+        {visibleTasks.map(task => (
           <button key={task.id} onClick={() => onTaskClick(task)}
-            className="w-full text-left bg-card rounded-xl border border-border hover:border-white/10 hover:bg-white/[0.02] transition-all p-4">
+            className="binnie-card binnie-card-hover w-full p-4 text-left">
             <div className="flex items-start gap-3">
               <PriorityDot priority={task.priority} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground mb-1">{task.title}</p>
                 <div className="flex items-center gap-2 mb-2 flex-wrap"><OrgBadge org={task.org} /><AreaBadge area={task.area} /></div>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Next Action By", value: task.nextActionBy === "me" ? "You" : task.nextActionBy },
-                    { label: "Waiting Since", value: task.waitingSince || "—" },
-                    { label: "Response Due", value: task.responseDue || task.deadline || "—" },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <p className="text-[10px] font-mono text-muted-foreground uppercase">{label}</p>
-                      <p className="text-[12px] font-mono text-foreground mt-0.5">{value}</p>
-                    </div>
-                  ))}
-                </div>
+                <div className="flex flex-wrap gap-1.5">{waitingChips(task).map(chip => <span key={`${task.id}-${chip.label}`} className={cn("rounded-full px-2 py-1 text-[10px] font-medium", chip.className)}>{chip.label}</span>)}</div>
+                <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-muted-foreground"><span>Next: {readableTaskNextAction(task)}</span>{task.waitingSince && <><span className="text-border">·</span><span>{humanizeWaitingSince(task.waitingSince)}</span></>}{task.deadline && <><span className="text-border">·</span><span className={cn(isTaskOverdue(task) && "font-medium text-overdue")}>Due {task.deadline}</span></>}{task.blockedBy && <><span className="text-border">·</span><span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />{task.blockedBy.label}</span></>}</div>
               </div>
             </div>
           </button>
         ))}
-        {current.tasks.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground"><Hourglass className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Nothing here.</p></div>
+        {visibleTasks.length === 0 && (
+          <div className="py-12 text-center text-muted-foreground"><Hourglass className="mx-auto mb-3 h-10 w-10 opacity-20" /><p className="text-sm">No waiting work matches this view.</p><p className="mt-1 text-[11px]">Try another filter or clear your search.</p></div>
         )}
       </div>
     </div>
@@ -1122,13 +4190,15 @@ function WaitingView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
 
 function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const todayTasks = TASKS.filter(t => t.isToday && t.nextActionBy === "me");
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const todayTasks = getTasksForToday(TASKS, currentUserId);
+  const workspaceDate = getWorkspaceCalendarDate();
   return (
-    <div className="p-8 max-w-2xl mx-auto">
+    <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
       <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Monday, 12 Aug</p>
+        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">{formatWorkspaceDate(workspaceDate, { weekday: "long", day: "numeric", month: "short" })}</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Today</h1>
-        <p className="text-sm text-muted-foreground mt-1">{todayTasks.length} tasks · ~{todayTasks.reduce((a, t) => a + (t.estimatedHours || 0), 0)}h estimated</p>
+        <p className="text-sm text-muted-foreground mt-1">{formatTodayWorkload(todayTasks, currentUserId)}</p>
       </div>
       <div className="space-y-2">
         {todayTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}
@@ -1139,21 +4209,21 @@ function TodayView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── OVERDUE VIEW ─────────────────────────────────────────────────────────────
 
-function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  const overdue = TASKS.filter(t => t.isOverdue);
+function OverdueView({ onTaskClick, embedded = false, tasks }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[] }) {
+  const overdue = getOverdueTasks(tasks || TASKS);
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-red-400 uppercase tracking-widest mb-1">Attention Required</p>
+    <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
+      {!embedded && <div className="mb-8">
+        <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-overdue">A few dates to revisit</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Overdue</h1>
         <p className="text-sm text-muted-foreground mt-1">{overdue.length} tasks past their deadline</p>
-      </div>
+      </div>}
       <div className="space-y-2">
         {overdue.map(t => <TaskCard key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
         {overdue.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500/30" />
-            <p className="text-sm">Nothing overdue. Great job!</p>
+            <p className="text-sm">Nothing urgent right now.</p>
           </div>
         )}
       </div>
@@ -1161,46 +4231,192 @@ function OverdueView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   );
 }
 
-// ─── THIS WEEK VIEW ───────────────────────────────────────────────────────────
-
-const DAYS = ["Mon 12", "Tue 13", "Wed 14", "Thu 15", "Fri 16"];
-const WEEK_TASKS: Record<string, Task[]> = {
-  "Mon 12": TASKS.filter(t => t.isToday),
-  "Tue 13": TASKS.filter(t => t.id === "t11"),
-  "Wed 14": TASKS.filter(t => t.id === "t1" || t.id === "t8"),
-  "Thu 15": TASKS.filter(t => t.id === "t6"),
-  "Fri 16": TASKS.filter(t => t.id === "t7"),
+const ATTENTION_REASON_META: Record<AttentionReason, { label: string; className: string }> = {
+  follow_up: { label: "Follow up due", className: "bg-info/10 text-info" },
+  waiting_on_me: { label: "Waiting on you", className: "bg-primary/10 text-primary" },
+  blocked: { label: "Blocked", className: "bg-overdue/10 text-overdue" },
+  review: { label: "Review", className: "bg-review/10 text-review" },
+  overdue: { label: "Overdue", className: "bg-overdue/10 text-overdue" },
 };
 
+function taskMatchesAttentionSearch(task: Task, query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return [task.title, task.org, task.area, task.project || "", readableTaskNextAction(task), ...taskAssigneeNames(task)].join(" ").toLowerCase().includes(normalized);
+}
+
+function AttentionAllView({ onTaskClick, tasks, principalId }: { onTaskClick: (task: Task) => void; tasks?: Task[]; principalId?: string }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const attention = getAttentionWork(tasks || TASKS, principalId || currentUserId);
+  const order = ["overdue", "blocked", "review", "waiting_on_me", "follow_up"] as const;
+  const items = [...attention.allNow].sort((left, right) => {
+    const leftReasons = attention.reasonsByTaskId.get(left.id) || [];
+    const rightReasons = attention.reasonsByTaskId.get(right.id) || [];
+    return Math.min(...leftReasons.map(reason => order.indexOf(reason))) - Math.min(...rightReasons.map(reason => order.indexOf(reason)));
+  });
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><div className="space-y-2.5">{items.map(task => {
+    const reasons = attention.reasonsByTaskId.get(task.id) || [];
+    return <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} attentionReasons={reasons} />;
+  })}</div>{!items.length && <div className="py-16 text-center text-muted-foreground"><CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-success/40" /><p className="text-sm font-medium text-foreground">Nothing needs your attention right now.</p><p className="mt-1 text-[12px]">Binnie will keep the broader context in its own tabs until it needs a move from you.</p></div>}</div>;
+}
+
+function AttentionView({ tab, filters, profile, onTabChange, onFiltersChange, onTaskClick, onPrincipalClick }: { tab: AttentionTab; filters: AttentionFilterState; profile: UserProfile; onTabChange: (tab: AttentionTab) => void; onFiltersChange: (patch: Partial<AttentionFilterState>) => void; onTaskClick: (task: Task) => void; onPrincipalClick: (principal: DirectoryPerson) => void }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const authorizedOrganizationIds = new Set(profile.workspaces.map(workspace => workspace.organizationId));
+  const organizations = ORGS_META.filter(organization => authorizedOrganizationIds.has(organization.id));
+  const authorizedOrganizationNames = new Set(organizations.map(organization => organization.name));
+  const visiblePrincipalIds = new Set(TASKS.filter(task => !task.organizationId || authorizedOrganizationIds.has(task.organizationId)).flatMap(task => getTaskAttentionPrincipalIds(task)));
+  const principals = PEOPLE_DIRECTORY.filter(principal => principal.active && (principal.id === profile.directoryId || visiblePrincipalIds.has(principal.id) || principal.memberships.some(membership => authorizedOrganizationNames.has(membership.organization))));
+  const scopedTasks = filterAttentionTasks(TASKS, { organizationId: filters.organizationId || undefined, principalId: filters.principalId || undefined }).filter(task => taskMatchesAttentionSearch(task, filters.search));
+  // A selected principal turns Attention into that authorized Person or Team's
+  // operational lens. With no selection it remains the signed-in person's
+  // Attention, preserving the personal default.
+  const attentionActorId = filters.principalId || currentUserId;
+  const attention = getAttentionWork(scopedTasks, attentionActorId);
+  const waiting = getWaitingWork(scopedTasks, attentionActorId);
+  const delegated = getDelegatedTasks(scopedTasks, attentionActorId);
+  const review = getReviewTasks(scopedTasks, attentionActorId);
+  const overdue = getOverdueTasks(scopedTasks);
+  const followUpCount = new Set(getFollowUpNudgeCandidates(scopedTasks, attentionActorId).candidates.filter(candidate => candidate.kind === "follow_up").map(candidate => candidate.taskId)).size;
+  const hasFilters = Boolean(filters.search.trim() || filters.organizationId || filters.principalId || filters.waitingKinds.length || filters.followUpDueOnly);
+  const selectedOrganization = organizations.find(organization => organization.id === filters.organizationId);
+  const selectedPrincipal = principals.find(principal => principal.id === filters.principalId);
+  const waitingFilterOptions: Array<{ id: WaitingFilterKey; label: string; count: number }> = [
+    { id: "others", label: "Waiting on others", count: waiting.waitingOnOthers.length },
+    { id: "me", label: "Waiting on me", count: waiting.waitingOnMe.length },
+    { id: "blocked", label: "Blocked", count: waiting.blocked.length },
+    { id: "external", label: "External", count: waiting.external.length },
+  ];
+  const toggleWaitingKind = (kind: WaitingFilterKey) => onFiltersChange({ waitingKinds: filters.waitingKinds.includes(kind) ? filters.waitingKinds.filter(item => item !== kind) : [...filters.waitingKinds, kind] });
+  const tabs: Array<{ id: AttentionTab; label: string; count: number }> = [
+    { id: "all", label: "All", count: attention.allNow.length },
+    { id: "followup", label: "Follow Up", count: followUpCount },
+    { id: "waiting", label: "Waiting", count: waiting.all.length },
+    { id: "delegated", label: "Delegated", count: delegated.length },
+    { id: "review", label: "Review", count: review.length },
+    { id: "overdue", label: "Overdue", count: overdue.length },
+  ];
+  return <div><div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><div className="mb-5"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Attention</h1><p className="mt-1.5 text-sm text-muted-foreground">What needs a move from you now, with the rest of your management context close by.</p></div><div role="tablist" aria-label="Attention views" className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => onTabChange(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}{item.count > 0 && <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5 text-[9px]", tab === item.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.count}</span>}</button>)}</div><div className="mt-3 flex flex-wrap items-center gap-2"><div className="flex min-w-[12rem] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /><input value={filters.search} onChange={event => onFiltersChange({ search: event.target.value })} placeholder="Search attention…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{filters.search && <button onClick={() => onFiltersChange({ search: "" })} aria-label="Clear attention search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><label className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 text-[11px] text-muted-foreground"><Building2 className="h-3.5 w-3.5 shrink-0" /><span className="sr-only">Organization</span><select value={filters.organizationId} onChange={event => onFiltersChange({ organizationId: event.target.value })} className="max-w-44 bg-transparent text-[11px] font-medium text-foreground outline-none"><option value="">All organizations</option>{organizations.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><label className="flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 text-[11px] text-muted-foreground"><Users className="h-3.5 w-3.5 shrink-0" /><span className="sr-only">People and teams</span><select value={filters.principalId} onChange={event => onFiltersChange({ principalId: event.target.value })} className="max-w-48 bg-transparent text-[11px] font-medium text-foreground outline-none"><option value="">All people &amp; teams</option><optgroup label="People">{principals.filter(principal => principal.type === "person").map(principal => <option key={principal.id} value={principal.id}>{principal.name}</option>)}</optgroup><optgroup label="Teams">{principals.filter(principal => principal.type === "team").map(principal => <option key={principal.id} value={principal.id}>{principal.name}</option>)}</optgroup></select></label><button onClick={() => setFiltersOpen(current => !current)} aria-expanded={filtersOpen} className={cn("h-9 rounded-xl border px-3 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />Filters</button>{hasFilters && <button onClick={() => onFiltersChange(EMPTY_ATTENTION_FILTERS)} className="h-9 rounded-xl px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button>}</div>{filtersOpen && <section className="mt-2 rounded-xl border border-border bg-card p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-[11px] font-semibold text-foreground">Refine Attention</p><p className="mt-0.5 text-[10px] text-muted-foreground">{selectedOrganization?.name || "All organizations"}{selectedPrincipal ? ` · ${selectedPrincipal.name}` : ""}</p></div>{hasFilters && <button onClick={() => onFiltersChange(EMPTY_ATTENTION_FILTERS)} className="text-[10px] font-medium text-primary hover:text-primary/80">Clear all</button>}</div>{tab === "waiting" ? <div className="mt-3 grid gap-1.5 sm:grid-cols-2"><p className="sm:col-span-2 text-[10px] font-medium text-muted-foreground">Waiting context</p>{waitingFilterOptions.map(option => <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[11px] text-foreground hover:bg-muted/55"><input type="checkbox" checked={filters.waitingKinds.includes(option.id)} onChange={() => toggleWaitingKind(option.id)} className="accent-primary" /><span className="flex-1">{option.label}</span><span className="text-muted-foreground">{option.count}</span></label>)}<label className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[11px] text-foreground hover:bg-muted/55"><input type="checkbox" checked={filters.followUpDueOnly} onChange={event => onFiltersChange({ followUpDueOnly: event.target.checked })} className="accent-primary" /><span>Follow-up due</span></label></div> : <p className="mt-3 text-[10px] text-muted-foreground">Organization, people, teams, and search already narrow this Attention view.</p>}</section>}</div>{tab === "all" && <AttentionAllView onTaskClick={onTaskClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "followup" && <FollowUpView embedded onTaskClick={onTaskClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "waiting" && <WaitingView embedded onTaskClick={onTaskClick} tasks={scopedTasks} attentionFilters={filters} principalId={attentionActorId} />}{tab === "delegated" && <DelegatedView embedded onTaskClick={onTaskClick} onFollowUp={() => onTabChange("followup")} onPrincipalClick={onPrincipalClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "review" && <ReviewView embedded onTaskClick={onTaskClick} tasks={scopedTasks} principalId={attentionActorId} />}{tab === "overdue" && <OverdueView embedded onTaskClick={onTaskClick} tasks={scopedTasks} />}</div>;
+}
+
+// ─── THIS WEEK VIEW ───────────────────────────────────────────────────────────
+
 function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
-  return (
-    <div className="p-8 h-full overflow-auto">
-      <div className="mb-6">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Week of 12 Aug</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>This Week</h1>
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const workspaceDate = getWorkspaceCalendarDate();
+  const weekdayIndex = (workspaceDate.getUTCDay() + 6) % 7;
+  const currentMonday = new Date(workspaceDate);
+  currentMonday.setUTCDate(workspaceDate.getUTCDate() - weekdayIndex);
+  const [weekStart, setWeekStart] = useState(() => new Date(currentMonday));
+  const [selectedDayId, setSelectedDayId] = useState(() => isoDate(workspaceDate));
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setUTCDate(weekStart.getUTCDate() + index);
+    return { date, index, label: formatWorkspaceDate(date, { weekday: "short", day: "numeric" }) };
+  });
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const weekTasks = getPersonalTasksForWeek(TASKS, currentUserId, weekStart);
+  const dayColumns = weekDays.map(({ date, index, label }) => {
+    const dateId = isoDate(date);
+    const tasks = weekTasks
+      .filter(task => isTaskScheduledForDate(task, dateId))
+      .sort((left, right) => weeklyTaskSortOrder(left) - weeklyTaskSortOrder(right));
+    return {
+      date,
+      dateId,
+      index,
+      label,
+      tasks,
+      doneCount: tasks.filter(task => task.status === "done").length,
+      isToday: dateId === isoDate(workspaceDate),
+    };
+  });
+  const selectedDay = dayColumns.find(day => day.dateId === selectedDayId) || dayColumns[0];
+  const isCurrentWeek = isoDate(weekStart) === isoDate(currentMonday);
+  const startLabel = formatWorkspaceDate(weekStart, { month: "short", day: "numeric" });
+  const endLabel = formatWorkspaceDate(weekEnd, weekStart.getUTCMonth() === weekEnd.getUTCMonth()
+    ? { day: "numeric" }
+    : { month: "short", day: "numeric" });
+
+  function moveWeek(direction: -1 | 1) {
+    const nextWeek = new Date(weekStart);
+    nextWeek.setUTCDate(weekStart.getUTCDate() + direction * 7);
+    setWeekStart(nextWeek);
+    setSelectedDayId(isoDate(nextWeek));
+  }
+
+  function returnToCurrentWeek() {
+    setWeekStart(new Date(currentMonday));
+    setSelectedDayId(isoDate(workspaceDate));
+  }
+
+  function toggleDayExpansion(dateId: string) {
+    setExpandedDays(current => ({ ...current, [dateId]: !current[dateId] }));
+  }
+
+  function renderDayTasks(day: typeof dayColumns[number]) {
+    const visibleTasks = expandedDays[day.dateId] ? day.tasks : day.tasks.slice(0, 3);
+    const remainingCount = day.tasks.length - visibleTasks.length;
+    if (!day.tasks.length) return <p className="px-1 pt-3 text-[10px] text-muted-foreground/70">No work planned</p>;
+    return <>
+      <div className="space-y-2 pt-3">
+        {visibleTasks.map(task => <WeeklyPlannerTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}
       </div>
-      <div className="grid grid-cols-5 gap-3 min-h-[400px]">
-        {DAYS.map(day => {
-          const tasks = WEEK_TASKS[day] || [];
-          const isToday = day === "Mon 12";
-          return (
-            <div key={day} className={cn("rounded-xl border flex flex-col", isToday ? "border-primary/30 bg-primary/[0.03]" : "border-border bg-card")}>
-              <div className={cn("px-3 py-2.5 border-b", isToday ? "border-primary/20" : "border-border")}>
-                <p className={cn("text-[12px] font-semibold", isToday ? "text-primary" : "text-foreground")}>{day}</p>
-                <p className="text-[10px] text-muted-foreground font-mono">{tasks.length} tasks</p>
-              </div>
-              <div className="p-2 space-y-1.5 flex-1">
-                {tasks.map(t => (
-                  <button key={t.id} onClick={() => onTaskClick(t)}
-                    className="w-full text-left p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border border-border">
-                    <div className="flex items-start gap-1.5"><PriorityDot priority={t.priority} /><p className="text-[11px] text-foreground leading-snug">{t.title}</p></div>
-                    <div className="mt-1"><OrgBadge org={t.org} /></div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+      {remainingCount > 0 && <button onClick={() => toggleDayExpansion(day.dateId)} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[10px] font-medium text-primary transition-colors hover:bg-primary/8">+{remainingCount} more</button>}
+      {expandedDays[day.dateId] && day.tasks.length > 3 && <button onClick={() => toggleDayExpansion(day.dateId)} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted">Show less</button>}
+    </>;
+  }
+
+  return (
+    <div className="h-full overflow-auto p-5 sm:p-8 lg:p-10">
+      <div className="mb-5">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="mb-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Week of {startLabel}</p>
+            <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>This Week</h1>
+          </div>
+          <p className="pb-0.5 text-right text-[12px] font-medium text-muted-foreground">{startLabel} – {endLabel}</p>
+        </div>
+        <div className="mt-4 flex items-center justify-end gap-1.5">
+          <button onClick={() => moveWeek(-1)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" />Previous</button>
+          <button onClick={returnToCurrentWeek} disabled={isCurrentWeek} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:cursor-default disabled:opacity-45">Today</button>
+          <button onClick={() => moveWeek(1)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Next<ChevronRight className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>
+      <div className="hidden lg:block">
+        <div className="overflow-x-auto xl:overflow-visible">
+          <div className="grid min-h-[25rem] min-w-[56rem] grid-cols-[repeat(7,minmax(0,1fr))] overflow-hidden rounded-[1.25rem] border border-border bg-card xl:min-w-0">
+            {dayColumns.map(day => (
+              <section key={day.dateId} style={{ backgroundColor: `var(${WEEK_LANE_TOKENS[day.index]})` }} className={cn("flex min-w-0 flex-col border-l border-border/70 first:border-l-0", day.isToday && "shadow-[inset_0_2px_0_rgb(142_148_242_/_0.72)]")}>
+                <header className={cn("border-b border-border/70 px-2.5 py-3", day.isToday && "border-b-primary/25 bg-primary/[0.075]")}>
+                  <div className="flex items-start justify-between gap-1">
+                    <p className={cn("text-[11px] font-semibold", day.isToday ? "text-primary" : "text-foreground")}>{day.label}</p>
+                    {day.isToday && <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-primary">Today</span>}
+                  </div>
+                  <WeeklyPlannerDayCount taskCount={day.tasks.length} doneCount={day.doneCount} />
+                </header>
+                <div className="flex flex-1 flex-col px-2.5 pb-3">{renderDayTasks(day)}</div>
+              </section>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="lg:hidden">
+        <div className="overflow-x-auto pb-2">
+          <div className="flex min-w-max gap-1.5">
+            {dayColumns.map(day => <button key={day.dateId} onClick={() => setSelectedDayId(day.dateId)} aria-pressed={selectedDay.dateId === day.dateId} className={cn("w-[4.4rem] rounded-xl border px-2 py-2 text-left transition-colors", selectedDay.dateId === day.dateId ? "border-primary/35 bg-primary/[0.09] text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/20")}><span className="block text-[10px] font-semibold uppercase">{formatWorkspaceDate(day.date, { weekday: "short" })}</span><span className="mt-0.5 block text-sm font-semibold">{formatWorkspaceDate(day.date, { day: "numeric" })}</span><span className="mt-1 block text-[9px]">{day.tasks.length} {day.tasks.length === 1 ? "task" : "tasks"}</span>{day.isToday && <span className="mt-1 block text-[8px] font-semibold uppercase tracking-wide">Today</span>}</button>)}
+          </div>
+        </div>
+        <section style={{ backgroundColor: `var(${WEEK_LANE_TOKENS[selectedDay.index]})` }} className={cn("mt-3 rounded-[1.25rem] border border-border", selectedDay.isToday && "border-primary/35")}>
+          <header className={cn("border-b border-border/70 px-4 py-3", selectedDay.isToday && "border-b-primary/25 bg-primary/[0.075]")}>
+            <div className="flex items-center justify-between gap-2"><p className={cn("text-sm font-semibold", selectedDay.isToday ? "text-primary" : "text-foreground")}>{formatWorkspaceDate(selectedDay.date, { weekday: "long", month: "short", day: "numeric" })}</p>{selectedDay.isToday && <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">Today</span>}</div>
+            <WeeklyPlannerDayCount taskCount={selectedDay.tasks.length} doneCount={selectedDay.doneCount} />
+          </header>
+          <div className="p-3">{renderDayTasks(selectedDay)}</div>
+        </section>
       </div>
     </div>
   );
@@ -1208,17 +4424,22 @@ function ThisWeekView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 // ─── ALL TASKS VIEW (NEW) ─────────────────────────────────────────────────────
 
-type QuickFilter = "mine" | "delegated" | "no-deadline" | "due-soon" | "overdue" | "waiting" | "completed" | null;
+type QuickFilter = "no-deadline" | "due-soon" | "overdue" | "review" | "has-files" | "high-priority";
 type SortBy = "deadline" | "priority" | "updated" | "org";
 
-function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept as a migration fallback while task data is local mock state.
+function LegacyAllTasksView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) => void; onNewTask: () => void }) {
   const [search, setSearch] = useState("");
-  const [qf, setQf] = useState<QuickFilter>(null);
+  const [secondaryFilters, setSecondaryFilters] = useState<QuickFilter[]>([]);
+  const [ownershipTab, setOwnershipTab] = useState<"all" | "mine" | "delegated" | "waiting" | "done">("all");
+  const [taskLayout, setTaskLayout] = useState<"list" | "board">("list");
   const [sortBy, setSortBy] = useState<SortBy>("deadline");
   const [showFilters, setShowFilters] = useState(false);
   const [filterOrg, setFilterOrg] = useState<OrgName | null>(null);
-  const [filterStatus, setFilterStatus] = useState<TaskStatus | null>(null);
-  const [filterPriority, setFilterPriority] = useState<Priority | null>(null);
+  const [filterArea, setFilterArea] = useState<AreaName | null>(null);
+  const [filterProject, setFilterProject] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
+  const [filterDeadline, setFilterDeadline] = useState<"all" | "today" | "tomorrow" | "overdue" | "no-deadline">("all");
 
   const PRIORITY_ORDER: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
@@ -1228,15 +4449,23 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       if (!t.title.toLowerCase().includes(q) && !t.org.toLowerCase().includes(q) && !t.area.toLowerCase().includes(q) && !(t.assignee || "").toLowerCase().includes(q)) return false;
     }
     if (filterOrg && t.org !== filterOrg) return false;
-    if (filterStatus && t.status !== filterStatus) return false;
-    if (filterPriority && t.priority !== filterPriority) return false;
-    if (qf === "mine" && t.nextActionBy !== "me") return false;
-    if (qf === "delegated" && !t.isDelegated) return false;
-    if (qf === "no-deadline" && t.deadline) return false;
-    if (qf === "overdue" && !t.isOverdue) return false;
-    if (qf === "waiting" && !t.isWaiting) return false;
-    if (qf === "completed" && t.status !== "done") return false;
-    if (qf === "due-soon" && !t.isToday) return false;
+    if (filterArea && t.area !== filterArea) return false;
+    if (filterProject && t.project !== filterProject) return false;
+    if (filterAssignee && t.assignee !== filterAssignee) return false;
+    if (ownershipTab === "mine" && t.nextActionBy !== "me") return false;
+    if (ownershipTab === "delegated" && !t.isDelegated) return false;
+    if (ownershipTab === "waiting" && !t.isWaiting) return false;
+    if (ownershipTab === "done" && t.status !== "done") return false;
+    if (filterDeadline === "today" && !t.isToday && t.deadline !== "Today") return false;
+    if (filterDeadline === "tomorrow" && t.deadline !== "Tomorrow") return false;
+    if (filterDeadline === "overdue" && !t.isOverdue) return false;
+    if (filterDeadline === "no-deadline" && t.deadline) return false;
+    if (secondaryFilters.includes("no-deadline") && t.deadline) return false;
+    if (secondaryFilters.includes("overdue") && !t.isOverdue) return false;
+    if (secondaryFilters.includes("due-soon") && !t.isToday && t.deadline !== "Tomorrow") return false;
+    if (secondaryFilters.includes("review") && t.status !== "review") return false;
+    if (secondaryFilters.includes("has-files") && !t.files?.length) return false;
+    if (secondaryFilters.includes("high-priority") && t.priority !== "urgent" && t.priority !== "high") return false;
     return true;
   });
 
@@ -1246,36 +4475,55 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
     return 0;
   });
 
-  const quickFilters: { id: QuickFilter; label: string; count: number }[] = [
-    { id: "mine", label: "My Tasks", count: TASKS.filter(t => t.nextActionBy === "me").length },
-    { id: "delegated", label: "Delegated", count: TASKS.filter(t => t.isDelegated).length },
+  const secondaryFilterOptions: { id: QuickFilter; label: string; count: number }[] = [
     { id: "no-deadline", label: "No Deadline", count: TASKS.filter(t => !t.deadline).length },
-    { id: "due-soon", label: "Due Soon", count: TASKS.filter(t => t.isToday).length },
+    { id: "due-soon", label: "Due Soon", count: TASKS.filter(t => t.isToday || t.deadline === "Tomorrow").length },
     { id: "overdue", label: "Overdue", count: TASKS.filter(t => t.isOverdue).length },
-    { id: "waiting", label: "Waiting", count: TASKS.filter(t => t.isWaiting).length },
-    { id: "completed", label: "Completed", count: TASKS.filter(t => t.status === "done").length },
+    { id: "review", label: "Needs Review", count: TASKS.filter(t => t.status === "review").length },
+    { id: "has-files", label: "Has Files", count: TASKS.filter(t => t.files?.length).length },
+    { id: "high-priority", label: "High Priority", count: TASKS.filter(t => t.priority === "urgent" || t.priority === "high").length },
+  ];
+  const areas = Array.from(new Set(TASKS.map(task => task.area)));
+  const projects = Array.from(new Set(TASKS.map(task => task.project).filter((project): project is string => Boolean(project))));
+  const assignees = Array.from(new Set(TASKS.map(task => task.assignee).filter((assignee): assignee is string => Boolean(assignee))));
+  const activeFilterCount = secondaryFilters.length + Number(Boolean(filterOrg)) + Number(Boolean(filterArea)) + Number(Boolean(filterProject)) + Number(Boolean(filterAssignee)) + Number(filterDeadline !== "all");
+  const toggleSecondaryFilter = (filter: QuickFilter) => setSecondaryFilters(current => current.includes(filter) ? current.filter(item => item !== filter) : [...current, filter]);
+  const clearAllFilters = () => {
+    setSecondaryFilters([]);
+    setFilterOrg(null);
+    setFilterArea(null);
+    setFilterProject(null);
+    setFilterAssignee(null);
+    setFilterDeadline("all");
+  };
+  const boardColumns: { id: TaskStatus; label: string; tint: string; dot: string }[] = [
+    { id: "ready", label: "Ready", tint: "binnie-tint-primary", dot: "bg-primary" },
+    { id: "in_progress", label: "In Progress", tint: "binnie-tint-mint", dot: "bg-success" },
+    { id: "waiting", label: "Waiting", tint: "binnie-tint-blue", dot: "bg-info" },
+    { id: "blocked", label: "Blocked", tint: "bg-overdue/[0.06]", dot: "bg-overdue" },
+    { id: "review", label: "Review", tint: "bg-[#f7dde6]/60", dot: "bg-review" },
+    { id: "done", label: "Completed", tint: "bg-[#dcede7]/55", dot: "bg-success" },
   ];
 
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
-      <div className="px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-3 mb-3">
+      <div className="sticky top-0 z-10 border-b border-border bg-background/85 px-4 py-4 backdrop-blur-sm sm:px-6">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex-1">
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-0.5">Master List</p>
-            <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>All Tasks</h1>
+            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-0.5">Task workspace</p>
+            <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Tasks</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-3 py-2 w-64 focus-within:border-primary/40 transition-colors">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors focus-within:border-primary/40 sm:w-64">
               <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tasks…"
                 className="bg-transparent text-sm text-foreground outline-none placeholder-muted-foreground flex-1 min-w-0" />
               {search && <button onClick={() => setSearch("")}><X className="w-3 h-3 text-muted-foreground" /></button>}
             </div>
             <button onClick={() => setShowFilters(!showFilters)}
-              className={cn("flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[12px] transition-colors", showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border text-muted-foreground hover:text-foreground hover:border-white/10")}>
-              <SlidersHorizontal className="w-3.5 h-3.5" />Filters
-              {(filterOrg || filterStatus || filterPriority) && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+              className={cn("flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[12px] transition-colors", showFilters ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/25 hover:text-foreground")}>
+              <SlidersHorizontal className="w-3.5 h-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filters"}
             </button>
             <div className="relative">
               <select value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}
@@ -1287,66 +4535,49 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
               </select>
               <ArrowUpDown className="w-3 h-3 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-[12px] font-medium text-white hover:bg-primary/80 transition-colors">
+            <button onClick={onNewTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85">
               <Plus className="w-3.5 h-3.5" />New Task
             </button>
+            <div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1" aria-label="Task layout">
+              <button onClick={() => setTaskLayout("list")} aria-label="List layout" aria-pressed={taskLayout === "list"} className={cn("rounded-lg p-1.5 transition-colors", taskLayout === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><ListTodo className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setTaskLayout("board")} aria-label="Board layout" aria-pressed={taskLayout === "board"} className={cn("rounded-lg p-1.5 transition-colors", taskLayout === "board" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Layers className="h-3.5 w-3.5" /></button>
+            </div>
           </div>
         </div>
-        {/* Quick filters */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {quickFilters.map(f => (
-            <button key={f.id} onClick={() => setQf(qf === f.id ? null : f.id)}
-              className={cn("flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border",
-                qf === f.id
-                  ? f.id === "overdue" ? "bg-red-400/15 text-red-400 border-red-400/30" : "bg-primary/15 text-primary border-primary/30"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-white/10")}>
-              {f.label}
-              <span className={cn("font-mono", qf === f.id ? "" : "text-muted-foreground/60")}>{f.count}</span>
-            </button>
+        <div className="mb-3 flex w-fit items-center gap-1 rounded-xl border border-border bg-card/75 p-1">
+          {[
+            { id: "all" as const, label: "All" },
+            { id: "mine" as const, label: "Mine" },
+            { id: "delegated" as const, label: "Delegated" },
+            { id: "waiting" as const, label: "Waiting" },
+            { id: "done" as const, label: "Done" },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setOwnershipTab(tab.id)} className={cn("rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors", ownershipTab === tab.id ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{tab.label}</button>
           ))}
-          {qf && <button onClick={() => setQf(null)} className="text-[11px] text-muted-foreground hover:text-foreground ml-1">Clear</button>}
         </div>
         {/* Filter panel */}
         {showFilters && (
-          <div className="mt-3 pt-3 border-t border-border flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-muted-foreground">Org:</span>
-              <div className="flex gap-1">
-                {(["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => {
-                  const c = ORG_COLORS[org];
-                  return (
-                    <button key={org} onClick={() => setFilterOrg(filterOrg === org ? null : org)}
-                      className={cn("px-2 py-1 rounded text-[11px] transition-colors border", filterOrg === org ? cn(c.bg, c.text, c.border) : "border-border text-muted-foreground hover:text-foreground")}>
-                      {org.split(" ")[0]}
-                    </button>
-                  );
-                })}
+          <div className="mt-3 rounded-2xl border border-border bg-card/90 p-4 shadow-[0_8px_24px_rgb(35_41_61_/_0.06)]">
+            <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Refine your view</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add one or more conditions without changing your task view.</p></div>{activeFilterCount > 0 && <button onClick={clearAllFilters} className="text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground">Clear all</button>}</div>
+            <div className="border-t border-border pt-3">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Task conditions</p>
+              <div className="flex flex-wrap gap-1.5">
+                {secondaryFilterOptions.map(filter => <button key={filter.id} onClick={() => toggleSecondaryFilter(filter.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition-colors", secondaryFilters.includes(filter.id) ? filter.id === "overdue" ? "border-overdue/25 bg-overdue/10 text-overdue" : "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/25 hover:text-foreground")}>{filter.label}<span className="ml-1.5 font-mono opacity-65">{filter.count}</span></button>)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-muted-foreground">Priority:</span>
-              <div className="flex gap-1">
-                {(["urgent", "high", "medium", "low"] as Priority[]).map(p => {
-                  const c = PRIORITY_CONFIG[p];
-                  return (
-                    <button key={p} onClick={() => setFilterPriority(filterPriority === p ? null : p)}
-                      className={cn("px-2 py-1 rounded text-[11px] transition-colors border capitalize", filterPriority === p ? cn(c.bg, c.color) : "border-border text-muted-foreground hover:text-foreground")}>
-                      {p}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="mt-4 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-3">
+              <label className="text-[10px] font-medium text-muted-foreground">Organization<select value={filterOrg || ""} onChange={event => setFilterOrg(event.target.value as OrgName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All organizations</option>{ORGS_META.map(org => <option key={org.name} value={org.name}>{org.name}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Area<select value={filterArea || ""} onChange={event => setFilterArea(event.target.value as AreaName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All areas</option>{areas.map(area => <option key={area} value={area}>{area}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject || ""} onChange={event => setFilterProject(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All projects</option>{projects.map(project => <option key={project} value={project}>{project}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Assignee<select value={filterAssignee || ""} onChange={event => setFilterAssignee(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">Anyone</option>{assignees.map(assignee => <option key={assignee} value={assignee}>{assignee}</option>)}</select></label>
+              <label className="text-[10px] font-medium text-muted-foreground">Deadline<select value={filterDeadline} onChange={event => setFilterDeadline(event.target.value as typeof filterDeadline)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any target date</option><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="overdue">Past target</option><option value="no-deadline">No target date</option></select></label>
             </div>
-            {(filterOrg || filterStatus || filterPriority) && (
-              <button onClick={() => { setFilterOrg(null); setFilterStatus(null); setFilterPriority(null); }}
-                className="text-[11px] text-muted-foreground hover:text-foreground ml-auto">Clear filters</button>
-            )}
           </div>
         )}
       </div>
 
       {/* Column headers */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/20">
+      {taskLayout === "list" && <div className="hidden items-center gap-3 border-b border-border bg-muted/25 px-4 py-2 md:flex">
         <span className="w-2 flex-shrink-0" />
         <span className="text-[10px] font-mono text-muted-foreground uppercase flex-1">Task</span>
         <div className="flex items-center gap-2 flex-shrink-0 text-[10px] font-mono text-muted-foreground">
@@ -1358,23 +4589,43 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
           <span className="w-20 text-right">Next Action</span>
           <span className="w-3" />
         </div>
-      </div>
+      </div>}
 
-      {/* Task rows */}
+      {/* Task list or soft board */}
       <div className="flex-1 overflow-y-auto">
         {tasks.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <ListTodo className="w-10 h-10 mx-auto mb-3 opacity-20" />
             <p className="text-sm">No tasks match your filters.</p>
           </div>
-        ) : (
+        ) : taskLayout === "list" ? (
           tasks.map(task => <TaskRow key={task.id} task={task} onClick={() => onTaskClick(task)} />)
+        ) : (
+          <div className="h-full overflow-x-auto p-4 sm:p-5">
+            <div className="grid min-w-[90rem] grid-cols-6 gap-4">
+              {boardColumns.map(column => {
+                const columnTasks = tasks.filter(task => task.status === column.id);
+                return (
+                  <section key={column.id} className={cn("binnie-board-column", column.tint)}>
+                    <div className="mb-3 flex items-center justify-between px-1">
+                      <div className="flex items-center gap-2"><span className={cn("h-2 w-2 rounded-full", column.dot)} /><h2 className="text-[12px] font-semibold text-foreground">{column.label}</h2></div>
+                      <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{columnTasks.length}</span>
+                    </div>
+                    <div className="space-y-2.5">
+                      {columnTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} compact />)}
+                      {columnTasks.length === 0 && <p className="rounded-xl border border-dashed border-border/75 bg-white/35 px-3 py-5 text-center text-[11px] text-muted-foreground">Nothing here right now.</p>}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 
       <div className="px-4 py-2.5 border-t border-border bg-muted/20 flex items-center gap-3">
         <span className="text-[11px] font-mono text-muted-foreground">{tasks.length} of {TASKS.length} tasks</span>
-        {(search || qf || filterOrg || filterStatus || filterPriority) && (
+        {(search || activeFilterCount > 0) && (
           <span className="text-[11px] text-primary">Filtered</span>
         )}
       </div>
@@ -1382,556 +4633,1766 @@ function AllTasksView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   );
 }
 
-// ─── PEOPLE / ACCOUNTABILITY VIEW (NEW) ───────────────────────────────────────
+// ─── TASKS WORKSPACE ──────────────────────────────────────────────────────────
 
-type PeopleSort = "followup" | "overdue" | "no-update" | "active" | "name";
+type TaskScope = "month" | "carried" | "unscheduled" | "done";
+type TaskStateFilter = "all" | "mine" | "delegated" | "waiting" | "review";
+type TaskDeadlineFilter = "all" | "today" | "this-week" | "overdue" | "no-date";
 
-function PeopleView({ onPersonClick }: { onPersonClick: (name: string) => void }) {
-  const [sort, setSort] = useState<PeopleSort>("followup");
-
-  const owesUpdate = PEOPLE_DATA.filter(p => p.waitingOnThem > 0).length;
-  const waitingForMe = PEOPLE_DATA.filter(p => p.waitingOnMe > 0).length;
-  const overdueCount = PEOPLE_DATA.reduce((a, p) => a + p.overdue, 0);
-
-  const sorted = [...PEOPLE_DATA].sort((a, b) => {
-    if (sort === "followup") return (b.needsFollowUp ? 1 : 0) - (a.needsFollowUp ? 1 : 0);
-    if (sort === "overdue") return b.overdue - a.overdue;
-    if (sort === "active") return b.active - a.active;
-    if (sort === "name") return a.name.localeCompare(b.name);
-    // no-update: sort by oldestUnanswered (days)
-    return parseInt(b.oldestUnanswered) - parseInt(a.oldestUnanswered);
-  });
-
-  const SORT_OPTIONS: { id: PeopleSort; label: string }[] = [
-    { id: "followup", label: "Needs Follow-Up" },
-    { id: "no-update", label: "Longest Without Update" },
-    { id: "overdue", label: "Most Overdue" },
-    { id: "active", label: "Most Active" },
-    { id: "name", label: "Name" },
-  ];
-
+function TaskWorkspaceRow({ task, onClick, archived = false }: { task: Task; onClick: () => void; archived?: boolean }) {
+  const nextAction = task.status === "review"
+    ? "Needs my review"
+    : task.status === "blocked"
+      ? `Blocked by ${task.blockedBy?.label || task.nextActionBy}`
+    : task.isWaiting
+      ? `Waiting on ${task.nextActionBy === "me" ? "you" : task.nextActionBy}`
+      : task.isDelegated
+        ? `Currently with ${task.currentResponsibility?.name || task.assignee || task.nextActionBy}`
+        : task.status === "in_progress"
+          ? "In progress · Next: Me"
+          : "Next: Me";
+  const target = task.deadline ? `${task.isOverdue ? "Past target · " : "Target "}${task.deadline}` : "No target date";
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Accountability</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>People</h1>
-      </div>
-
-      {/* Summary alert */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        {[
-          { value: owesUpdate, label: "people owe me an update", color: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
-          { value: waitingForMe, label: "people waiting for me", color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
-          { value: overdueCount, label: "delegated tasks overdue", color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" },
-        ].map(({ value, label, color, bg, border }) => (
-          <div key={label} className={cn("flex items-center gap-3 px-4 py-3 rounded-xl border", bg, border)}>
-            <span className={cn("text-2xl font-bold", color)} style={{ fontFamily: "var(--font-display)" }}>{value}</span>
-            <span className={cn("text-[12px]", color)}>{label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Sort controls */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-[11px] font-mono text-muted-foreground">Sort by:</span>
-        <div className="flex gap-1 flex-wrap">
-          {SORT_OPTIONS.map(o => (
-            <button key={o.id} onClick={() => setSort(o.id)}
-              className={cn("px-2.5 py-1 rounded-full text-[11px] border transition-colors", sort === o.id ? "bg-primary/15 text-primary border-primary/30" : "border-border text-muted-foreground hover:text-foreground")}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* People cards */}
-      <div className="space-y-3">
-        {sorted.map(person => {
-          const color = getPersonColor(person.name);
-          const orgC = ORG_COLORS[person.org];
-          return (
-            <button key={person.name} onClick={() => onPersonClick(person.name)}
-              className="w-full text-left bg-card rounded-xl border border-border hover:border-white/10 hover:bg-white/[0.02] transition-all p-5 group">
-              <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
-                  {getInitials(person.name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="text-sm font-semibold text-foreground">{person.name}</h3>
-                    {person.needsFollowUp && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400">Follow Up</span>
-                    )}
-                    {person.overdue > 0 && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-400/10 text-red-400">{person.overdue} overdue</span>
-                    )}
-                  </div>
-                  <p className="text-[12px] text-muted-foreground">{person.role} · <span className={orgC.text}>{person.org}</span></p>
-                </div>
-                <div className="grid grid-cols-4 gap-4 flex-shrink-0 text-center">
-                  {[
-                    { val: person.active, label: "Active", color: "text-foreground" },
-                    { val: person.waitingOnThem, label: "On Them", color: "text-amber-400" },
-                    { val: person.waitingOnMe, label: "On Me", color: "text-indigo-400" },
-                    { val: person.overdue, label: "Overdue", color: person.overdue > 0 ? "text-red-400" : "text-muted-foreground" },
-                  ].map(({ val, label, color: c }) => (
-                    <div key={label}>
-                      <p className={cn("text-lg font-bold", c)} style={{ fontFamily: "var(--font-display)" }}>{val}</p>
-                      <p className="text-[10px] font-mono text-muted-foreground">{label}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-right flex-shrink-0 min-w-[120px]">
-                  <p className="text-[11px] text-muted-foreground">Last update: <span className="text-foreground">{person.lastUpdate}</span></p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Oldest unanswered: <span className="text-amber-400/80">{person.oldestUnanswered}</span></p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <button onClick={onClick} className={cn("group flex w-full items-start gap-3 border-b border-border/70 px-4 py-5 text-left transition-colors hover:bg-primary/[0.025] sm:px-5", task.isOverdue && "bg-overdue/[0.025]")}>
+      <span className="mt-1.5 flex-shrink-0"><PriorityDot priority={task.priority} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-start gap-3"><span className="min-w-0 flex-1"><span className="block text-[14px] font-medium leading-6 text-foreground">{task.title}</span><span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground"><OrgBadge org={task.org} /><span>·</span><AreaBadge area={task.area} />{task.project && <><span>·</span><span className="truncate">{task.project}</span></>}</span></span><ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" /></span>
+        <span className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px]"><span className={cn("inline-flex items-center gap-1.5", task.status === "review" ? "text-review" : task.status === "blocked" ? "text-overdue" : task.isWaiting ? "text-info" : "text-muted-foreground")}><StatusDot status={task.status} />{nextAction}</span><span className="text-border">·</span><span className={cn(task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{target}</span>{archived && <><span className="text-border">·</span><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Archived</span></>}</span>
+      </span>
+    </button>
   );
 }
 
-// ─── PERSON DETAIL VIEW (NEW) ─────────────────────────────────────────────────
+type OperationalTaskScope = "my" | "team" | "people" | "assigned_by_me" | "completed" | "archive";
+type TaskDisplayMode = "list" | "board";
+const BOARD_STATUSES: Array<{ id: TaskStatus; label: string }> = [
+  { id: "ready", label: "Ready" }, { id: "in_progress", label: "In Progress" }, { id: "waiting", label: "Waiting" },
+  { id: "blocked", label: "Blocked" }, { id: "review", label: "Review" }, { id: "done", label: "Done" },
+];
 
-function PersonDetailView({ personName, onBack, onTaskClick }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
-  const person = PEOPLE_DATA.find(p => p.name === personName);
-  if (!person) return null;
-  const color = getPersonColor(person.name);
-  const orgC = ORG_COLORS[person.org];
+function taskPriorityLabel(priority: Priority) {
+  return priority === "medium" ? "Normal" : priority.charAt(0).toUpperCase() + priority.slice(1);
+}
 
-  const personTasks = TASKS.filter(t => t.assignee === personName || t.nextActionBy === personName);
-  const groups: { label: string; color: string; tasks: Task[] }[] = [
-    { label: "Waiting on Them", color: "bg-amber-400", tasks: personTasks.filter(t => t.nextActionBy === personName && t.status !== "done") },
-    { label: "Submitted for My Review", color: "bg-pink-400", tasks: personTasks.filter(t => t.status === "review") },
-    { label: "In Progress / Active", color: "bg-indigo-400", tasks: personTasks.filter(t => t.status === "in_progress") },
-    { label: "Completed", color: "bg-emerald-400", tasks: personTasks.filter(t => t.status === "done") },
-  ].filter(g => g.tasks.length > 0);
+function taskStatusLabel(status: TaskStatus) {
+  return BOARD_STATUSES.find((item) => item.id === status)?.label || status;
+}
 
-  return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <BackButton label="People" onClick={onBack} />
+function operationalTaskQuery() {
+  if (typeof window === "undefined") return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+}
 
-      {/* Person header */}
-      <div className="bg-card rounded-xl border border-border p-6 mb-6">
-        <div className="flex items-center gap-4 mb-5">
-          <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold"
-            style={{ backgroundColor: color + "22", color, border: `2px solid ${color}44` }}>
-            {getInitials(person.name)}
-          </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>{person.name}</h1>
-            <p className="text-sm text-muted-foreground">{person.role} · <span className={orgC.text}>{person.org}</span></p>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-[11px] font-mono text-muted-foreground">Last update: <span className="text-foreground">{person.lastUpdate}</span></span>
-              <span className="text-[11px] font-mono text-muted-foreground">Oldest unanswered: <span className="text-amber-400">{person.oldestUnanswered}</span></span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button className="px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5" />Message
-            </button>
-            <button className="px-3 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-[12px] hover:text-foreground transition-colors flex items-center gap-1.5">
-              <Send className="w-3.5 h-3.5" />Follow Up
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { val: person.active, label: "Active Tasks", color: "text-foreground" },
-            { val: person.waitingOnThem, label: "Waiting on Them", color: "text-amber-400" },
-            { val: person.waitingOnMe, label: "Waiting on Me", color: "text-indigo-400" },
-            { val: person.overdue, label: "Overdue", color: person.overdue > 0 ? "text-red-400" : "text-emerald-400" },
-          ].map(({ val, label, color: c }) => (
-            <div key={label} className="bg-muted/40 rounded-lg p-3 text-center">
-              <p className={cn("text-2xl font-bold", c)} style={{ fontFamily: "var(--font-display)" }}>{val}</p>
-              <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{label}</p>
-            </div>
-          ))}
-        </div>
+function AllTasksView({ onTaskClick, onNewTask, profile }: { onTaskClick: (task: Task) => void; onNewTask: () => void; profile: UserProfile }) {
+  const taskStoreRevision = useTaskStoreVersion();
+  const query = operationalTaskQuery();
+  const initialScope = query.get("scope");
+  const initialMode = query.get("view");
+  const [scope, setScope] = useState<OperationalTaskScope>(initialScope === "team" || initialScope === "people" || initialScope === "assigned_by_me" || initialScope === "completed" || initialScope === "archive" ? initialScope : "my");
+  // My Work is the unfiltered operational baseline. A Tasks filter left in
+  // the URL by a different scope must not make the primary personal queue
+  // appear empty after a refresh or a return from Today/This Week. Saved views
+  // still apply their filters intentionally through their dedicated event.
+  const initializesMyWork = initialScope !== "team" && initialScope !== "people" && initialScope !== "assigned_by_me" && initialScope !== "completed" && initialScope !== "archive";
+  const initialTaskFilter = (key: string) => initializesMyWork ? "" : query.get(key) || "";
+  const [mode, setMode] = useState<TaskDisplayMode>(initialMode === "board" && initialScope !== "completed" && initialScope !== "archive" ? "board" : "list");
+  const [selectedPersonId, setSelectedPersonId] = useState(() => query.get("person") || "");
+  const [selectedTeamId, setSelectedTeamId] = useState(() => query.get("team") || "");
+  const [scopeData, setScopeData] = useState<TaskScopeResultDTO | null>(null);
+  const [scopeMessage, setScopeMessage] = useState("");
+  const [search, setSearch] = useState(() => initialTaskFilter("q"));
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
+  const [columns, setColumns] = useState<TaskListColumnId[]>(() => {
+    const saved = profile.taskListColumns.filter((column): column is TaskListColumnId => TASK_LIST_COLUMNS.some((candidate) => candidate.id === column));
+    const initialListScope = initialScope === "team" || initialScope === "people" || initialScope === "assigned_by_me" || initialScope === "completed" || initialScope === "archive" ? initialScope : "my";
+    return initialListScope === "my" && saved.length ? saved : getRecommendedTaskListColumns(initialListScope);
+  });
+  const [filterOrg, setFilterOrg] = useState(() => initialTaskFilter("organization"));
+  const [filterArea, setFilterArea] = useState(() => initialTaskFilter("area"));
+  const [filterProject, setFilterProject] = useState(() => initialTaskFilter("project"));
+  const [filterAssignee, setFilterAssignee] = useState(() => initialTaskFilter("assignedTo"));
+  const [filterTeam, setFilterTeam] = useState(() => initialTaskFilter("assignedTeam"));
+  const [filterAssignedBy, setFilterAssignedBy] = useState(() => initialTaskFilter("assignedBy"));
+  const [ownedByMe, setOwnedByMe] = useState(() => !initializesMyWork && query.get("owned") === "true");
+  const [filterPriority, setFilterPriority] = useState<Priority | "">(() => {
+    const value = initialTaskFilter("priority");
+    return value === "low" || value === "medium" || value === "high" || value === "urgent" ? value : "";
+  });
+  const [filterStatus, setFilterStatus] = useState<TaskStatus | "">(() => {
+    const value = initialTaskFilter("status");
+    return BOARD_STATUSES.some((item) => item.id === value) ? value as TaskStatus : "";
+  });
+  const [dateFilter, setDateFilter] = useState<"" | "target" | "deadline" | "overdue">(() => {
+    const value = initialTaskFilter("date");
+    return value === "target" || value === "deadline" || value === "overdue" ? value : "";
+  });
+  const [hasFilesOnly, setHasFilesOnly] = useState(() => !initializesMyWork && query.get("hasFiles") === "true");
+  const [sortColumn, setSortColumn] = useState<TaskListColumnId>(() => initialScope === "archive" ? "archivedDate" : initialScope === "completed" ? "completedDate" : "deadline");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [showAllDone, setShowAllDone] = useState(false);
+
+  useEffect(() => {
+    const params = operationalTaskQuery();
+    params.set("view", mode);
+    params.set("scope", scope);
+    const setOrDelete = (key: string, value: string | boolean | undefined) => {
+      if (value === undefined || value === "" || value === false) params.delete(key);
+      else params.set(key, String(value));
+    };
+    setOrDelete("person", scope === "people" ? selectedPersonId : undefined);
+    setOrDelete("team", scope === "team" ? selectedTeamId : undefined);
+    setOrDelete("q", search || undefined);
+    setOrDelete("organization", filterOrg || undefined);
+    setOrDelete("area", filterArea || undefined);
+    setOrDelete("project", filterProject || undefined);
+    setOrDelete("assignedTo", (scope === "team" || scope === "assigned_by_me") ? filterAssignee || undefined : undefined);
+    setOrDelete("assignedTeam", (scope === "team" || scope === "assigned_by_me") ? filterTeam || undefined : undefined);
+    setOrDelete("assignedBy", (scope === "team" || scope === "people") ? filterAssignedBy || undefined : undefined);
+    setOrDelete("owned", scope === "my" && ownedByMe);
+    setOrDelete("priority", filterPriority || undefined);
+    setOrDelete("status", filterStatus || undefined);
+    setOrDelete("date", dateFilter || undefined);
+    setOrDelete("hasFiles", hasFilesOnly || undefined);
+    const path = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`;
+    window.history.replaceState(null, "", path);
+  }, [mode, scope, selectedPersonId, selectedTeamId, search, filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, ownedByMe, filterPriority, filterStatus, dateFilter, hasFilesOnly]);
+
+  useEffect(() => {
+    if (!taskStoreUsesServer) return;
+    let cancelled = false;
+    void getTaskScopeAction({ scope, personId: scope === "people" ? selectedPersonId || undefined : undefined, teamId: scope === "team" ? selectedTeamId || undefined : undefined, ownedByMe: scope === "my" && ownedByMe }).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) { setScopeData(null); setScopeMessage(result.message); return; }
+      setScopeData(result.data);
+      setScopeMessage("");
+      if (!selectedPersonId && result.data.people.length) setSelectedPersonId(result.data.people[0]!.id);
+      if (!selectedTeamId && result.data.teams.length) setSelectedTeamId(result.data.teams[0]!.id);
+    });
+    return () => { cancelled = true; };
+  }, [scope, selectedPersonId, selectedTeamId, ownedByMe, taskStoreRevision]);
+
+  useEffect(() => {
+    const applySavedView = (event: Event) => {
+      const filters = (event as CustomEvent<{ filters?: Record<string, unknown> }>).detail?.filters;
+      if (!filters) return;
+      const savedScope = filters.scope === "my" || filters.scope === "team" || filters.scope === "people" || filters.scope === "assigned_by_me" || filters.scope === "completed" || filters.scope === "archive" ? filters.scope : "my";
+      setScope(savedScope);
+      if (filters.mode === "list" || (filters.mode === "board" && savedScope !== "completed" && savedScope !== "archive")) setMode(filters.mode);
+      setSelectedPersonId(typeof filters.personId === "string" ? filters.personId : "");
+      setSelectedTeamId(typeof filters.teamId === "string" ? filters.teamId : "");
+      setSearch(typeof filters.query === "string" ? filters.query : "");
+      setFilterOrg(typeof filters.organization === "string" ? filters.organization : "");
+      setFilterArea(typeof filters.area === "string" ? filters.area : "");
+      setFilterProject(typeof filters.project === "string" ? filters.project : "");
+      setFilterAssignee((savedScope === "team" || savedScope === "assigned_by_me") && typeof filters.assignedTo === "string" ? filters.assignedTo : "");
+      setFilterTeam((savedScope === "team" || savedScope === "assigned_by_me") && typeof filters.assignedTeam === "string" ? filters.assignedTeam : "");
+      setFilterAssignedBy((savedScope === "team" || savedScope === "people") && typeof filters.assignedBy === "string" ? filters.assignedBy : "");
+      setOwnedByMe(savedScope === "my" && filters.ownedByMe === true);
+      setFilterPriority(filters.priority === "low" || filters.priority === "medium" || filters.priority === "high" || filters.priority === "urgent" ? filters.priority : "");
+      setFilterStatus(BOARD_STATUSES.some((item) => item.id === filters.status) ? filters.status as TaskStatus : "");
+      setDateFilter(filters.date === "target" || filters.date === "deadline" || filters.date === "overdue" ? filters.date : "");
+      setHasFilesOnly(filters.hasFiles === true);
+    };
+    const saveSavedView = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (!name || !taskStoreUsesServer) return;
+      const filters = {
+        scope,
+        mode,
+        personId: scope === "people" ? selectedPersonId || undefined : undefined,
+        teamId: scope === "team" ? selectedTeamId || undefined : undefined,
+        query: search || undefined,
+        organization: filterOrg || undefined,
+        area: filterArea || undefined,
+        project: filterProject || undefined,
+        assignedTo: (scope === "team" || scope === "assigned_by_me") ? filterAssignee || undefined : undefined,
+        assignedTeam: (scope === "team" || scope === "assigned_by_me") ? filterTeam || undefined : undefined,
+        assignedBy: (scope === "team" || scope === "people") ? filterAssignedBy || undefined : undefined,
+        ownedByMe: scope === "my" && ownedByMe || undefined,
+        priority: filterPriority || undefined,
+        status: filterStatus || undefined,
+        date: dateFilter || undefined,
+        hasFiles: hasFilesOnly || undefined,
+      };
+      void saveViewAction({ name, filters }).then((result) => {
+        if (result.ok) { CANONICAL_SAVED_VIEWS = [result.data, ...CANONICAL_SAVED_VIEWS.filter((view) => view.id !== result.data.id)]; publishTaskStore(); }
+      });
+    };
+    window.addEventListener("binnie:apply-saved-view", applySavedView);
+    window.addEventListener("binnie:save-saved-view", saveSavedView);
+    return () => { window.removeEventListener("binnie:apply-saved-view", applySavedView); window.removeEventListener("binnie:save-saved-view", saveSavedView); };
+  }, [scope, mode, selectedPersonId, selectedTeamId, search, filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, ownedByMe, filterPriority, filterStatus, dateFilter, hasFilesOnly]);
+
+  const fallbackTasks = TASKS.filter((task) => {
+    if (scope === "my") return taskIsForCurrentUser(task, profile.directoryId || "") && (!ownedByMe || task.ownerPrincipalId === profile.directoryId);
+    if (scope === "people") return Boolean(selectedPersonId && taskIsForCurrentUser(task, selectedPersonId));
+    if (scope === "team") return Boolean(selectedTeamId && getTaskAssigneeIds(task).includes(selectedTeamId));
+    if (scope === "assigned_by_me") return getDelegatedTasks([task], profile.directoryId || "").length > 0;
+    if (scope === "completed") return task.status === "done" && !task.archived;
+    if (scope === "archive") return task.status === "done" && Boolean(task.archived);
+    return true;
+  });
+  const sourceTasks = taskStoreUsesServer
+    // Scope responses are already server-authorized and carry the same
+    // canonical Task DTO used by Today and This Week. Prefer them over an
+    // older broad snapshot so a recent responsibility handoff cannot leave
+    // the Tasks card showing a stale assignee.
+    ? (scopeData?.scope === scope ? scopeData.tasks.map(canonicalTaskToLegacy) : [])
+    : fallbackTasks;
+  const scopeLoading = taskStoreUsesServer && (!scopeData || scopeData.scope !== scope);
+  const scopedTaskDtos = taskStoreUsesServer && scopeData?.scope === scope ? scopeData.tasks : [];
+  const uniqueFilterOptions = (options: Array<{ id?: string; name?: string }>) => Array.from(new Map(options
+    .filter((option): option is { id: string; name: string } => Boolean(option.id && option.name))
+    .map((option) => [option.id, option])).values()).sort((left, right) => left.name.localeCompare(right.name));
+  // These are labels for canonical IDs, not client-side identity keys. The
+  // server-authorized scope above remains the only source task universe.
+  const organizationOptions = uniqueFilterOptions([
+    ...profile.workspaces.map((workspace) => ({ id: workspace.organizationId, name: workspace.organization })),
+    ...scopedTaskDtos.map((task) => ({ id: task.organizationId, name: task.org })),
+  ]);
+  const areaOptions = uniqueFilterOptions(scopedTaskDtos.flatMap((task) => task.involvedDepartments.map((department) => ({ id: department.id, name: department.name }))));
+  const projectOptions = uniqueFilterOptions([
+    ...scopedTaskDtos.map((task) => ({ id: task.projectId, name: task.project })),
+    ...sourceTasks.map((task) => ({ id: task.projectId, name: task.project })),
+  ]);
+  const personOptions = uniqueFilterOptions((scopeData?.people || []).map((person) => ({ id: person.id, name: person.name })));
+  const teamOptions = uniqueFilterOptions((scopeData?.teams || []).map((team) => ({ id: team.id, name: team.name })));
+  const authorizedPrincipalIds = new Set([profile.directoryId, ...personOptions.map((person) => person.id), ...teamOptions.map((team) => team.id)].filter(Boolean));
+  const assignedByOptions = uniqueFilterOptions(sourceTasks.flatMap((task) => task.assignments?.flatMap((assignment) => assignment.assignedByPrincipalId && authorizedPrincipalIds.has(assignment.assignedByPrincipalId) ? [{ id: assignment.assignedByPrincipalId, name: assignment.assignedBy || getDirectoryPerson(assignment.assignedByPrincipalId)?.name || "Assigned by" }] : []) || []));
+  // Query strings from older Tasks links used labels. Canonicalize those once
+  // their authorized option is available, then retain only stable IDs.
+  useEffect(() => {
+    const canonicalize = (value: string, options: Array<{ id: string; name: string }>, setValue: (next: string) => void) => {
+      const match = options.find((option) => option.id === value || option.name === value);
+      if (match && match.id !== value) setValue(match.id);
+    };
+    canonicalize(filterOrg, organizationOptions, setFilterOrg);
+    canonicalize(filterArea, areaOptions, setFilterArea);
+    canonicalize(filterProject, projectOptions, setFilterProject);
+    if (scope === "team" || scope === "assigned_by_me") {
+      canonicalize(filterAssignee, personOptions, setFilterAssignee);
+      canonicalize(filterTeam, teamOptions, setFilterTeam);
+    }
+    canonicalize(filterAssignedBy, assignedByOptions, setFilterAssignedBy);
+  }, [scope, filterOrg, filterArea, filterProject, filterAssignee, filterTeam, filterAssignedBy, organizationOptions, areaOptions, projectOptions, personOptions, teamOptions, assignedByOptions]);
+  const today = isoDate(getWorkspaceCalendarDate());
+  const filteredTasks = sourceTasks.filter((task) => {
+    const searchable = [task.title, task.description, task.notes, task.org, task.area, task.project, ...(task.assignments?.map((assignment) => assignment.name) || []), ...(task.assignments?.map((assignment) => assignment.assignedBy || "") || [])].filter(Boolean).join(" ").toLowerCase();
+    if (search.trim() && !searchable.includes(search.trim().toLowerCase())) return false;
+    if (filterOrg && task.organizationId !== filterOrg) return false;
+    if (filterArea && ![task.leadDepartmentId, ...(task.involvedDepartmentIds || [])].includes(filterArea)) return false;
+    if (filterProject && task.projectId !== filterProject) return false;
+    if ((scope === "team" || scope === "assigned_by_me") && filterAssignee && task.currentResponsibilityId !== filterAssignee) return false;
+    if ((scope === "team" || scope === "assigned_by_me") && filterTeam && task.currentResponsibilityId !== filterTeam) return false;
+    if ((scope === "team" || scope === "people") && filterAssignedBy && !(task.assignments || []).some((assignment) => assignment.assignedByPrincipalId === filterAssignedBy)) return false;
+    if (filterPriority && task.priority !== filterPriority) return false;
+    if (filterStatus && task.status !== filterStatus) return false;
+    if (dateFilter === "target" && !task.targetDate) return false;
+    if (dateFilter === "deadline" && !task.deadlineDate) return false;
+    if (dateFilter === "overdue" && !(task.status !== "done" && task.deadlineDate && task.deadlineDate < today)) return false;
+    if (hasFilesOnly && !task.files?.length) return false;
+    return true;
+  }).sort((left, right) => {
+    const value = (task: Task) => {
+      if (sortColumn === "task") return task.title;
+      if (sortColumn === "priority") return String({ urgent: 0, high: 1, medium: 2, low: 3 }[task.priority]);
+      if (sortColumn === "assignedTo") return task.currentResponsibility?.name || task.assignee || "";
+      if (sortColumn === "assignedBy") return task.assignments?.find((assignment) => assignment.assignedBy)?.assignedBy || "";
+      if (sortColumn === "owner") return task.owner?.name || "";
+      if (sortColumn === "currentStep") return task.currentStep || "";
+      if (sortColumn === "organization") return task.org;
+      if (sortColumn === "area") return task.area;
+      if (sortColumn === "project") return task.project || "";
+      if (sortColumn === "status") return task.status;
+      if (sortColumn === "assignedDate") return task.assignments?.map((assignment) => assignment.assignedAt).sort()[0] || "";
+      if (sortColumn === "planFor") return task.startDate || "";
+      if (sortColumn === "targetDate") return task.targetDate || "";
+      if (sortColumn === "deadline") return task.deadlineDate || "";
+      if (sortColumn === "completedBy") return task.completedBy?.name || "";
+      if (sortColumn === "completedDate") return task.completedAt || "";
+      if (sortColumn === "archivedDate") return task.archivedAt || "";
+      return "";
+    };
+    return value(left).localeCompare(value(right)) * (sortDirection === "asc" ? 1 : -1);
+  });
+  const availableColumns = getTaskListColumnOptions(scope);
+  const availableColumnIds = new Set<TaskListColumnId>(availableColumns.map((column) => column.id));
+  const visibleColumns = columns.filter((column) => availableColumnIds.has(column));
+  const selectedPerson = scopeData?.people.find((person) => person.id === selectedPersonId);
+  const selectedTeam = scopeData?.teams.find((team) => team.id === selectedTeamId);
+  // Organization is a deliberately separate, always-visible filter. The
+  // Filters button and its chips represent only the secondary refinements.
+  const activeFilters = [filterArea, filterProject, scope === "team" || scope === "assigned_by_me" ? filterAssignee : "", scope === "team" || scope === "assigned_by_me" ? filterTeam : "", scope === "team" || scope === "people" ? filterAssignedBy : "", filterPriority, filterStatus, dateFilter].filter(Boolean).length + Number(hasFilesOnly) + Number(scope === "my" && ownedByMe);
+  const activeFilterChips = [
+    filterArea ? { id: "area", label: areaOptions.find((area) => area.id === filterArea)?.name || "Area", clear: () => setFilterArea("") } : null,
+    filterProject ? { id: "project", label: projectOptions.find((project) => project.id === filterProject)?.name || "Project", clear: () => setFilterProject("") } : null,
+    (scope === "team" || scope === "assigned_by_me") && filterAssignee ? { id: "person", label: personOptions.find((person) => person.id === filterAssignee)?.name || "Person", clear: () => setFilterAssignee("") } : null,
+    (scope === "team" || scope === "assigned_by_me") && filterTeam ? { id: "team", label: teamOptions.find((team) => team.id === filterTeam)?.name || "Team", clear: () => setFilterTeam("") } : null,
+    (scope === "team" || scope === "people") && filterAssignedBy ? { id: "assigned-by", label: `Assigned by ${assignedByOptions.find((person) => person.id === filterAssignedBy)?.name || "Person"}`, clear: () => setFilterAssignedBy("") } : null,
+    scope === "my" && ownedByMe ? { id: "owned", label: "Owned by me", clear: () => setOwnedByMe(false) } : null,
+    filterPriority ? { id: "priority", label: `${taskPriorityLabel(filterPriority)} priority`, clear: () => setFilterPriority("") } : null,
+    filterStatus ? { id: "status", label: taskStatusLabel(filterStatus), clear: () => setFilterStatus("") } : null,
+    dateFilter ? { id: "date", label: dateFilter === "target" ? "Has target date" : dateFilter === "deadline" ? "Has deadline" : "Overdue", clear: () => setDateFilter("") } : null,
+    hasFilesOnly ? { id: "files", label: "Has files", clear: () => setHasFilesOnly(false) } : null,
+  ].filter((chip): chip is { id: string; label: string; clear: () => void } => Boolean(chip));
+  const showTeamSelector = scope === "team" && (scopeData?.teams.length || 0) > 1;
+  const peopleSummary = scope === "people" ? {
+    active: filteredTasks.filter((task) => task.status !== "done").length,
+    waiting: filteredTasks.filter((task) => task.status === "waiting").length,
+    overdue: filteredTasks.filter((task) => task.status !== "done" && task.deadlineDate && task.deadlineDate < today).length,
+    review: filteredTasks.filter((task) => task.status === "review").length,
+  } : null;
+  const visibleFilterControls = getTasksFilterControls(scope, mode);
+  const showsTeamFilter = visibleFilterControls.includes("team");
+  const showsPersonFilter = visibleFilterControls.includes("person");
+  const showsAssignedByFilter = visibleFilterControls.includes("assigned_by");
+  const showsStatusFilter = visibleFilterControls.includes("status");
+
+  const updateColumns = (next: TaskListColumnId[]) => {
+    const candidateColumns: TaskListColumnId[] = next.includes("task") ? next : ["task", ...next];
+    const normalized = candidateColumns.filter((column) => availableColumnIds.has(column));
+    setColumns(normalized);
+    if (taskStoreUsesServer) void saveTaskListColumnsAction({ columns: normalized }).then((result) => { if (!result.ok) setScopeMessage(result.message); });
+  };
+  const selectScope = (nextScope: OperationalTaskScope) => {
+    if (nextScope === "people" && !scopeData?.people.length) { setScopeMessage("You do not have permission to browse another person's tasks."); return; }
+    if (nextScope === "team" && !scopeData?.teams.length) { setScopeMessage("No team task list is available to you."); return; }
+    if (nextScope === "people" && !selectedPersonId) setSelectedPersonId(scopeData!.people[0]!.id);
+    if (nextScope === "team" && !selectedTeamId) setSelectedTeamId(scopeData!.teams[0]!.id);
+    const normalizedFilters = normalizeTaskScopeFilters(nextScope, {
+      search,
+      organization: filterOrg,
+      area: filterArea,
+      project: filterProject,
+      assignee: filterAssignee,
+      team: filterTeam,
+      assignedBy: filterAssignedBy,
+      ownedByMe,
+      priority: filterPriority,
+      status: filterStatus,
+      date: dateFilter,
+      hasFiles: hasFilesOnly,
+    });
+    setSearch(normalizedFilters.search);
+    setFilterOrg(normalizedFilters.organization);
+    setFilterArea(normalizedFilters.area);
+    setFilterProject(normalizedFilters.project);
+    setFilterAssignee(normalizedFilters.assignee);
+    setFilterTeam(normalizedFilters.team);
+    setFilterAssignedBy(normalizedFilters.assignedBy);
+    setOwnedByMe(normalizedFilters.ownedByMe);
+    setFilterPriority(normalizedFilters.priority as Priority | "");
+    setFilterStatus(normalizedFilters.status as TaskStatus | "");
+    setDateFilter(normalizedFilters.date as "" | "target" | "deadline" | "overdue");
+    setHasFilesOnly(normalizedFilters.hasFiles);
+    if (nextScope === "completed" || nextScope === "archive") setMode("list");
+    setColumns(getRecommendedTaskListColumns(nextScope));
+    setSortColumn(nextScope === "archive" ? "archivedDate" : nextScope === "completed" ? "completedDate" : "deadline");
+    setSortDirection("asc");
+    setScope(nextScope);
+  };
+  const changeSort = (column: TaskListColumnId) => {
+    if (sortColumn === column) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+    else { setSortColumn(column); setSortDirection("asc"); }
+  };
+  const clearFilters = () => { setFilterOrg(""); setFilterArea(""); setFilterProject(""); setFilterAssignee(""); setFilterTeam(""); setFilterAssignedBy(""); setOwnedByMe(false); setFilterPriority(""); setFilterStatus(""); setDateFilter(""); setHasFilesOnly(false); };
+  const moveCard = async (task: Task, status: TaskStatus) => {
+    if (task.status === status) return;
+    if (!taskStoreUsesServer || !task.version) { updateTask(task.id, { status, completedAt: status === "done" ? new Date().toISOString() : undefined, isWaiting: status === "waiting" }); return; }
+    const result = await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status });
+    if (!result.ok) { setScopeMessage(result.message); return; }
+    applyCanonicalTask(result.data, result.revision);
+    setScopeData((current) => current ? { ...current, tasks: current.tasks.map((item) => item.id === result.data.id ? result.data : item) } : current);
+  };
+  const renderCell = (task: Task, column: TaskListColumnId) => {
+    const assigneeNames = task.assignments?.map((assignment) => assignment.name).join(" · ") || task.assignee || "—";
+    const assignedAt = task.assignments?.map((assignment) => assignment.assignedAt).sort()[0];
+    const assignedByName = task.assignments?.map((assignment) => assignment.assignedBy).filter((name): name is string => Boolean(name)).filter((name, index, all) => all.indexOf(name) === index).join(" · ");
+    const text = "text-[11px] text-muted-foreground";
+    if (column === "task") return <span><span className="block max-w-[23rem] truncate text-[13px] font-semibold text-foreground">{task.title}</span>{scope === "assigned_by_me" && <span className="mt-0.5 block max-w-[23rem] truncate text-[11px] text-muted-foreground">Now with {task.currentResponsibility?.name || task.assignee || "Unassigned"}{task.currentStep ? ` · ${task.currentStep}` : ""}</span>}{task.description && scope !== "assigned_by_me" && <span className="mt-0.5 block max-w-[23rem] truncate text-[11px] text-muted-foreground">{task.description}</span>}</span>;
+    if (column === "priority") return <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", task.priority === "urgent" ? "bg-overdue/10 text-overdue" : task.priority === "high" ? "bg-warning/10 text-warning" : task.priority === "low" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")}>{taskPriorityLabel(task.priority)}</span>;
+    if (column === "assignedTo") return <span className={text}>{task.currentResponsibility?.name || assigneeNames}</span>;
+    if (column === "assignedBy") return <span className={text}>{assignedByName || "—"}</span>;
+    if (column === "owner") return <span className={text}>{task.owner?.name || "—"}</span>;
+    if (column === "currentStep") return <span className={cn(text, "block max-w-48 truncate")}>{task.currentStep || "—"}</span>;
+    if (column === "organization") return <TaskOrganizationBadge org={task.org} />;
+    if (column === "area") return <span className={text}>{getTaskAreas(task).join(" · ") || "—"}</span>;
+    if (column === "project") return <span className={text}>{task.project || "—"}</span>;
+    if (column === "status") return <span className={cn("inline-flex items-center gap-1.5", text)}><StatusDot status={task.status} />{taskStatusLabel(task.status)}</span>;
+    if (column === "assignedDate") return <span className={text}>{assignedAt ? taskDateLabel(assignedAt.slice(0, 10)) : "—"}</span>;
+    if (column === "planFor") return <span className={text}>{taskDateLabel(task.startDate) || "—"}</span>;
+    if (column === "targetDate") return <span className={text}>{taskDateLabel(task.targetDate) || "—"}</span>;
+    if (column === "deadline") return <span className={cn(text, (task.isOverdue || task.deadlineDate === today) && "font-medium", task.isOverdue && "text-overdue", task.deadlineDate === today && !task.isOverdue && "text-warning")}>{taskDateLabel(task.deadlineDate) || "—"}</span>;
+    if (column === "files") return task.files?.length ? <button onClick={(event) => { event.stopPropagation(); onTaskClick(task); }} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"><Paperclip className="h-3.5 w-3.5" />{task.files.length}</button> : <span className={text}>—</span>;
+    if (column === "notes") return <span className={cn(text, "block max-w-48 truncate")}>{task.description || "—"}</span>;
+    if (column === "blockedBy") return <span className={cn(text, "block max-w-44 truncate")}>{task.blockedBy?.label || "—"}</span>;
+    if (column === "completedBy") return <span className={text}>{task.completedBy?.name || "—"}</span>;
+    if (column === "completedDate") return <span className={text}>{task.completedAt ? taskDateLabel(task.completedAt.slice(0, 10)) : "—"}</span>;
+    return <span className={text}>{task.archivedAt ? taskDateLabel(task.archivedAt.slice(0, 10)) : "—"}</span>;
+  };
+
+  return <div className="mx-auto w-full max-w-[96rem] p-5 sm:p-8 lg:p-10">
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="binnie-heading text-3xl font-bold text-foreground">Tasks</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Your work, in one calm place.</p>
       </div>
-
-      {/* Task groups */}
-      <div className="space-y-5">
-        {groups.map(group => (
-          <div key={group.label}>
-            <SectionHeader label={group.label} count={group.tasks.length} color={group.color} />
-            <div className="space-y-2">
-              {group.tasks.map(t => <TaskCard key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
-            </div>
-          </div>
-        ))}
-        {groups.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-emerald-500/30" />
-            <p className="text-sm">No tasks found for {person.name}.</p>
-          </div>
-        )}
+      <button onClick={onNewTask} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />New Task</button>
+    </div>
+    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-fit flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border bg-card p-1.5" aria-label="Work scope">
+          <div className="flex flex-wrap items-center gap-1"><span className="px-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Active work</span><button onClick={() => selectScope("my")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "my" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>My Work</button>{scopeData?.allowedScopes.includes("team") && <button onClick={() => selectScope("team")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "team" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>Team</button>}{scopeData?.allowedScopes.includes("people") && <button onClick={() => selectScope("people")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "people" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>People</button>}</div>
+          <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+          <div className="flex flex-wrap items-center gap-1"><span className="px-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Tracking + history</span>{scopeData?.allowedScopes.includes("assigned_by_me") && <button onClick={() => selectScope("assigned_by_me")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "assigned_by_me" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>Assigned by me</button>}{scopeData?.allowedScopes.includes("completed") && <button onClick={() => selectScope("completed")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "completed" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>Completed</button>}{scopeData?.allowedScopes.includes("archive") && <button onClick={() => selectScope("archive")} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium", scope === "archive" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>Archive</button>}</div>
+        </div>
+        <span className="hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+        <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1" aria-label="Task view">
+          <button onClick={() => setMode("list")} aria-pressed={mode === "list"} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", mode === "list" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>List</button>
+          {scope !== "completed" && scope !== "archive" && <button onClick={() => setMode("board")} aria-pressed={mode === "board"} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", mode === "board" ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Board</button>}
+        </div>
       </div>
     </div>
-  );
+    {(scope === "people" || scope === "team") && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2.5">
+      <span className="text-[11px] text-muted-foreground">Viewing:</span>
+      {scope === "people" || showTeamSelector ? <select value={scope === "people" ? selectedPersonId : selectedTeamId} onChange={(event) => scope === "people" ? setSelectedPersonId(event.target.value) : setSelectedTeamId(event.target.value)} aria-label={scope === "people" ? "Person whose tasks are shown" : "Team whose tasks are shown"} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground">{(scope === "people" ? scopeData?.people : scopeData?.teams)?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select> : <span className="text-[11px] font-medium text-foreground">{selectedTeam?.name}</span>}
+      <span className="min-w-0 truncate text-[11px] text-muted-foreground">{scope === "people" ? selectedPerson?.subtitle : selectedTeam?.subtitle}</span>
+      <button onClick={() => selectScope("my")} className="ml-auto rounded-lg px-2 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/8">Back to My Work</button>
+    </div>}
+    {peopleSummary && <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground"><span className="font-medium text-foreground">{selectedPerson?.name}&rsquo;s tasks</span><span>· {peopleSummary.active} active</span><span>· {peopleSummary.waiting} waiting</span><span className={cn(peopleSummary.overdue > 0 && "text-overdue")}>· {peopleSummary.overdue} overdue</span><span>· {peopleSummary.review} review</span></div>}
+    <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center">
+      <div className="flex min-w-[15rem] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+        <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks, notes, people…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />
+        {search && <button onClick={() => setSearch("")} aria-label="Clear task search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <select value={filterOrg} onChange={(event) => setFilterOrg(event.target.value)} aria-label="Filter by organization" className="max-w-[12.5rem] rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground">
+          <option value="">All organizations</option>
+          {organizationOptions.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+        </select>
+        <button onClick={() => setFiltersOpen((open) => !open)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilters ? `Filters · ${activeFilters}` : "Filters"}</button>
+        {(activeFilters > 0 || search) && <button onClick={() => { const name = window.prompt("Name this view"); if (name?.trim()) window.dispatchEvent(new CustomEvent("binnie:save-saved-view", { detail: { name } })); }} className="rounded-xl px-2.5 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Save view</button>}
+        {mode === "list" && <div className="relative"><button onClick={() => setViewOptionsOpen((open) => !open)} aria-label="View options" aria-expanded={viewOptionsOpen} className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{viewOptionsOpen && <div className="absolute right-0 z-30 mt-2 w-72 rounded-2xl border border-border bg-popover p-2 shadow-lg"><p className="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">View options</p><label className="mb-2 block px-2 text-[10px] font-medium text-muted-foreground">Sort by<select value={sortColumn} onChange={(event) => { setSortColumn(event.target.value as TaskListColumnId); setSortDirection("asc"); }} className="mt-1.5 w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground">{availableColumns.filter((column) => column.id !== "files" && column.id !== "notes" && column.id !== "blockedBy").map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label><label className="mb-2 block px-2 text-[10px] font-medium text-muted-foreground">Direction<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")} className="mt-1.5 w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label><div className="border-t border-border pt-2"><p className="px-2 pb-1 text-[10px] font-medium text-muted-foreground">Recommended for {scope === "assigned_by_me" ? "Assigned by me" : scope === "completed" ? "Completed" : scope === "archive" ? "Archive" : scope === "my" ? "My Work" : scope === "team" ? "Team" : "People"}</p>{availableColumns.map((column) => <label key={column.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-foreground hover:bg-muted"><input type="checkbox" checked={visibleColumns.includes(column.id)} disabled={column.id === "task"} onChange={(event) => updateColumns(event.target.checked ? [...visibleColumns, column.id] : visibleColumns.filter((item) => item !== column.id))} className="h-3.5 w-3.5 accent-primary" />{column.label}</label>)}</div><button onClick={() => { const recommended = getRecommendedTaskListColumns(scope); updateColumns(recommended); setSortColumn(scope === "archive" ? "archivedDate" : scope === "completed" ? "completedDate" : "deadline"); setSortDirection("asc"); }} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">Use recommended columns</button></div>}</div>}
+      </div>
+    </div>
+    {!filtersOpen && activeFilterChips.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-1.5"><span className="text-[10px] text-muted-foreground">Filtered by</span>{activeFilterChips.map((chip) => <button key={chip.id} onClick={chip.clear} className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.055] px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">{chip.label}<X className="h-3 w-3" /></button>)}<button onClick={clearFilters} className="rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear all</button></div>}
+    {filtersOpen && <div className="mb-4 rounded-2xl border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Refine this view</p><p className="mt-0.5 text-[10px] text-muted-foreground">Only filters that add meaning to {scope === "my" ? "your personal work" : scope === "team" ? "this team’s work" : "this person’s work"} are shown.</p></div>{activeFilters > 0 && <button onClick={clearFilters} className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear all</button>}</div>
+      <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-4">
+        {showsTeamFilter && <label className="text-[10px] font-medium text-muted-foreground">{scope === "assigned_by_me" ? "Currently with team" : "Team"}<select value={filterTeam} onChange={(event) => setFilterTeam(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any team</option>{teamOptions.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>}
+        <label className="text-[10px] font-medium text-muted-foreground">Area / Department<select value={filterArea} onChange={(event) => setFilterArea(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All areas</option>{areaOptions.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}</select></label>
+        <label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject} onChange={(event) => setFilterProject(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projectOptions.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+        {showsPersonFilter && <label className="text-[10px] font-medium text-muted-foreground">{scope === "assigned_by_me" ? "Currently with person" : "Person"}<select value={filterAssignee} onChange={(event) => setFilterAssignee(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any person</option>{personOptions.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>}
+        {showsAssignedByFilter && <label className="text-[10px] font-medium text-muted-foreground">Assigned by<select value={filterAssignedBy} onChange={(event) => setFilterAssignedBy(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Anyone</option>{assignedByOptions.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>}
+        <label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={(event) => setFilterPriority(event.target.value as Priority | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Normal</option><option value="low">Low</option></select></label>
+        {showsStatusFilter && <label className="text-[10px] font-medium text-muted-foreground">Status<select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as TaskStatus | "")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">All statuses</option>{BOARD_STATUSES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
+        <label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="">Any date</option><option value="target">Has target date</option><option value="deadline">Has deadline</option><option value="overdue">Overdue</option></select></label>
+        <label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={(event) => setHasFilesOnly(event.target.checked)} className="h-4 w-4 accent-primary" />Has files</label>
+        {scope === "my" && <label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={ownedByMe} onChange={(event) => setOwnedByMe(event.target.checked)} className="h-4 w-4 accent-primary" />Owned by me</label>}
+      </div>
+    </div>}
+    {scopeMessage && <p className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{scopeMessage}</p>}
+    {mode === "list" ? (
+      <div className="overflow-x-auto rounded-[1.2rem] border border-border bg-card">
+        <table className="min-w-full border-separate border-spacing-0 text-left">
+          <thead>
+            <tr>
+              {visibleColumns.map((column) => <th key={column} className={cn("whitespace-nowrap border-b border-border px-3 py-3 first:pl-4", column === "task" && "min-w-[19rem]")}>
+                <button onClick={() => changeSort(column)} className="inline-flex items-center gap-1 text-[10px] font-medium tracking-[0.045em] text-muted-foreground hover:text-foreground">
+                  {TASK_LIST_COLUMNS.find((item) => item.id === column)?.label}
+                  {sortColumn === column && <span className="text-primary">{sortDirection === "asc" ? "↑" : "↓"}</span>}
+                </button>
+              </th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {scopeLoading ? <tr><td colSpan={visibleColumns.length} className="px-5 py-12 text-center text-[12px] text-muted-foreground">Loading permitted work…</td></tr> : filteredTasks.length ? filteredTasks.map((task) => <tr key={task.id} role="button" tabIndex={0} onClick={() => onTaskClick(task)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onTaskClick(task); } }} className="cursor-pointer border-b border-border/70 transition-colors last:border-0 hover:bg-primary/[0.025]">{visibleColumns.map((column) => <td key={column} className={cn("max-w-[19rem] px-3 py-3.5 align-middle first:pl-4", column === "task" && "min-w-[19rem]")}>{renderCell(task, column)}</td>)}</tr>) : <tr><td colSpan={visibleColumns.length} className="px-5 py-14 text-center"><ListTodo className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-[12px] font-medium text-foreground">{scope === "people" ? `${selectedPerson?.name || "This person"} has no open work matching these filters.` : "Nothing here right now."}</p></td></tr>}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="overflow-x-auto pb-3">
+        <div className="flex min-w-max items-stretch gap-3">
+          {BOARD_STATUSES.map((column) => {
+            const columnTasks = filteredTasks
+              .filter((task) => task.status === column.id)
+              .filter((task) => column.id !== "done" || showAllDone || !task.completedAt || new Date(task.completedAt).getTime() >= Date.now() - 30 * 86400000);
+            return <section key={column.id} style={{ backgroundColor: `var(${BOARD_STATUS_LANE_TOKENS[column.id]})` }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const task = filteredTasks.find((item) => item.id === dragTaskId); if (task) void moveCard(task, column.id); setDragTaskId(null); }} className="flex min-h-[24rem] w-[19rem] shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-border/75">
+              <header className="mb-2.5 flex items-center justify-between border-b border-border/60 px-3.5 py-3">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground"><span className={cn("h-1.5 w-1.5 rounded-full", BOARD_STATUS_DOT_CLASSES[column.id])} />{column.label}</p>
+                <span className="text-[10px] font-medium text-muted-foreground">{columnTasks.length}</span>
+              </header>
+              <div className="flex flex-1 flex-col px-2.5 pb-2.5">
+                <div className="space-y-2">
+                  {columnTasks.map((task) => {
+                    const assignmentLabel = task.assignments?.map((assignment) => assignment.name).join(" · ") || task.assignee;
+                    const areas = getTaskAreas(task);
+                    return <article key={task.id} draggable onDragStart={(event: DragEvent<HTMLElement>) => { event.dataTransfer.effectAllowed = "move"; setDragTaskId(task.id); }} onDragEnd={() => setDragTaskId(null)} onClick={() => onTaskClick(task)} className="cursor-grab rounded-xl border border-border/80 bg-card p-3 shadow-[0_2px_7px_var(--theme-shadow)] transition hover:border-primary/30 hover:shadow-[0_5px_12px_var(--theme-shadow)] active:cursor-grabbing">
+                      <p className="text-[12px] font-semibold leading-5 text-foreground">{task.title}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5"><TaskOrganizationBadge org={task.org} />{areas.length > 0 && <span className="text-[10px] text-muted-foreground">{areas.join(" · ")}</span>}</div>
+                      {assignmentLabel && <p className="mt-2 truncate text-[10px] text-muted-foreground">{assignmentLabel}</p>}
+                      {(task.priority === "urgent" || task.priority === "high" || task.deadlineDate) && <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">{(task.priority === "urgent" || task.priority === "high") && <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-medium", task.priority === "urgent" ? "bg-overdue/10 text-overdue" : "bg-warning/10 text-warning")}>{taskPriorityLabel(task.priority)}</span>}{task.deadlineDate && <span className={cn("ml-auto text-[9px]", task.isOverdue ? "font-medium text-overdue" : task.deadlineDate === today ? "font-medium text-warning" : "text-muted-foreground")}>{taskDateLabel(task.deadlineDate)}</span>}</div>}
+                    </article>;
+                  })}
+                  {!columnTasks.length && <p className="px-1 py-7 text-center text-[10px] text-muted-foreground">No tasks</p>}
+                </div>
+              </div>
+              {column.id === "done" && filteredTasks.some((task) => task.status === "done" && task.completedAt && new Date(task.completedAt).getTime() < Date.now() - 30 * 86400000) && <button onClick={() => setShowAllDone((value) => !value)} className="mx-2.5 mb-2.5 rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/8">{showAllDone ? "Show recent" : "View all completed"}</button>}
+            </section>;
+          })}
+        </div>
+      </div>
+    )}
+    <p className="mt-3 text-[11px] text-muted-foreground">{scopeLoading ? "Loading permitted work…" : `${filteredTasks.length} task${filteredTasks.length === 1 ? "" : "s"} in this view.`}{!scopeLoading && mode === "board" && " Moving a board card updates the same task everywhere."}</p>
+  </div>;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained only as a local compatibility fallback while existing task UI is verified.
+function LegacyTaskListView({ onTaskClick, onNewTask }: { onTaskClick: (task: Task) => void; onNewTask: () => void }) {
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const [scope, setScope] = useState<TaskScope>("month");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("deadline");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showStaleReview, setShowStaleReview] = useState(true);
+  const [filterOrg, setFilterOrg] = useState<OrgName | null>(null);
+  const [filterArea, setFilterArea] = useState<AreaName | null>(null);
+  const [filterProject, setFilterProject] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
+  const [filterState, setFilterState] = useState<TaskStateFilter>("all");
+  const [filterPriority, setFilterPriority] = useState<Priority | "all">("all");
+  const [filterDeadline, setFilterDeadline] = useState<TaskDeadlineFilter>("all");
+  const [hasFilesOnly, setHasFilesOnly] = useState(false);
+
+  const priorityOrder: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  const allSearchableTasks = [...TASKS, ...ARCHIVED_TASKS];
+  const isActive = isActiveTask;
+  const hasCurrentMonthTarget = (task: Task) => getTasksForMonth([task]).length > 0;
+  const isInScope = (task: Task) => {
+    if (scope === "month") return isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task);
+    if (scope === "carried") return isActive(task) && Boolean(task.carriedOver || isTaskOverdue(task));
+    if (scope === "unscheduled") return isActive(task) && !getTaskPlannerDate(task);
+    return task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task));
+  };
+  const matchesFilters = (task: Task) => {
+    if (filterOrg && task.org !== filterOrg) return false;
+    if (filterArea && task.area !== filterArea) return false;
+    if (filterProject && task.project !== filterProject) return false;
+    if (filterAssignee && task.assignee !== filterAssignee) return false;
+    if (filterState === "mine" && !taskIsForCurrentUser(task, currentUserId)) return false;
+    if (filterState === "delegated" && !getDelegatedTasks([task], currentUserId).length) return false;
+    if (filterState === "waiting" && task.status !== "waiting") return false;
+    if (filterState === "review" && task.status !== "review") return false;
+    if (filterPriority !== "all" && task.priority !== filterPriority) return false;
+    if (filterDeadline === "today" && !getTasksForToday([task], currentUserId).length) return false;
+    if (filterDeadline === "this-week" && !getTasksForWeek([task]).length) return false;
+    if (filterDeadline === "overdue" && !isTaskOverdue(task)) return false;
+    if (filterDeadline === "no-date" && getTaskPlannerDate(task)) return false;
+    if (hasFilesOnly && !task.files?.length) return false;
+    return true;
+  };
+  const matchesSearch = (task: Task) => {
+    const query = search.trim().toLowerCase();
+    return !query || [task.title, task.org, task.area, task.project, task.assignee, task.deadline].filter(Boolean).some(value => value!.toLowerCase().includes(query));
+  };
+  const sourceTasks = showArchive ? ARCHIVED_TASKS : search.trim() ? allSearchableTasks : TASKS.filter(isInScope);
+  const tasks = sourceTasks.filter(task => matchesSearch(task) && matchesFilters(task)).sort((a, b) => sortBy === "priority" ? priorityOrder[a.priority] - priorityOrder[b.priority] : sortBy === "org" ? a.org.localeCompare(b.org) : 0);
+  const areas = Array.from(new Set(allSearchableTasks.map(task => task.area)));
+  const projects = Array.from(new Set(allSearchableTasks.map(task => task.project).filter((project): project is string => Boolean(project))));
+  const assignees = Array.from(new Set(allSearchableTasks.map(task => task.assignee).filter((assignee): assignee is string => Boolean(assignee))));
+  const carriedTasks = TASKS.filter(task => isActive(task) && (task.carriedOver || isTaskOverdue(task)));
+  const longStaleTasks = carriedTasks.filter(task => (task.staleDays || 0) > 30);
+  const activeFilterCount = Number(Boolean(filterOrg)) + Number(Boolean(filterArea)) + Number(Boolean(filterProject)) + Number(Boolean(filterAssignee)) + Number(filterState !== "all") + Number(filterPriority !== "all") + Number(filterDeadline !== "all") + Number(hasFilesOnly);
+  const clearFilters = () => { setFilterOrg(null); setFilterArea(null); setFilterProject(null); setFilterAssignee(null); setFilterState("all"); setFilterPriority("all"); setFilterDeadline("all"); setHasFilesOnly(false); };
+  const currentViewFilters = () => ({ scope, filterOrg, filterArea, filterProject, filterAssignee, filterState, filterPriority, filterDeadline, hasFilesOnly, sortBy });
+  const applySavedView = (filters: Record<string, unknown>) => {
+    if (typeof filters.scope === "string") setScope(filters.scope as TaskScope);
+    setFilterOrg(typeof filters.filterOrg === "string" ? filters.filterOrg as OrgName : null);
+    setFilterArea(typeof filters.filterArea === "string" ? filters.filterArea as AreaName : null);
+    setFilterProject(typeof filters.filterProject === "string" ? filters.filterProject : null);
+    setFilterAssignee(typeof filters.filterAssignee === "string" ? filters.filterAssignee : null);
+    if (typeof filters.filterState === "string") setFilterState(filters.filterState as TaskStateFilter);
+    if (typeof filters.filterPriority === "string") setFilterPriority(filters.filterPriority as Priority | "all");
+    if (typeof filters.filterDeadline === "string") setFilterDeadline(filters.filterDeadline as TaskDeadlineFilter);
+    if (typeof filters.hasFilesOnly === "boolean") setHasFilesOnly(filters.hasFilesOnly);
+    if (typeof filters.sortBy === "string") setSortBy(filters.sortBy as SortBy);
+  };
+  useEffect(() => {
+    const apply = (event: Event) => {
+      const filters = (event as CustomEvent<{ filters?: Record<string, unknown> }>).detail?.filters;
+      if (filters) applySavedView(filters);
+    };
+    const save = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (!name || !taskStoreUsesServer) return;
+      void saveViewAction({ name, filters: currentViewFilters() }).then(result => {
+        if (result.ok) { CANONICAL_SAVED_VIEWS = [result.data, ...CANONICAL_SAVED_VIEWS.filter(view => view.id !== result.data.id)]; publishTaskStore(); }
+      });
+    };
+    const remove = (event: Event) => {
+      const viewId = (event as CustomEvent<{ viewId?: string }>).detail?.viewId;
+      if (!viewId || !taskStoreUsesServer) return;
+      void deleteViewAction({ viewId }).then(result => {
+        if (result.ok) { CANONICAL_SAVED_VIEWS = CANONICAL_SAVED_VIEWS.filter(view => view.id !== viewId); publishTaskStore(); }
+      });
+    };
+    window.addEventListener("binnie:apply-saved-view", apply);
+    window.addEventListener("binnie:save-saved-view", save);
+    window.addEventListener("binnie:delete-saved-view", remove);
+    return () => { window.removeEventListener("binnie:apply-saved-view", apply); window.removeEventListener("binnie:save-saved-view", save); window.removeEventListener("binnie:delete-saved-view", remove); };
+  });
+  const scopeTabs: { id: TaskScope; label: string; count: number }[] = [
+    { id: "month", label: "This Month", count: TASKS.filter(task => isActive(task) && !task.carriedOver && hasCurrentMonthTarget(task)).length },
+    { id: "carried", label: "Carried Over", count: carriedTasks.length },
+    { id: "unscheduled", label: "Unscheduled", count: TASKS.filter(task => isActive(task) && !getTaskPlannerDate(task)).length },
+    { id: "done", label: "Done", count: TASKS.filter(task => task.status === "done" && !task.archived && (task.completedInCurrentMonth || hasCurrentMonthTarget(task))).length },
+  ];
+  const scopeHelp: Record<TaskScope, string> = { month: "Current work with a target this month.", carried: "Unfinished work brought forward from an earlier period.", unscheduled: "Active work without a target date yet.", done: "Completed work from this month." };
+
+  if (showArchive) return <div className="mx-auto w-full max-w-4xl p-5 sm:p-8 lg:p-10"><button onClick={() => setShowArchive(false)} className="mb-5 inline-flex items-center gap-1.5 text-[12px] text-muted-foreground transition-colors hover:text-foreground"><ChevronLeft className="h-3.5 w-3.5" />Back to Tasks</button><div className="mb-6"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">History</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Archive</h1><p className="mt-1.5 text-sm text-muted-foreground">Completed work that is safely kept for reference.</p></div><div className="overflow-hidden rounded-[1.35rem] border border-border bg-card">{tasks.length ? tasks.map(task => <TaskWorkspaceRow key={task.id} task={task} archived onClick={() => onTaskClick(task)} />) : <p className="px-5 py-14 text-center text-sm text-muted-foreground">No archived tasks match these filters.</p>}</div></div>;
+
+  return <div className="mx-auto w-full max-w-4xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="binnie-heading text-3xl font-bold text-foreground">Tasks</h1><p className="mt-1.5 text-sm text-muted-foreground">Everything that still needs your attention.</p></div><button onClick={() => setShowArchive(true)} className="w-fit rounded-xl px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Archive</button></div><div className="mb-5 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card/75 p-1">{scopeTabs.map(tab => <button key={tab.id} onClick={() => setScope(tab.id)} className={cn("rounded-lg px-3 py-2 text-[12px] font-medium transition-colors", scope === tab.id ? "bg-primary/12 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{tab.label}<span className="ml-1.5 text-[10px] opacity-65">{tab.count}</span></button>)}</div><div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center"><p className="flex-1 text-[11px] text-muted-foreground">{scopeHelp[scope]}</p><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[13rem] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 sm:flex-none"><Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search tasks and archive…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{search && <button onClick={() => setSearch("")} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setShowFilters(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[12px] transition-colors", showFilters ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/25 hover:text-foreground")}><span className="inline-flex items-center gap-1.5"><SlidersHorizontal className="h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filters"}</span></button><select value={sortBy} onChange={event => setSortBy(event.target.value as SortBy)} className="rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground"><option value="deadline">Sort: Target date</option><option value="priority">Sort: Priority</option><option value="org">Sort: Organization</option><option value="updated">Sort: Updated</option></select><button onClick={onNewTask} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" />New Task</button></div></div>{showFilters && <div className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-[0_8px_24px_rgb(35_41_61_/_0.06)]"><div className="mb-3 flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Refine your view</p><p className="mt-0.5 text-[10px] text-muted-foreground">Filters stay tucked away until you need them.</p></div>{activeFilterCount > 0 && <button onClick={clearFilters} className="text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear all</button>}</div><div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-3"><label className="text-[10px] font-medium text-muted-foreground">Organization<select value={filterOrg || ""} onChange={event => setFilterOrg(event.target.value as OrgName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All organizations</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Area<select value={filterArea || ""} onChange={event => setFilterArea(event.target.value as AreaName || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All areas</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={filterProject || ""} onChange={event => setFilterProject(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">All projects</option>{projects.map(project => <option key={project}>{project}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assignee<select value={filterAssignee || ""} onChange={event => setFilterAssignee(event.target.value || null)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="">Anyone</option>{assignees.map(assignee => <option key={assignee}>{assignee}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Work state<select value={filterState} onChange={event => setFilterState(event.target.value as TaskStateFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any state</option><option value="mine">Mine</option><option value="delegated">Delegated</option><option value="waiting">Waiting</option><option value="review">Needs review</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={filterPriority} onChange={event => setFilterPriority(event.target.value as Priority | "all")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any priority</option><option value="urgent">Needs attention</option><option value="high">Important</option><option value="medium">Planned</option><option value="low">When there’s room</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Deadline<select value={filterDeadline} onChange={event => setFilterDeadline(event.target.value as TaskDeadlineFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground"><option value="all">Any target date</option><option value="today">Today</option><option value="this-week">This week</option><option value="overdue">Past target</option><option value="no-date">No target date</option></select></label><label className="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground"><input type="checkbox" checked={hasFilesOnly} onChange={event => setHasFilesOnly(event.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />Has files</label></div></div>}{showStaleReview && longStaleTasks.length > 0 && <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-warning/20 bg-warning/[0.07] p-4 sm:flex-row sm:items-center"><div className="flex-1"><p className="text-[13px] font-semibold text-foreground">{longStaleTasks.length} {longStaleTasks.length === 1 ? "task has" : "tasks have"} been carried over for more than 30 days.</p><p className="mt-1 text-[11px] text-muted-foreground">Take a quiet moment to decide what still matters.</p></div><div className="flex gap-2"><button onClick={() => setScope("carried")} className="rounded-xl bg-card px-3 py-2 text-[11px] font-medium text-foreground shadow-sm">Review them</button><button onClick={() => setShowStaleReview(false)} className="rounded-xl px-3 py-2 text-[11px] text-muted-foreground hover:bg-card/50">Not now</button></div></div>}<div className="overflow-hidden rounded-[1.35rem] border border-border bg-card shadow-[0_3px_16px_var(--theme-shadow)]">{tasks.length ? tasks.map(task => <TaskWorkspaceRow key={task.id} task={task} archived={Boolean(task.archived)} onClick={() => onTaskClick(task)} />) : <div className="px-5 py-14 text-center"><ListTodo className="mx-auto mb-3 h-9 w-9 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">Nothing to show here right now.</p><p className="mt-1 text-[12px] text-muted-foreground">The rest of your work is safely organized.</p></div>}</div><p className="mt-3 text-[11px] text-muted-foreground">{search ? `${tasks.length} search result${tasks.length === 1 ? "" : "s"} across current work and archive.` : `${tasks.length} task${tasks.length === 1 ? "" : "s"} in this view.`}</p></div>;
+}
+
+// ─── PEOPLE DIRECTORY ────────────────────────────────────────────────────────
+
+type PeopleSort = "followup" | "overdue" | "active" | "name";
+type PersonWorkFilter = "all" | "assigned" | "waiting-on-them" | "waiting-on-me" | "overdue";
+
+const personAreas = Array.from(new Set(TASKS.map(task => task.area)));
+
+function personRole(person: DirectoryPerson, organization?: OrgName) {
+  const membership = getPersonMembership(person, organization);
+  return [membership?.role, membership?.area].filter(Boolean).join(" · ") || (person.type === "team" ? "Team" : "No role set");
+}
+
+function MembershipPills({ person, compact = false }: { person: DirectoryPerson; compact?: boolean }) {
+  return <div className="flex flex-wrap gap-1.5">{person.memberships.slice(0, compact ? 1 : 3).map(membership => <span key={membership.organization} className="rounded-full border border-border bg-muted/45 px-2 py-1 text-[10px] text-muted-foreground">{membership.organization}{membership.area ? ` · ${membership.area}` : ""}</span>)}{person.memberships.length > (compact ? 1 : 3) && <span className="rounded-full border border-border bg-muted/45 px-2 py-1 text-[10px] text-muted-foreground">+{person.memberships.length - (compact ? 1 : 3)}</span>}</div>;
+}
+
+function PersonManagerDrawer({ open, onClose, onSaved, organizationContext, initialPerson }: { open: boolean; onClose: () => void; onSaved: (person: DirectoryPerson) => void; organizationContext?: OrgName; initialPerson?: DirectoryPerson | null }) {
+  const emptyMembership = (): OrganizationMembership => ({ organization: organizationContext || "", role: "", area: "" });
+  const [name, setName] = useState(() => initialPerson?.name || "");
+  const [type, setType] = useState<DirectoryEntityType>(() => initialPerson?.type || "person");
+  const [memberships, setMemberships] = useState<OrganizationMembership[]>(() => initialPerson ? initialPerson.memberships.map(membership => ({ ...membership })) : [emptyMembership()]);
+  const [email, setEmail] = useState(() => initialPerson?.email || "");
+  const [phone, setPhone] = useState(() => initialPerson?.phone || "");
+  const [notes, setNotes] = useState(() => initialPerson?.notes || "");
+  const [existingQuery, setExistingQuery] = useState("");
+  const [showCreate, setShowCreate] = useState(!organizationContext || Boolean(initialPerson));
+  const [error, setError] = useState("");
+
+  if (!open) return null;
+  const existingMatches = getDirectoryAssignees().filter(person => person.name.toLowerCase().includes(existingQuery.trim().toLowerCase())).slice(0, 5);
+  const updateMembership = (index: number, patch: Partial<OrganizationMembership>) => setMemberships(current => current.map((membership, membershipIndex) => membershipIndex === index ? { ...membership, ...patch } : membership));
+  const addMembership = () => setMemberships(current => [...current, { organization: "", role: "", area: "" }]);
+  const removeMembership = (index: number) => setMemberships(current => current.length === 1 ? current : current.filter((_, membershipIndex) => membershipIndex !== index));
+  const canonicalMemberships = (values: OrganizationMembership[]) => values
+    .filter(membership => membership.organization)
+    .map(membership => ({
+      organizationId: remoteOrganizationIds.get(membership.organization),
+      departmentId: membership.area ? getRemoteDepartmentId(membership.organization, membership.area) : undefined,
+    }));
+  const attachExisting = async (person: DirectoryPerson) => {
+    if (!organizationContext) return;
+    if (person.memberships.some(membership => membership.organization === organizationContext)) { setError(`${person.name} is already connected to ${organizationContext}.`); return; }
+    if (taskStoreUsesServer) {
+      const result = await updatePrincipalAction({
+        principalId: person.id,
+        name: person.name,
+        type: person.type,
+        email: person.email,
+        memberships: canonicalMemberships([...person.memberships, { organization: organizationContext, role: "", area: "" }]),
+      });
+      if (!result.ok) { setError(result.message); return; }
+      onSaved(applyCanonicalDirectoryPerson(result.data));
+      onClose();
+      return;
+    }
+    const updated = replaceDirectoryPerson(person.id, current => ({ ...current, memberships: [...current.memberships, { organization: organizationContext, role: "", area: "" }] }));
+    if (updated) onSaved(updated);
+    onClose();
+  };
+  const save = async () => {
+    const cleanName = name.trim();
+    const cleanMemberships = memberships.filter(membership => membership.organization).map(membership => ({ ...membership, role: membership.role?.trim(), area: membership.area || undefined }));
+    if (!cleanName) { setError("Add a name before saving."); return; }
+    if (memberships.some(membership => !membership.organization && (membership.role?.trim() || membership.area))) { setError("Choose an organization before adding a role or department."); return; }
+    if (new Set(cleanMemberships.map(membership => membership.organization)).size !== cleanMemberships.length) { setError("Use each organization once, then set its role and department on that membership."); return; }
+    const duplicate = PEOPLE_DIRECTORY.find(person => person.name.toLowerCase() === cleanName.toLowerCase() && person.id !== initialPerson?.id);
+    if (duplicate) { setError(`${duplicate.name} already exists in Binnie. Add them to an organization instead of creating a duplicate.`); return; }
+    const values = { name: cleanName, type, memberships: cleanMemberships, email: email.trim() || undefined, phone: phone.trim() || undefined, notes: notes.trim() || undefined };
+    if (taskStoreUsesServer && !initialPerson) {
+      const result = await createPrincipalAction({
+        name: cleanName,
+        type,
+        email: values.email,
+        memberships: canonicalMemberships(cleanMemberships),
+      });
+      if (!result.ok) { setError(result.message); return; }
+      onSaved(applyCanonicalDirectoryPerson(result.data));
+      onClose();
+      return;
+    }
+    if (taskStoreUsesServer && initialPerson) {
+      const result = await updatePrincipalAction({
+        principalId: initialPerson.id,
+        name: cleanName,
+        type,
+        email: values.email,
+        memberships: canonicalMemberships(cleanMemberships),
+      });
+      if (!result.ok) { setError(result.message); return; }
+      onSaved(applyCanonicalDirectoryPerson(result.data));
+      onClose();
+      return;
+    }
+    const next = initialPerson
+      ? replaceDirectoryPerson(initialPerson.id, current => ({ ...current, ...values }))
+      : { id: `person-${Date.now()}`, ...values, active: true, accountStatus: "no_account" as DirectoryAccountStatus };
+    if (!next) { setError("This person could not be found."); return; }
+    if (!initialPerson) PEOPLE_DIRECTORY.push(next);
+    onSaved(next);
+    onClose();
+  };
+
+  return <div className="fixed inset-0 z-[90] flex justify-end" role="dialog" aria-modal="true" aria-label={initialPerson ? `Edit ${initialPerson.name}` : "Add person"}>
+    <button aria-label="Close person manager" onClick={onClose} className="absolute inset-0 cursor-default bg-foreground/10 backdrop-blur-[1px]" />
+    <aside className="relative flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-20px_0_50px_rgb(35_41_61_/_0.12)]">
+      <div className="flex items-start justify-between border-b border-border px-5 py-5"><div><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">People directory</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{initialPerson ? "Edit person" : organizationContext ? `Add person to ${organizationContext}` : "Add person"}</h2><p className="mt-1 text-[11px] text-muted-foreground">People can exist without a Binnie account.</p></div><button onClick={onClose} aria-label="Close" className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div>
+      <div className="flex-1 overflow-y-auto p-5">
+        {organizationContext && !initialPerson && <section className="mb-5 rounded-2xl border border-border bg-muted/30 p-3.5"><p className="text-[12px] font-semibold text-foreground">Add an existing Binnie person</p><p className="mt-0.5 text-[10px] text-muted-foreground">Create a membership instead of a duplicate record.</p><div className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input autoFocus value={existingQuery} onChange={event => setExistingQuery(event.target.value)} placeholder="Search people…" className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" /></div>{existingQuery && <div className="mt-2 space-y-1.5">{existingMatches.map(person => <button key={person.id} onClick={() => attachExisting(person)} className="flex w-full items-center gap-2 rounded-xl border border-border bg-card p-2.5 text-left hover:border-primary/30"><Avatar name={person.name} size="xs" /><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-medium text-foreground">{person.name}</span><span className="block truncate text-[10px] text-muted-foreground">{personRole(person)}{person.memberships.some(membership => membership.organization === organizationContext) ? ` · already in ${organizationContext}` : ""}</span></span><Plus className="h-3.5 w-3.5 text-primary" /></button>)}{!existingMatches.length && <p className="px-1 py-2 text-[11px] text-muted-foreground">No match yet. Create a new person below.</p>}</div>}<button onClick={() => setShowCreate(current => !current)} className="mt-3 text-[11px] font-medium text-primary">{showCreate ? "Hide new person form" : "+ Create new person"}</button></section>}
+        {showCreate && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-[1fr_9rem]"><label className="text-[11px] font-medium text-muted-foreground">Name<input value={name} onChange={event => setName(event.target.value)} placeholder={type === "team" ? "Enter team name" : "Enter name"} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Record type<select value={type} onChange={event => setType(event.target.value as DirectoryEntityType)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="person">Person</option><option value="team">Team</option></select></label></div>
+          <section><div className="mb-2 flex items-center justify-between"><div><p className="text-[11px] font-medium text-muted-foreground">Organization memberships <span className="font-normal">(optional)</span></p><p className="mt-0.5 text-[10px] text-muted-foreground">Role and department can be different in each organization.</p></div><button onClick={addMembership} className="text-[11px] font-medium text-primary">+ Add organization</button></div><div className="space-y-2">{memberships.map((membership, index) => <div key={`${membership.organization || "new"}-${index}`} className="grid gap-2 rounded-xl border border-border bg-muted/25 p-3 sm:grid-cols-[1.15fr_1fr_1fr_auto]"><select value={membership.organization} onChange={event => updateMembership(index, { organization: event.target.value })} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Select organization</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select><input value={membership.role || ""} onChange={event => updateMembership(index, { role: event.target.value })} placeholder="Role or title" className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground placeholder:text-muted-foreground" /><select value={membership.area || ""} onChange={event => updateMembership(index, { area: event.target.value || undefined })} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Select department</option>{personAreas.map(area => <option key={area}>{area}</option>)}</select><button onClick={() => removeMembership(index)} disabled={memberships.length === 1} aria-label="Remove organization" className="rounded-lg p-2 text-muted-foreground hover:bg-overdue/10 hover:text-overdue disabled:opacity-30"><X className="h-3.5 w-3.5" /></button></div>)}</div></section>
+          <div className="grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">Email <span className="font-normal">(optional)</span><input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="Email address" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Phone / WhatsApp <span className="font-normal">(optional)</span><input value={phone} onChange={event => setPhone(event.target.value)} placeholder="Phone or WhatsApp" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /></label></div><label className="block text-[11px] font-medium text-muted-foreground">Notes <span className="font-normal">(optional)</span><textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Add notes" className="mt-1.5 min-h-20 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /></label></div>}
+        {error && <p className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.06] px-3 py-2 text-[11px] text-overdue">{error}</p>}
+      </div>
+      <div className="flex justify-end gap-2 border-t border-border px-5 py-4"><button onClick={onClose} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button>{showCreate && <button onClick={save} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">{initialPerson ? "Save changes" : `Add ${type === "team" ? "team" : "person"}`}</button>}</div>
+    </aside>
+  </div>;
+}
+
+function PeopleView({ onPersonClick, entityType = "person" }: { onPersonClick: (name: string) => void; entityType?: DirectoryEntityType }) {
+  const [sort, setSort] = useState<PeopleSort>("followup");
+  const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [organization, setOrganization] = useState<OrgName | "all">("all");
+  const [area, setArea] = useState<AreaName | "all">("all");
+  const [activityFilter, setActivityFilter] = useState<"all" | "open" | "waiting-them" | "waiting-me" | "overdue">("all");
+  const [directoryRevision, setDirectoryRevision] = useState(0);
+  const [addOpen, setAddOpen] = useState(false);
+  void directoryRevision;
+  const accountability = PEOPLE_DIRECTORY.filter(person => person.type === entityType).map(person => ({ person, summary: getPersonAccountability(person.name) }));
+  const entityLabel = entityType === "team" ? "Teams" : "People";
+  const entitySingular = entityType === "team" ? "Team" : "Person";
+  const owesUpdate = accountability.filter(item => item.summary.waitingOnThem > 0).length;
+  const waitingForMe = accountability.filter(item => item.summary.waitingOnMe > 0).length;
+  const overdueCount = accountability.reduce((count, item) => count + item.summary.overdue, 0);
+  const filtered = accountability.filter(({ person, summary }) => {
+    const searchable = [person.name, person.type, person.email, ...person.memberships.flatMap(membership => [membership.organization, membership.role, membership.area])].filter(Boolean).join(" ").toLowerCase();
+    if (query && !searchable.includes(query.toLowerCase())) return false;
+    if (organization !== "all" && !person.memberships.some(membership => membership.organization === organization)) return false;
+    if (area !== "all" && !person.memberships.some(membership => membership.area === area)) return false;
+    if (activityFilter === "open" && !summary.active) return false;
+    if (activityFilter === "waiting-them" && !summary.waitingOnThem) return false;
+    if (activityFilter === "waiting-me" && !summary.waitingOnMe) return false;
+    if (activityFilter === "overdue" && !summary.overdue) return false;
+    return true;
+  }).sort((left, right) => sort === "name" ? left.person.name.localeCompare(right.person.name) : sort === "overdue" ? right.summary.overdue - left.summary.overdue : sort === "active" ? right.summary.active - left.summary.active : right.summary.waitingOnThem - left.summary.waitingOnThem || right.summary.overdue - left.summary.overdue);
+  const activeFilterCount = Number(organization !== "all") + Number(area !== "all") + Number(activityFilter !== "all");
+
+  return <div className="mx-auto max-w-5xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Accountability</p><h1 className="binnie-heading text-3xl font-bold text-foreground">{entityLabel}</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep track of who owns what and where work is waiting.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[13rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${entityLabel.toLowerCase()}`} className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground" />{query && <button onClick={() => setQuery("")} aria-label={`Clear ${entityLabel.toLowerCase()} search`}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setFiltersOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium", filtersOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button>{entityType === "person" && <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Add Person</button>}</div></div>
+    <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">{[{ value: owesUpdate, label: "updates you’re waiting for", color: "text-warning", bg: "bg-warning/10", border: "border-warning/20" }, { value: waitingForMe, label: "people waiting for you", color: "text-info", bg: "bg-info/10", border: "border-info/20" }, { value: overdueCount, label: "dates worth revisiting", color: "text-overdue", bg: "bg-overdue/10", border: "border-overdue/20" }].map(item => <div key={item.label} className={cn("flex items-center gap-3 rounded-xl border px-4 py-3", item.bg, item.border)}><span className={cn("binnie-heading text-2xl font-bold", item.color)}>{item.value}</span><span className={cn("text-[12px]", item.color)}>{item.label}</span></div>)}</div>
+    {filtersOpen && <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[10px] font-medium text-muted-foreground">Organization<select value={organization} onChange={event => setOrganization(event.target.value as OrgName | "all")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="all">All organizations</option>{ORGS_META.map(org => <option key={org.name}>{org.name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Department<select value={area} onChange={event => setArea(event.target.value as AreaName | "all")} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="all">All departments</option>{personAreas.map(item => <option key={item}>{item}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Work context<select value={activityFilter} onChange={event => setActivityFilter(event.target.value as typeof activityFilter)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[11px] text-foreground"><option value="all">Any context</option><option value="open">Has open work</option><option value="waiting-them">Waiting on them</option><option value="waiting-me">Waiting on me</option><option value="overdue">Overdue work</option></select></label><div className="flex items-end"><button onClick={() => { setOrganization("all"); setArea("all"); setActivityFilter("all"); }} className="rounded-xl px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Clear filters</button></div></div>}
+    <div className="mb-3 flex flex-wrap items-center gap-2"><span className="text-[11px] text-muted-foreground">Sort by</span>{([{ id: "followup", label: "Needs Follow-Up" }, { id: "overdue", label: "Most Overdue" }, { id: "active", label: "Most Active" }, { id: "name", label: "Name" }] as { id: PeopleSort; label: string }[]).map(option => <button key={option.id} onClick={() => setSort(option.id)} className={cn("rounded-full border px-2.5 py-1 text-[11px]", sort === option.id ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div>
+    <div className="space-y-2.5">{filtered.map(({ person, summary }) => <button key={person.id} onClick={() => onPersonClick(person.name)} className="binnie-card binnie-card-hover group w-full p-4 text-left"><div className="flex items-center gap-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[13px] font-semibold text-foreground">{person.name}</p><span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{person.type}</span>{!person.active && <span className="rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">Inactive</span>}</div><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{personRole(person)}</p><div className="mt-2"><MembershipPills person={person} compact /></div></div><div className="hidden grid-cols-4 gap-4 text-center sm:grid">{[{ value: summary.active, label: "Active" }, { value: summary.waitingOnThem, label: "On them" }, { value: summary.waitingOnMe, label: "On me" }, { value: summary.overdue, label: "Overdue" }].map(item => <span key={item.label}><span className={cn("block text-base font-semibold", item.label === "Overdue" && item.value ? "text-overdue" : item.label === "On them" && item.value ? "text-warning" : "text-foreground")}>{item.value}</span><span className="block text-[9px] text-muted-foreground">{item.label}</span></span>)}</div><ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" /></div></button>)}{!filtered.length && <div className="binnie-card py-14 text-center"><Users className="mx-auto mb-3 h-9 w-9 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No {entityLabel.toLowerCase()} added yet.</p><p className="mt-1 text-[12px] text-muted-foreground">{entityType === "person" ? "Add people so Binnie can help you delegate work and keep track of follow-ups." : "Teams stay in the shared directory and own their own task queues."}</p>{entityType === "person" && <button onClick={() => setAddOpen(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add {entitySingular}</button>}</div>}</div>
+    {entityType === "person" && addOpen && <PersonManagerDrawer open onClose={() => setAddOpen(false)} onSaved={() => setDirectoryRevision(current => current + 1)} />}
+  </div>;
+}
+
+function PersonDetailView({ personName, onBack, onTaskClick, onFollowUp, onViewTasks, onOpenAttention }: { personName: string; onBack: () => void; onTaskClick: (t: Task) => void; onFollowUp: () => void; onViewTasks: (personId: string) => void; onOpenAttention?: (principalId: string) => void }) {
+  const [revision, setRevision] = useState(0);
+  const [workFilter, setWorkFilter] = useState<PersonWorkFilter>("all");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [removeMembership, setRemoveMembership] = useState<OrganizationMembership | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const person = getDirectoryPerson(personName);
+  void revision;
+  if (!person) return <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card p-8 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">This person is not in the Binnie directory yet.</p></div></div>;
+  const summary = getPersonAccountability(person.name);
+  // People is the inspectable counterpart of My Work: management access can
+  // open another person's view without turning their Team queue into theirs.
+  const personTasks = TASKS.filter(task => taskIsForCurrentUser(task, person.id));
+  const visibleTasks = personTasks.filter(task => workFilter === "all" || workFilter === "assigned" ? (workFilter === "all" || getTaskAssigneeIds(task).includes(person.id)) : workFilter === "waiting-on-them" ? task.nextActionPrincipalId === person.id && task.status !== "done" : workFilter === "waiting-on-me" ? task.nextActionPrincipalId === CANONICAL_ACTOR_ID : Boolean(task.isOverdue));
+  const defaultMembership = person.memberships[0];
+  const removeActiveTasks = removeMembership ? TASKS.filter(task => task.org === removeMembership.organization && task.status !== "done" && (task.assignee === person.name || task.nextActionBy === person.name)) : [];
+  const saveAssignedTask = () => {
+    if (!taskTitle.trim() || !defaultMembership) return;
+    createTask({ title: taskTitle.trim(), org: defaultMembership.organization, area: defaultMembership.area || "Operations", priority: "medium", status: "ready", assignee: person.name, assigneeIds: [person.id], nextActionBy: person.name, isDelegated: true, isWaiting: false, activity: [{ type: "assigned", actor: "You", text: `Sent to ${person.name}`, time: "Just now" }] });
+    setTaskTitle(""); setAssignOpen(false); setRevision(current => current + 1);
+  };
+  const completeMembershipRemoval = (reassign: boolean) => {
+    if (!removeMembership) return;
+    if (reassign) {
+      const next = getDirectoryAssignees(removeMembership.organization).find(candidate => candidate.name !== person.name)?.name || "Unassigned";
+      removeActiveTasks.forEach(task => { const nextId = getDirectoryPerson(next)?.id; setTaskAssignees(task, nextId ? [nextId] : []); Object.assign(task, { nextActionBy: next, isDelegated: next !== "Unassigned", lastUpdate: `Reassigned from ${person.name}` }); });
+      commitTaskStore();
+    }
+    replaceDirectoryPerson(person.id, current => ({ ...current, memberships: current.memberships.filter(membership => membership.organization !== removeMembership.organization) }));
+    setRemoveMembership(null); setRevision(current => current + 1);
+  };
+  const deactivate = () => { replaceDirectoryPerson(person.id, current => ({ ...current, active: false, accountStatus: "disabled" })); setMoreOpen(false); setRevision(current => current + 1); };
+
+  // Compatibility JSX below is intentionally kept in place while the People
+  // view is migrated in focused slices.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10"><BackButton label="People" onClick={onBack} /><div className="binnie-card mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar name={person.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="binnie-heading text-2xl font-bold text-foreground">{person.name}</h1><span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{person.type === "team" ? "Team" : "Person"}</span>{person.type === "person" && <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{person.accountStatus.replace(/_/g, " ")}</span>}{!person.active && <span className="rounded-full bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Inactive</span>}</div><p className="mt-1 text-sm text-muted-foreground">{personRole(person)}</p><div className="mt-3"><MembershipPills person={person} /></div>{person.email && <p className="mt-3 text-[11px] text-muted-foreground">{person.email}{person.phone ? ` · ${person.phone}` : ""}</p>}</div><div className="flex flex-wrap gap-2"><button onClick={() => onViewTasks(person.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><ListTodo className="h-3.5 w-3.5" />View Tasks</button>{onOpenAttention && <button onClick={() => onOpenAttention(person.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><AlertTriangle className="h-3.5 w-3.5" />Attention</button>}<button onClick={() => setAssignOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />Assign Task</button><button onClick={onFollowUp} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><Send className="h-3.5 w-3.5" />Follow Up</button><div className="relative"><button onClick={() => setMoreOpen(current => !moreOpen)} aria-label="Person actions" className="rounded-xl border border-border bg-card p-2 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{moreOpen && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-20 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-lg"><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit Person</button><button onClick={() => { setMoreOpen(false); setEditOpen(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Manage Organizations</button>{person.active && <button onClick={deactivate} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Deactivate Person</button>}</div>}</div></div></div><div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">{[{ label: "Active", value: summary.active }, { label: "Ready", value: summary.ready }, { label: "In Progress", value: summary.inProgress }, { label: "Waiting on them", value: summary.waitingOnThem }, { label: "Waiting on me", value: summary.waitingOnMe }, { label: "Blocked", value: summary.blocked }, { label: "Overdue", value: summary.overdue }, { label: "Review", value: summary.review }].map(item => <div key={item.label} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-semibold", item.label === "Blocked" || item.label === "Overdue" ? "text-overdue" : item.label.startsWith("Waiting") ? "text-warning" : "text-foreground")}>{item.value}</p><p className="mt-0.5 text-[9px] leading-3 text-muted-foreground">{item.label}</p></div>)}</div></div>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(15rem,.8fr)]"><section><div className="mb-3 flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Open Work</p><p className="mt-0.5 text-[11px] text-muted-foreground">Work involving {person.name}.</p></div>{([{ id: "all", label: "All" }, { id: "assigned", label: "Currently with them" }, { id: "waiting-on-them", label: "Waiting on them" }, { id: "waiting-on-me", label: "Waiting on me" }, { id: "overdue", label: "Overdue" }] as { id: PersonWorkFilter; label: string }[]).map(filter => <button key={filter.id} onClick={() => setWorkFilter(filter.id)} className={cn("rounded-full border px-2 py-1 text-[10px]", workFilter === filter.id ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{filter.label}</button>)}</div><div className="space-y-2">{visibleTasks.map(task => <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />)}{!visibleTasks.length && <div className="rounded-2xl border border-border bg-card px-4 py-10 text-center text-[12px] text-muted-foreground">No work matches this view.</div>}</div></section><aside className="space-y-6"><section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Organizations</p><button onClick={() => setEditOpen(true)} className="text-[11px] font-medium text-primary">+ Add Organization</button></div><div className="space-y-2">{person.memberships.map(membership => <div key={membership.organization} className="rounded-xl border border-border bg-card p-3"><p className="text-[12px] font-medium text-foreground">{membership.organization}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{[membership.role, membership.area].filter(Boolean).join(" · ") || "No role or department set"}</p><button onClick={() => setRemoveMembership(membership)} className="mt-2 text-[10px] font-medium text-muted-foreground hover:text-overdue">Remove from organization</button></div>)}{!person.memberships.length && <div className="rounded-xl border border-dashed border-border px-3 py-5 text-center text-[11px] text-muted-foreground">No organization memberships yet.</div>}</div></section><section><p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><div className="space-y-2">{personTasks.flatMap(task => (task.activity || []).map(activity => ({ activity, task }))).slice(0, 4).map(({ activity, task }, index) => <button key={`${task.id}-${index}`} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-border bg-card p-3 text-left hover:border-primary/25"><p className="truncate text-[11px] text-foreground">{activity.text}</p><p className="mt-1 text-[10px] text-muted-foreground">{activity.time} · {task.title}</p></button>)}{!personTasks.length && <p className="rounded-xl border border-border bg-card px-3 py-5 text-center text-[11px] text-muted-foreground">Activity will appear as work moves.</p>}</div></section></aside></div>
+    {assignOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label={`Assign a task to ${person.name}`} className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="mb-4 flex items-start justify-between"><div><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Assign task</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{person.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">No Binnie account is needed to own work.</p></div><button onClick={() => setAssignOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="block text-[11px] font-medium text-muted-foreground">Task name<input autoFocus value={taskTitle} onChange={event => setTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveAssignedTask()} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><p className="mt-3 rounded-xl bg-muted/45 px-3 py-2 text-[11px] text-muted-foreground">{defaultMembership?.organization} · {defaultMembership?.area || "No department"}</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setAssignOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={saveAssignedTask} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Assign Task</button></div></div></div>}
+    {removeMembership && <div className="fixed inset-0 z-[85] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label={`Remove ${person.name} from ${removeMembership.organization}`} className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><h2 className="binnie-heading text-xl font-bold text-foreground">Remove from {removeMembership.organization}?</h2><p className="mt-2 text-[12px] leading-5 text-muted-foreground">This only removes the organization membership. {person.name} and their work history stay in Binnie.</p>{removeActiveTasks.length > 0 && <div className="mt-4 rounded-xl border border-warning/20 bg-warning/[0.06] p-3"><p className="text-[12px] font-medium text-foreground">{person.name} still owns {removeActiveTasks.length} active {removeActiveTasks.length === 1 ? "task" : "tasks"} here.</p><p className="mt-1 text-[10px] text-muted-foreground">Choose whether to reassign that work or keep its historical ownership.</p></div>}<div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setRemoveMembership(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button>{removeActiveTasks.length > 0 && <button onClick={() => completeMembershipRemoval(true)} className="rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground">Reassign Tasks</button>}<button onClick={() => completeMembershipRemoval(false)} className="rounded-xl bg-overdue px-3.5 py-2 text-[12px] font-medium text-white">Keep Tasks Assigned</button></div></div></div>}
+    {editOpen && <PersonManagerDrawer open initialPerson={person} onClose={() => setEditOpen(false)} onSaved={() => setRevision(current => current + 1)} />}
+  </div>;
 }
 
 // ─── ORGANIZATION DETAIL VIEW (NEW) ───────────────────────────────────────────
 
-const ORGS_META: { name: OrgName; desc: string; areas: AreaName[] }[] = [
-  { name: "Villa Khayangan", desc: "Hospitality & property management", areas: ["System Development", "Operations", "Marketing", "Finance", "HR"] },
-  { name: "Apotik", desc: "Pharmacy operations", areas: ["Operations", "Finance", "HR"] },
-  { name: "Personal", desc: "Personal projects & finances", areas: ["Finance"] },
-];
+interface OrganizationAreaSettings { aliases?: string[]; defaultAssignee?: string; defaultTeamId?: string }
+interface OrganizationMeta { id: string; name: OrgName; desc: string; colorKey: OrganizationColorKey; areas: AreaName[]; aliases?: string[]; areaSettings?: Record<string, OrganizationAreaSettings> }
 
-function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick }: {
-  orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void;
+const ORGS_META: OrganizationMeta[] = [];
+
+type OrgTaskFilter = "all" | "today" | "week" | "mine" | "delegated" | "waiting" | "review" | "revisit" | "overdue";
+type OrgTaskSort = "deadline" | "priority" | "title" | "updated";
+type ResourceDraft = { label: string; type: ResourceType; url: string; area: string; project: string; description: string };
+
+const EMPTY_RESOURCE_DRAFT: ResourceDraft = { label: "", type: "website", url: "", area: "", project: "", description: "" };
+
+function OrgDetailView({ orgName, onBack, onTaskClick, onProjectClick, onNavigate, onPersonClick, onOpenAttention }: {
+  orgName: OrgName; onBack: () => void; onTaskClick: (t: Task) => void; onProjectClick: (id: string) => void; onNavigate: (view: NavView) => void; onPersonClick: (person: string) => void; onOpenAttention?: (organizationId: string) => void;
 }) {
+  useTaskStoreVersion();
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const orgMeta = ORGS_META.find(o => o.name === orgName);
+  const c = ORG_COLORS[orgName] || DEFAULT_ORG_COLOR;
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
-  const orgMeta = ORGS_META.find(o => o.name === orgName)!;
-  const c = ORG_COLORS[orgName];
-  const orgTasks = TASKS.filter(t => t.org === orgName);
-  const filteredTasks = selectedArea ? orgTasks.filter(t => t.area === selectedArea) : orgTasks;
-  const orgProjects = STRATEGIC_PROJECTS.filter(p => p.org === orgName);
-  const orgPeople = PEOPLE_DATA.filter(p => p.org === orgName);
-  const resources = ORG_RESOURCES[orgName];
+  const [areas, setAreas] = useState<AreaName[]>(() => orgMeta?.areas || []);
+  const projects = CANONICAL_PROJECTS.filter(project => project.organization === orgName && project.status !== "archived").map(project => {
+    const progress = getProjectProgress(TASKS, project.id);
+    return {
+      id: project.id,
+      name: project.name,
+      org: project.organization as OrgName,
+      progress: progress.progress,
+      tasks: progress.total,
+      done: progress.done,
+      deadline: project.targetDate ? taskDateLabel(project.targetDate) || "No target yet" : "No target yet",
+      status: project.status,
+      focus: project.focusItems[0]?.text,
+      leadArea: project.leadArea,
+    };
+  });
+  const [resources, setResources] = useState<OrganizationResource[]>(() => ORG_RESOURCES[orgName] || []);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [archived, setArchived] = useState(false);
+  const orgTitle = orgName;
+  const orgDescription = orgMeta?.desc || "";
+  const [orgColorKey, setOrgColorKey] = useState<OrganizationColorKey>(() => orgMeta?.colorKey || "powderBlue");
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [peopleManagerOpen, setPeopleManagerOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [resourceFormOpen, setResourceFormOpen] = useState(false);
+  const [resourceManagerOpen, setResourceManagerOpen] = useState(false);
+  const [areasOpen, setAreasOpen] = useState(false);
+  const [orgSettingsOpen, setOrgSettingsOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [planningTimelineOpen, setPlanningTimelineOpen] = useState(false);
+  const [newArea, setNewArea] = useState("");
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilterOpen, setTaskFilterOpen] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<OrgTaskFilter>("all");
+  const [taskPriority, setTaskPriority] = useState<Priority | "all">("all");
+  const [taskProject, setTaskProject] = useState("");
+  const [dateFilter, setDateFilter] = useState<"all" | "dated" | "none">("all");
+  const [taskSort, setTaskSort] = useState<OrgTaskSort>("deadline");
+  const [showAllWork, setShowAllWork] = useState(false);
+  const [quickMenuTaskId, setQuickMenuTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
+  const [showActivity, setShowActivity] = useState(false);
+  const [resourceDraft, setResourceDraft] = useState<ResourceDraft>(EMPTY_RESOURCE_DRAFT);
+  const [editingResourceIndex, setEditingResourceIndex] = useState<number | null>(null);
+  const [resourceError, setResourceError] = useState("");
+  const [projectDraft, setProjectDraft] = useState({ name: "", area: orgMeta?.areas[0] || "Operations", description: "", target: "", owner: "", focus: "" });
+  const [projectError, setProjectError] = useState("");
+  const [message, setMessage] = useState("");
 
-  const stats = [
-    { label: "Today", value: orgTasks.filter(t => t.isToday).length, color: "text-indigo-400" },
-    { label: "This Week", value: orgTasks.length, color: "text-foreground" },
-    { label: "Overdue", value: orgTasks.filter(t => t.isOverdue).length, color: "text-red-400" },
-    { label: "Waiting", value: orgTasks.filter(t => t.isWaiting).length, color: "text-amber-400" },
-    { label: "Delegated", value: orgTasks.filter(t => t.isDelegated).length, color: "text-emerald-400" },
-    { label: "Review", value: orgTasks.filter(t => t.status === "review").length, color: "text-pink-400" },
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [orgName]);
+
+  if (!orgMeta) {
+    return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Organizations" onClick={onBack} /><div className="binnie-card p-8 text-center"><Building2 className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Organization not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p><button onClick={onBack} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Back to organizations</button></div></div>;
+  }
+  const canonicalOrganization = orgMeta;
+
+  const refreshWorkspace = (notice?: string) => {
+    // Organization actions edit canonical records; publishing here keeps every
+    // other page subscribed to the same store in sync.
+    commitTaskStore();
+    setWorkspaceRevision(current => current + 1);
+    if (notice) {
+      setMessage(notice);
+      window.setTimeout(() => setMessage(""), 2400);
+    }
+  };
+  void workspaceRevision;
+
+  const orgTasks = getTasksForOrganization(orgName);
+  const scopedAreaTasks = selectedArea ? getTasksForArea(selectedArea, orgName) : orgTasks;
+  const taskMatchesFilter = (task: Task) => {
+    if (taskFilter === "today" && !getOrganizationTodayWork(orgName, [task]).length) return false;
+    if (taskFilter === "week" && !getOrganizationWeekWork(orgName, [task]).length) return false;
+    if (taskFilter === "mine" && !taskIsForCurrentUser(task, currentUserId)) return false;
+    if (taskFilter === "delegated" && !getDelegatedTasks([task], currentUserId).length) return false;
+    if (taskFilter === "waiting" && task.status !== "waiting") return false;
+    if (taskFilter === "review" && !getReviewTasks([task], currentUserId).length) return false;
+    if (taskFilter === "revisit" && !getOrganizationRevisitWork(orgName, [task]).length) return false;
+    if (taskFilter === "overdue" && !isTaskOverdue(task)) return false;
+    if (taskPriority !== "all" && task.priority !== taskPriority) return false;
+    if (taskProject && task.project !== taskProject) return false;
+    if (dateFilter === "dated" && !getTaskPlannerDate(task)) return false;
+    if (dateFilter === "none" && getTaskPlannerDate(task)) return false;
+    if (taskSearch && ![task.title, task.area, task.project || "", task.assignee || "", task.nextActionBy].join(" ").toLowerCase().includes(taskSearch.toLowerCase())) return false;
+    return true;
+  };
+  const filteredTasks = [...scopedAreaTasks.filter(taskMatchesFilter)].sort((left, right) => {
+    if (taskSort === "title") return left.title.localeCompare(right.title);
+    if (taskSort === "priority") return ["urgent", "high", "medium", "low"].indexOf(left.priority) - ["urgent", "high", "medium", "low"].indexOf(right.priority);
+    if (taskSort === "updated") return (right.lastUpdate || "").localeCompare(left.lastUpdate || "");
+    return (left.deadline || "zzzz").localeCompare(right.deadline || "zzzz");
+  });
+  const visibleTasks = showAllWork ? filteredTasks : filteredTasks.slice(0, 8);
+  const selectedAreaOwnedCount = selectedArea ? getOrganizationActiveWork(orgName).filter(task => task.area === selectedArea).length : 0;
+  const selectedAreaSharedCount = selectedArea ? getOrganizationAreaWork(orgName, selectedArea).filter(task => task.area !== selectedArea).length : 0;
+  const scopedProjects = projects.filter(project => !selectedArea || project.leadArea === selectedArea);
+  const scopedPeople = PEOPLE_DIRECTORY.filter(person => person.active && person.memberships.some(membership => membership.organization === orgName && (!selectedArea || membership.area === selectedArea || orgTasks.some(task => taskInvolvesArea(task, selectedArea) && (taskHasAssignee(task, person) || task.nextActionBy === person.name)))));
+  const attentionTasks = scopedAreaTasks.filter(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review" || (task.status === "waiting" && task.waitingSince));
+  const readyToStart = scopedAreaTasks.filter(task => task.status === "ready" && !task.blockedBy);
+  const teamsWaitingOnThisArea = orgTasks.filter(task => task.status === "blocked" && task.blockedBy && (!selectedArea || task.blockedBy.owner === selectedArea));
+  const activityEntries: Array<Activity & { key: string; task?: Task }> = orgTasks
+    .flatMap(task => (task.activity || []).slice(-1).map(activity => ({ ...activity, key: `${task.id}-${activity.time}`, task })))
+    .slice(0, showActivity ? 10 : 4);
+  const projectNames = projects.map(project => project.name);
+  const activeFilterCount = Number(taskFilter !== "all") + Number(taskPriority !== "all") + Number(Boolean(taskProject)) + Number(dateFilter !== "all");
+  const organizationColor = getOrganizationColorStyles(orgColorKey);
+
+  async function saveOrganizationColor() {
+    const result = await updateOrganizationVocabularyAction({ organizationId: canonicalOrganization.id, colorKey: orgColorKey });
+    if (!result.ok) return setMessage(result.message || "Couldn’t update the organization color.");
+    const organizationIndex = ORGS_META.findIndex(candidate => candidate.id === canonicalOrganization.id);
+    if (organizationIndex >= 0) ORGS_META[organizationIndex] = { ...ORGS_META[organizationIndex], colorKey: orgColorKey };
+    setOrgSettingsOpen(false);
+    refreshWorkspace("Organization color updated");
+  }
+
+  async function completeTask(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status: "done" });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Task completed");
+    }
+    markTaskDone(task);
+    refreshWorkspace("Task completed");
+  }
+
+  async function rescheduleTask(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const tomorrow = getWorkspaceCalendarDate();
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, deadlineDate: captureISODate(tomorrow) });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Rescheduled for tomorrow");
+    }
+    Object.assign(task, { deadline: "Tomorrow", isOverdue: false, lastUpdate: "Rescheduled just now" });
+    refreshWorkspace("Rescheduled for tomorrow");
+  }
+
+  async function reassignTask(task: Task) {
+    // Routing changes must use the shared Task Detail confirmation and history,
+    // rather than silently cycling a person from an organization row.
+    setMessage("Open Task Detail to change who currently has this work.");
+    onTaskClick(task);
+  }
+
+  async function duplicateTask(task: Task) {
+    if (taskStoreUsesServer) {
+      const result = await createTaskAction({
+        title: `Copy of ${task.title}`, description: task.description, organizationId: task.organizationId,
+        leadDepartmentId: task.leadDepartmentId, projectId: task.projectId, involvedDepartmentIds: task.involvedDepartmentIds,
+        priority: task.priority, startDate: task.startDate, targetDate: task.targetDate, deadlineDate: task.deadlineDate,
+        followUpDate: task.followUpDate, checklistItems: task.checklistItems?.map(item => item.title),
+      });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Task duplicated");
+    }
+    createTask({ ...task, title: `Copy of ${task.title}`, status: "ready", isWaiting: false, isOverdue: false, nextActionBy: "me", assignee: undefined, assigneeIds: [], isDelegated: false, lastUpdate: "Just now", blockedBy: undefined });
+    refreshWorkspace("Task duplicated");
+  }
+
+  async function moveTaskToProject(task: Task) {
+    const target = projects.find(project => project.name !== task.project);
+    if (!target) return refreshWorkspace("Create another project to move this task");
+    if (taskStoreUsesServer && task.version) {
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, projectId: target.id });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace(`Moved to ${target.name}`);
+    }
+    Object.assign(task, { project: target.name, area: target.leadArea || task.area, lastUpdate: `Moved to ${target.name}` });
+    refreshWorkspace(`Moved to ${target.name}`);
+  }
+
+  async function moveTaskToNextArea(task: Task) {
+    const next = areas[(areas.indexOf(task.area) + 1) % Math.max(areas.length, 1)] || task.area;
+    if (taskStoreUsesServer && task.version) {
+      const departmentId = getRemoteDepartmentId(task.org, next);
+      if (!departmentId) return setMessage(`${next} is not configured for this organization.`);
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, leadDepartmentId: departmentId });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace(`Moved to ${next}`);
+    }
+    Object.assign(task, { area: next, lastUpdate: `Moved to ${next}` });
+    refreshWorkspace(`Moved to ${next}`);
+  }
+
+  async function archiveTask(task: Task) {
+    if (taskStoreUsesServer && task.version) {
+      const result = await archiveTaskAction({ taskId: task.id, expectedVersion: task.version });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      return refreshWorkspace("Task archived");
+    }
+    if (!archiveCanonicalTask(task.id)) return setMessage("Only completed tasks can be archived.");
+    refreshWorkspace("Task archived");
+  }
+
+  async function saveTaskTitle(task: Task) {
+    const title = editingTaskTitle.trim();
+    if (!title) return;
+    if (taskStoreUsesServer && task.version) {
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, title });
+      if (!result.ok) return setMessage(result.message);
+      applyCanonicalTask(result.data, result.revision);
+      setEditingTaskId(null);
+      return refreshWorkspace("Task updated");
+    }
+    updateTask(task.id, { title, lastUpdate: "Edited just now" });
+    setEditingTaskId(null);
+    refreshWorkspace("Task updated");
+  }
+
+  function addArea() {
+    const area = newArea.trim();
+    if (!area || areas.includes(area)) return;
+    setAreas(current => [...current, area]);
+    setNewArea("");
+    refreshWorkspace("Area added");
+  }
+
+  function renameArea(area: AreaName) {
+    const next = window.prompt("Rename area", area)?.trim();
+    if (!next || next === area || areas.includes(next)) return;
+    setAreas(current => current.map(item => item === area ? next : item));
+    TASKS.filter(task => task.org === orgName && taskInvolvesArea(task, area)).forEach(task => { task.area = task.area === area ? next : task.area; task.involvedAreas = getTaskAreas(task).map(item => item === area ? next : item); });
+    if (selectedArea === area) setSelectedArea(next);
+    refreshWorkspace("Area renamed");
+  }
+
+  function moveArea(area: AreaName, direction: -1 | 1) {
+    setAreas(current => {
+      const index = current.indexOf(area);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  function hideArea(area: AreaName) {
+    setAreas(current => current.filter(item => item !== area));
+    TASKS.filter(task => task.org === orgName && taskInvolvesArea(task, area)).forEach(task => { task.involvedAreas = getTaskAreas(task).filter(item => item !== area); if (task.area === area) task.area = task.involvedAreas[0] || "Unassigned"; });
+    if (selectedArea === area) setSelectedArea(null);
+    refreshWorkspace("Area hidden from this workspace");
+  }
+
+  function openResourceForm(index?: number) {
+    const resource = index === undefined ? undefined : resources[index];
+    setEditingResourceIndex(index ?? null);
+    setResourceDraft(resource ? { label: resource.label, type: resource.type, url: resource.url, area: resource.area || "", project: resource.project || "", description: resource.description || "" } : EMPTY_RESOURCE_DRAFT);
+    setResourceError("");
+    setResourceManagerOpen(false);
+    setResourceFormOpen(true);
+  }
+
+  function detectResourceType(url: string): ResourceType {
+    const normalized = url.toLowerCase();
+    if (normalized.includes("figma")) return "figma";
+    if (normalized.includes("github")) return "github";
+    if (normalized.includes("notion")) return "notion";
+    if (normalized.includes("docs.google")) return "doc";
+    if (normalized.includes("sheets.google")) return "sheet";
+    if (normalized.includes("drive.google")) return "drive";
+    return "website";
+  }
+
+  function saveResource() {
+    const label = resourceDraft.label.trim();
+    const url = resourceDraft.url.trim();
+    if (!label) return setResourceError("Give this resource a name.");
+    if (url && !/^https?:\/\//i.test(url)) return setResourceError("Use a full URL beginning with https://.");
+    const resource: OrganizationResource = { label, url, type: url ? detectResourceType(url) : resourceDraft.type, area: resourceDraft.area || undefined, project: resourceDraft.project || undefined, description: resourceDraft.description.trim() || undefined };
+    const next = editingResourceIndex === null ? [...resources, resource] : resources.map((item, index) => index === editingResourceIndex ? resource : item);
+    setResources(next);
+    ORG_RESOURCES[orgName] = next;
+    setResourceFormOpen(false);
+    refreshWorkspace(editingResourceIndex === null ? "Resource added" : "Resource updated");
+  }
+
+  async function createProject() {
+    const name = projectDraft.name.trim();
+    if (!name) return setProjectError("Give this project a name.");
+    const organizationId = remoteOrganizationIds.get(orgName) || canonicalOrganization.id;
+    const leadDepartmentId = getRemoteDepartmentId(orgName, projectDraft.area as AreaName);
+    const ownerId = projectDraft.owner ? getDirectoryPerson(projectDraft.owner)?.id : undefined;
+    if (projectDraft.target && !/^\d{4}-\d{2}-\d{2}$/.test(projectDraft.target)) return setProjectError("Use a calendar date for the project target.");
+    const result = await createProjectAction({
+      name,
+      organizationId,
+      description: projectDraft.description.trim() || undefined,
+      leadDepartmentId,
+      involvedDepartmentIds: leadDepartmentId ? [leadDepartmentId] : [],
+      targetDate: projectDraft.target || undefined,
+      members: ownerId ? [{ principalId: ownerId, role: "owner" }] : [],
+      focusItems: projectDraft.focus.trim() ? [projectDraft.focus.trim()] : [],
+    });
+    if (!result.ok) return setProjectError(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setProjectDraft({ name: "", area: areas[0] || "Operations", description: "", target: "", owner: "", focus: "" });
+    setProjectError("");
+    setProjectOpen(false);
+    refreshWorkspace("Project created");
+  }
+
+  const stats: { label: string; value: number; color: string; filter: OrgTaskFilter }[] = [
+    { label: "Today", value: getOrganizationTodayWork(orgName).length, color: "text-primary", filter: "today" },
+    { label: "This Week", value: getOrganizationWeekWork(orgName).length, color: "text-foreground", filter: "week" },
+    { label: "Dates to revisit", value: getOrganizationRevisitWork(orgName).length, color: "text-overdue", filter: "revisit" },
+    { label: "Waiting", value: getOrganizationWaitingWork(orgName).length, color: "text-info", filter: "waiting" },
+    { label: "Delegated by me", value: getDelegatedTasks(orgTasks, currentUserId).length, color: "text-success", filter: "delegated" },
+    { label: "Needs My Review", value: getReviewTasks(orgTasks, currentUserId).length, color: "text-review", filter: "review" },
   ];
 
+  if (loading) {
+    return <div className="mx-auto max-w-[1100px] p-5 sm:p-8 lg:p-10"><BackButton label="Organizations" onClick={onBack} /><div className="animate-pulse space-y-5"><div className="h-20 rounded-2xl bg-muted/70" /><div className="grid grid-cols-3 gap-3 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-24 rounded-2xl bg-muted/60" />)}</div><div className="grid gap-6 lg:grid-cols-3"><div className="h-[30rem] rounded-2xl bg-card" /><div className="h-[30rem] rounded-2xl bg-card" /></div></div></div>;
+  }
+
   return (
-    <div className="p-8 max-w-[1100px] mx-auto">
+    <div className="mx-auto max-w-[1100px] p-5 sm:p-8 lg:p-10">
       <BackButton label="Organizations" onClick={onBack} />
+      {selectedArea && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] px-3 py-2 text-[11px] text-muted-foreground"><AreaBadge area={selectedArea} /><span>{selectedAreaOwnedCount + selectedAreaSharedCount} active</span><span>· {selectedAreaOwnedCount} owned</span>{selectedAreaSharedCount > 0 && <span className="text-primary">· {selectedAreaSharedCount} shared</span>}</div>}
+      {message && <div role="status" className="mb-4 rounded-xl border border-success/20 bg-success/10 px-3.5 py-2 text-[12px] font-medium text-success">{message}</div>}
+      {archived && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/25 bg-warning/[0.06] p-4"><div><p className="text-[13px] font-semibold text-foreground">This organization is archived.</p><p className="mt-0.5 text-[11px] text-muted-foreground">Its work remains available for reference.</p></div><button onClick={() => { setArchived(false); refreshWorkspace("Organization restored"); }} className="rounded-xl bg-card px-3 py-2 text-[11px] font-medium text-foreground shadow-sm">Restore organization</button></div>}
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className={cn("w-3 h-3 rounded-sm", c.dot)} />
-            <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>{orgName}</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">{orgMeta.desc}</p>
+          <div className="mb-1 flex items-center gap-3"><div className={cn("h-3 w-3 rounded-sm", organizationColor.dot)} /><h1 className="binnie-heading text-3xl font-bold text-foreground">{orgTitle}</h1>{archived && <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Archived</span>}</div>
+          <p className="text-sm text-muted-foreground">{orgDescription}</p>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors"><Plus className="w-3.5 h-3.5" />Quick Capture</button>
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-[12px] hover:text-foreground transition-colors"><FolderKanban className="w-3.5 h-3.5" />Add Project</button>
+        {!archived && <div className="flex flex-wrap items-center gap-2"><button onClick={() => setCaptureOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-[12px] font-medium text-primary transition-colors hover:bg-primary/20"><Plus className="h-3.5 w-3.5" />Quick Capture</button><button onClick={() => setProjectOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"><FolderKanban className="h-3.5 w-3.5" />Add Project</button><div className="relative"><button onClick={() => setOverflowOpen(current => !current)} aria-label="Organization options" aria-expanded={overflowOpen} className="rounded-xl border border-border bg-card p-2 text-muted-foreground transition-colors hover:border-primary/25 hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{overflowOpen && <div className="absolute right-0 top-[calc(100%+0.4rem)] z-30 w-48 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_28px_rgb(35_41_61_/_0.12)]">{[{ label: "Edit Organization", action: () => setOrgSettingsOpen(true) }, { label: "Manage Areas", action: () => setAreasOpen(true) }, { label: "Manage Resources", action: () => setResourceManagerOpen(true) }, { label: "Organization Settings", action: () => setOrgSettingsOpen(true) }, { label: "Archive Organization", action: () => setArchiveConfirmOpen(true), destructive: true }].map(item => <button key={item.label} onClick={() => { setOverflowOpen(false); item.action(); }} className={cn("w-full rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-muted", item.destructive ? "text-overdue" : "text-foreground")}>{item.label}</button>)}</div>}</div></div>}
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{stats.map(stat => <button key={stat.label} onClick={() => { setSelectedArea(null); setTaskFilter(stat.filter); }} className={cn("binnie-card binnie-card-hover p-4 text-center", taskFilter === stat.filter && "border-primary/30 bg-secondary/45")}><p className={cn("binnie-heading text-2xl font-bold", stat.color)}>{stat.value}</p><p className="mt-1 text-[10px] font-medium text-muted-foreground">{stat.label}</p></button>)}</div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="lg:col-span-3 rounded-2xl border border-border bg-card p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[12px] font-semibold text-foreground">Organization workspace</p><p className="mt-1 text-[11px] text-muted-foreground">See work across projects by department, project, and real dependencies.</p></div><div role="tablist" aria-label="Organization planning views" className="flex rounded-xl border border-border bg-muted/35 p-1"><button role="tab" aria-selected={!planningTimelineOpen} onClick={() => setPlanningTimelineOpen(false)} className={cn("rounded-lg px-3 py-1.5 text-[11px] font-medium", !planningTimelineOpen ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Overview</button><button role="tab" aria-selected={planningTimelineOpen} onClick={() => setPlanningTimelineOpen(true)} className={cn("rounded-lg px-3 py-1.5 text-[11px] font-medium", planningTimelineOpen ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>Timeline</button></div></div>{planningTimelineOpen && <div className="mt-4 border-t border-border pt-4"><PlanningTimeline tasks={orgTasks} areas={areas} selectedArea={selectedArea || "all"} onAreaChange={area => setSelectedArea(area === "all" ? null : area)} onTaskClick={onTaskClick} onRefresh={refreshWorkspace} /></div>}</section>
+        <div className="space-y-6 lg:col-span-2">
+          <section>
+            <div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Areas</p><button onClick={() => setAreasOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">Manage Areas</button></div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setSelectedArea(null)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", !selectedArea ? cn(c.border, c.bg, c.text) : "border-border bg-card text-muted-foreground hover:text-foreground")}>All <span className="ml-1 text-[10px] opacity-65">{getOrganizationActiveWork(orgName).length}</span></button>
+              {areas.map(area => <button key={area} onClick={() => setSelectedArea(current => current === area ? null : area)} className={cn("rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors", selectedArea === area ? "border-primary/25 bg-secondary text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>{area} <span className="ml-1 text-[10px] opacity-65">{getOrganizationAreaWork(orgName, area).length}</span></button>)}
+            </div>
+          </section>
+
+          {selectedArea && <section className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl border border-primary/15 bg-primary/[0.045] p-4"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><div><p className="text-[12px] font-semibold text-foreground">Ready to Start</p><p className="text-[10px] text-muted-foreground">{readyToStart.length} {selectedArea} tasks can move now.</p></div></div><div className="mt-3 space-y-1.5">{readyToStart.slice(0, 3).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="block w-full truncate rounded-lg bg-card px-2.5 py-2 text-left text-[11px] font-medium text-foreground shadow-sm">{task.title}</button>)}{!readyToStart.length && <p className="text-[11px] text-muted-foreground">No ready work in this area right now.</p>}</div></div><div className="rounded-2xl border border-overdue/15 bg-overdue/[0.035] p-4"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Other Teams Waiting on {selectedArea}</p><p className="text-[10px] text-muted-foreground">Only real dependencies appear here.</p></div></div><div className="mt-3 space-y-1.5">{teamsWaitingOnThisArea.slice(0, 3).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="block w-full truncate rounded-lg bg-card px-2.5 py-2 text-left text-[11px] font-medium text-foreground shadow-sm">{task.area} · {task.title}</button>)}{!teamsWaitingOnThisArea.length && <p className="text-[11px] text-muted-foreground">No other teams are blocked by this area.</p>}</div></div></section>}
+
+          <section><div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center"><p className="flex-1 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">{selectedArea || "All Work"} · {filteredTasks.length}</p><div className="flex flex-wrap gap-2"><div className="flex min-w-[11rem] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><input value={taskSearch} onChange={event => setTaskSearch(event.target.value)} placeholder="Search work" className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground" />{taskSearch && <button onClick={() => setTaskSearch("")} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>}</div><button onClick={() => setTaskFilterOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium transition-colors", taskFilterOpen ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeFilterCount ? `Filters · ${activeFilterCount}` : "Filter"}</button><select value={taskSort} onChange={event => setTaskSort(event.target.value as OrgTaskSort)} className="rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground"><option value="deadline">Sort: target date</option><option value="priority">Sort: priority</option><option value="title">Sort: title</option><option value="updated">Sort: updated</option></select></div></div>{taskFilterOpen && <div className="mb-3 grid gap-3 rounded-2xl border border-border bg-card p-3 sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Work state<select value={taskFilter} onChange={event => setTaskFilter(event.target.value as OrgTaskFilter)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">All work</option><option value="today">Planned today</option><option value="week">Planned this week</option><option value="mine">Mine</option><option value="delegated">Delegated by me</option><option value="waiting">Waiting</option><option value="review">Needs my review</option><option value="revisit">Dates to revisit</option><option value="overdue">Overdue</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={taskPriority} onChange={event => setTaskPriority(event.target.value as Priority | "all")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any priority</option><option value="urgent">Needs attention</option><option value="high">Important</option><option value="medium">Normal</option><option value="low">When there’s room</option></select></label><label className="text-[10px] font-medium text-muted-foreground">Project<select value={taskProject} onChange={event => setTaskProject(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">All projects</option>{projectNames.map(name => <option key={name}>{name}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Date<select value={dateFilter} onChange={event => setDateFilter(event.target.value as "all" | "dated" | "none")} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="all">Any date</option><option value="dated">Has planner date</option><option value="none">No planner date</option></select></label><button onClick={() => { setTaskFilter("all"); setTaskPriority("all"); setTaskProject(""); setDateFilter("all"); }} className="w-fit text-[11px] font-medium text-muted-foreground hover:text-foreground">Clear filters</button></div>}<div className="binnie-card overflow-visible">{visibleTasks.map(task => <div key={task.id} className="group relative border-b border-border/70 last:border-b-0"><div className="flex items-center gap-3 px-4 py-3"><button onClick={() => onTaskClick(task)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><PriorityDot priority={task.priority} /><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-foreground">{task.title}</span><span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground"><AreaBadge area={task.area} />{task.project && <span>· {task.project}</span>}<span>· {task.nextActionBy === "me" ? "Next: me" : `Waiting on ${task.nextActionBy}`}</span></span></span></button><span className={cn("hidden text-[10px] font-medium sm:inline", task.isOverdue ? "text-overdue" : "text-muted-foreground")}>{task.deadline || "No date"}</span><div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><button onClick={() => completeTask(task)} aria-label={`Complete ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-success/10 hover:text-success"><Check className="h-3.5 w-3.5" /></button><button onClick={() => { setEditingTaskId(task.id); setEditingTaskTitle(task.title); }} aria-label={`Edit ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">Edit</button><button onClick={() => reassignTask(task)} aria-label={`Change current responsibility for ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Users className="h-3.5 w-3.5" /></button><button onClick={() => rescheduleTask(task)} aria-label={`Reschedule ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Calendar className="h-3.5 w-3.5" /></button><button onClick={() => setQuickMenuTaskId(current => current === task.id ? null : task.id)} aria-label={`More actions for ${task.title}`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" /></button></div></div>{editingTaskId === task.id && <div className="flex gap-2 border-t border-border bg-muted/25 px-4 py-2"><input autoFocus value={editingTaskTitle} onChange={event => setEditingTaskTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && saveTaskTitle(task)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground" /><button onClick={() => saveTaskTitle(task)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setEditingTaskId(null)} className="rounded-lg px-2 text-[11px] text-muted-foreground">Cancel</button></div>}{quickMenuTaskId === task.id && <div className="absolute right-3 top-11 z-20 w-40 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]"><button onClick={() => onTaskClick(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Open Detail</button><button onClick={() => duplicateTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Duplicate</button><button onClick={() => moveTaskToProject(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Move to Project</button><button onClick={() => moveTaskToNextArea(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Change Area</button><button onClick={() => archiveTask(task)} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-overdue hover:bg-overdue/10">Archive / Cancel</button></div>}</div>)}{filteredTasks.length === 0 && <div className="px-5 py-12 text-center"><ListTodo className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No work matches these filters.</p><p className="mt-1 text-[11px] text-muted-foreground">Try a different area or clear a filter.</p></div>}{filteredTasks.length > 8 && <button onClick={() => setShowAllWork(current => !current)} className="w-full border-t border-border px-4 py-3 text-center text-[11px] font-medium text-primary transition-colors hover:bg-primary/[0.025]">{showAllWork ? "Show less" : "View all work →"}</button>}</div></section>
+
+          <section><div className="mb-2 flex items-center justify-between"><div><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">People</p><p className="mt-0.5 text-[10px] text-muted-foreground">People are shared across Binnie and connected here by membership.</p></div><button onClick={() => setPeopleManagerOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Person</button></div>{scopedPeople.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{scopedPeople.map(person => { const summary = getPersonAccountability(person.name); return <button key={person.id} onClick={() => onPersonClick(person.name)} className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/25"><div className="flex items-center gap-2.5"><Avatar name={person.name} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{person.name}</span><span className="block truncate text-[10px] text-muted-foreground">{personRole(person, orgName)}</span></span>{summary.overdue > 0 && <span className="text-[10px] font-medium text-overdue">{summary.overdue} overdue</span>}</div><div className="mt-2 flex gap-3 border-t border-border pt-2 text-[10px] text-muted-foreground"><span>{summary.active} active</span><span>{summary.waitingOnThem} waiting</span>{summary.blocked > 0 && <span className="text-overdue">{summary.blocked} blocked</span>}</div></button>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No one has been added to this organization yet.</p><button onClick={() => setPeopleManagerOpen(true)} className="mt-3 text-[11px] font-medium text-primary">+ Add Person</button></div>}{peopleManagerOpen && <PersonManagerDrawer open organizationContext={orgName} onClose={() => setPeopleManagerOpen(false)} onSaved={() => { setPeopleManagerOpen(false); refreshWorkspace("People updated"); }} />}</section>
+
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Recent Activity</p><button onClick={() => setShowActivity(current => !current)} className="text-[11px] font-medium text-primary hover:text-primary/80">{showActivity ? "Show less" : "View Activity"}</button></div>{activityEntries.length ? <div className="binnie-card divide-y divide-border/70">{activityEntries.map(entry => <button key={entry.key} onClick={() => entry.task && onTaskClick(entry.task)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/45"><div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary" /><span className="min-w-0 flex-1"><span className="block text-[12px] text-foreground">{entry.text}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{entry.actor} · {entry.time}</span></span><ChevronRight className="mt-1 h-3.5 w-3.5 text-muted-foreground" /></button>)}</div> : <div className="binnie-card px-5 py-10 text-center"><p className="text-sm font-medium text-foreground">No recent activity yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Updates will appear here as work moves.</p></div>}</section>
+        </div>
+
+        <div className="space-y-6">
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Current Projects</p><button onClick={() => setProjectOpen(true)} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Project</button></div>{scopedProjects.length ? <div className="space-y-2">{scopedProjects.map(project => { const remaining = Math.max(project.tasks - project.done, 0); return <button key={project.id} onClick={() => onProjectClick(project.id)} className="binnie-card binnie-card-hover w-full p-4 text-left"><div className="mb-2 flex items-start gap-3"><span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-foreground">{project.name}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{project.focus || "No current focus"}</span></span></div><div className="mb-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} /></div><div className="flex items-center justify-between text-[10px] text-muted-foreground"><span>{project.progress}% · {remaining} remaining</span><span>Target: {project.deadline}</span></div></button>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><FolderKanban className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">No active projects yet.</p><p className="mt-1 text-[11px] text-muted-foreground">Create one when a piece of work needs its own focus.</p></div>}</section>
+
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Resources</p><button onClick={() => openResourceForm()} className="text-[11px] font-medium text-primary hover:text-primary/80">+ Add Resource</button></div>{resources.length ? <div className="space-y-1.5">{resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-2.5"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-foreground">{resource.label}</span>{(resource.area || resource.project) && <span className="block truncate text-[10px] text-muted-foreground">{resource.project || resource.area}</span>}</span>{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Open ↗</a> : <button onClick={() => openResourceForm(index)} className="rounded-lg px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/10">Add link</button>}</div>)}</div> : <div className="binnie-card px-5 py-10 text-center"><Link2 className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-foreground">Keep important links close.</p><p className="mt-1 text-[11px] text-muted-foreground">Add your Drive, website, dashboards, or project tools here.</p></div>}</section>
+
+          <section><div className="mb-2 flex items-center justify-between"><p className="text-[11px] font-medium uppercase tracking-[0.1em] text-warning">Needs Attention</p><span className="flex items-center gap-2"><span className="text-[10px] text-muted-foreground">{attentionTasks.length} items</span>{onOpenAttention && <button onClick={() => onOpenAttention(orgMeta.id)} className="text-[10px] font-medium text-primary hover:text-primary/80">View attention</button>}</span></div>{attentionTasks.length ? <div className="space-y-1.5">{attentionTasks.slice(0, 4).map(task => { const isReview = task.status === "review"; const reason = isReview ? "Needs Review" : task.isOverdue ? "Overdue" : `${readableTaskNextAction(task)} · ${humanizeWaitingSince(task.waitingSince)}`; return <div key={task.id} className="rounded-xl border border-warning/15 bg-warning/[0.04] p-3"><p className="truncate text-[12px] font-medium text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{reason}</p><div className="mt-2 flex gap-2"><button onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{isReview ? "Review" : "Open"}</button>{!isReview && task.isWaiting && <button onClick={() => onNavigate("followup")} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary">Follow Up</button>}</div></div>; })}</div> : <div className="binnie-card px-5 py-10 text-center"><CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-success/45" /><p className="text-sm font-medium text-foreground">Nothing needs attention right now.</p></div>}</section>
         </div>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-6 gap-3 mb-6">
-        {stats.map(({ label, value, color }) => (
-          <div key={label} className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className={cn("text-2xl font-bold", color)} style={{ fontFamily: "var(--font-display)" }}>{value}</p>
-            <p className="text-[10px] font-mono text-muted-foreground mt-1">{label}</p>
-          </div>
-        ))}
-      </div>
+      {captureOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.5rem] border border-border bg-background p-4 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)] sm:p-5"><div className="mb-3 flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Quick Capture for {orgTitle}</p><p className="text-[10px] text-muted-foreground">This organization is already selected.</p></div><button onClick={() => setCaptureOpen(false)} aria-label="Close quick capture" className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><QuickCapture organization={orgName} onSaved={() => refreshWorkspace("Saved to this organization")} onOpenTask={onTaskClick} /></div></div>}
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left: Areas + Tasks */}
-        <div className="col-span-2 space-y-5">
-          {/* Areas */}
-          <div>
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Areas</p>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => setSelectedArea(null)}
-                className={cn("px-3 py-2 rounded-lg border text-[12px] font-medium transition-all", !selectedArea ? cn("border", c.border, c.bg, c.text) : "border-border text-muted-foreground hover:text-foreground")}>
-                All
-                <span className="ml-1.5 text-[10px] font-mono opacity-60">{orgTasks.length}</span>
-              </button>
-              {orgMeta.areas.map(area => {
-                const count = orgTasks.filter(t => t.area === area).length;
-                return (
-                  <button key={area} onClick={() => setSelectedArea(selectedArea === area ? null : area)}
-                    className={cn("px-3 py-2 rounded-lg border text-[12px] transition-all", selectedArea === area ? cn(AREA_COLORS[area], "bg-muted/60 border-white/15") : "border-border text-muted-foreground hover:text-foreground")}>
-                    {area}
-                    <span className="ml-1.5 text-[10px] font-mono opacity-60">{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      {projectOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Add project" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Add Project</h2><p className="mt-1 text-[11px] text-muted-foreground">{orgTitle} is already selected.</p></div><button onClick={() => setProjectOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Project name<input autoFocus value={projectDraft.name} onChange={event => setProjectDraft(current => ({ ...current, name: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization<input value={orgTitle} disabled className="mt-1.5 w-full rounded-xl border border-border bg-muted px-3 py-2.5 text-[12px] text-muted-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Area<select value={projectDraft.area} onChange={event => setProjectDraft(current => ({ ...current, area: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={projectDraft.description} onChange={event => setProjectDraft(current => ({ ...current, description: event.target.value }))} className="mt-1.5 min-h-16 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input type="date" value={projectDraft.target} onChange={event => setProjectDraft(current => ({ ...current, target: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Owner<input value={projectDraft.owner} onChange={event => setProjectDraft(current => ({ ...current, owner: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={projectDraft.focus} onChange={event => setProjectDraft(current => ({ ...current, focus: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div>{projectError && <p className="mt-3 text-[11px] text-overdue">{projectError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setProjectOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void createProject()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create Project</button></div></div></div>}
 
-          {/* Tasks */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider">
-                {selectedArea ? selectedArea : "All Tasks"} · {filteredTasks.length}
-              </p>
-            </div>
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
-              {filteredTasks.slice(0, 8).map(t => <TaskRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
-              {filteredTasks.length > 8 && (
-                <div className="px-4 py-2.5 border-t border-border text-center">
-                  <span className="text-[11px] text-muted-foreground">+{filteredTasks.length - 8} more tasks</span>
-                </div>
-              )}
-              {filteredTasks.length === 0 && (
-                <div className="py-8 text-center text-muted-foreground text-sm">No tasks in this area.</div>
-              )}
-            </div>
-          </div>
+      {resourceManagerOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Manage resources" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-center justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Manage Resources</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep the tools for {orgTitle} close.</p></div><button onClick={() => setResourceManagerOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="max-h-64 space-y-2 overflow-y-auto">{resources.length ? resources.map((resource, index) => <div key={`${resource.label}-${index}`} className="flex items-center gap-2 rounded-xl border border-border p-3"><LinkIcon type={resource.type} /><span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{resource.label}</span><button onClick={() => openResourceForm(index)} className="text-[11px] font-medium text-primary">Edit</button></div>) : <p className="rounded-xl bg-muted/45 px-3 py-6 text-center text-[11px] text-muted-foreground">No resources yet.</p>}</div><div className="mt-4 flex justify-end gap-2"><button onClick={() => setResourceManagerOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Close</button><button onClick={() => openResourceForm()} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ Add Resource</button></div></div></div>}
 
-          {/* People in this org */}
-          {orgPeople.length > 0 && (
-            <div>
-              <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">People with Open Work</p>
-              <div className="grid grid-cols-2 gap-2">
-                {orgPeople.map(person => {
-                  const pc = getPersonColor(person.name);
-                  return (
-                    <div key={person.name} className="flex items-center gap-2.5 p-3 rounded-lg bg-card border border-border hover:border-white/10 transition-colors cursor-pointer">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold"
-                        style={{ backgroundColor: pc + "22", color: pc, border: `1px solid ${pc}44` }}>
-                        {getInitials(person.name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-medium text-foreground truncate">{person.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{person.active} active · {person.waitingOnThem} waiting</p>
-                      </div>
-                      {person.overdue > 0 && <span className="text-[10px] font-mono text-red-400">{person.overdue} OD</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+      {resourceFormOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Add resource" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">{editingResourceIndex === null ? "Add Resource" : "Edit Resource"}</h2><p className="mt-1 text-[11px] text-muted-foreground">Binnie will recognize common links automatically.</p></div><button onClick={() => setResourceFormOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Resource name<input autoFocus value={resourceDraft.label} onChange={event => setResourceDraft(current => ({ ...current, label: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Type<select value={resourceDraft.type} onChange={event => setResourceDraft(current => ({ ...current, type: event.target.value as ResourceType }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground">{["website", "drive", "sheet", "doc", "figma", "github", "dashboard", "notion", "other"].map(type => <option key={type} value={type}>{type === "drive" ? "Google Drive" : type === "sheet" ? "Google Sheet" : type === "doc" ? "Google Doc" : type[0].toUpperCase() + type.slice(1)}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Related area <span className="font-normal">(optional)</span><select value={resourceDraft.area} onChange={event => setResourceDraft(current => ({ ...current, area: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">No area</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">URL <span className="font-normal">(optional)</span><input value={resourceDraft.url} onChange={event => setResourceDraft(current => ({ ...current, url: event.target.value }))} placeholder="https://" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Related project <span className="font-normal">(optional)</span><select value={resourceDraft.project} onChange={event => setResourceDraft(current => ({ ...current, project: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">No project</option>{projectNames.map(project => <option key={project}>{project}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><input value={resourceDraft.description} onChange={event => setResourceDraft(current => ({ ...current, description: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div>{resourceError && <p className="mt-3 text-[11px] text-overdue">{resourceError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setResourceFormOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={saveResource} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save</button></div></div></div>}
 
-        {/* Right: Projects + Resources */}
-        <div className="space-y-5">
-          {/* Projects */}
-          {orgProjects.length > 0 && (
-            <div>
-              <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Current Projects</p>
-              <div className="space-y-2">
-                {orgProjects.map(proj => {
-                  const statusColor = proj.status === "at_risk" ? "text-orange-400" : "text-emerald-400";
-                  return (
-                    <button key={proj.id} onClick={() => onProjectClick(proj.id)}
-                      className="w-full text-left bg-card rounded-xl border border-border hover:border-white/10 transition-all p-4 group">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
-                        <span className={cn("text-[11px] font-mono", statusColor)}>{proj.progress}%</span>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2">
-                        <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${proj.progress}%` }} />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-muted-foreground">{proj.tasks - proj.done} remaining</span>
-                        <span className="text-[10px] font-mono text-muted-foreground">Due {proj.deadline}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+      {areasOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Manage areas" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Manage Areas</h2><p className="mt-1 text-[11px] text-muted-foreground">Set an optional default owner so Binnie can route clear work automatically.</p></div><button onClick={() => setAreasOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="max-h-64 space-y-2 overflow-y-auto">{areas.map((area, index) => <div key={area} className="rounded-xl border border-border p-3"><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{area}</span><button onClick={() => moveArea(area, -1)} disabled={index === 0} aria-label={`Move ${area} up`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"><ChevronUp className="h-3.5 w-3.5" /></button><button onClick={() => moveArea(area, 1)} disabled={index === areas.length - 1} aria-label={`Move ${area} down`} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"><ChevronDown className="h-3.5 w-3.5" /></button><button onClick={() => renameArea(area)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10">Rename</button><button onClick={() => hideArea(area)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-overdue hover:bg-overdue/10">Hide</button></div><label className="mt-2 block text-[10px] font-medium text-muted-foreground">Default owner or team<select value={getAreaSettings(orgName, area)?.defaultAssignee || ""} onChange={event => { setAreaSettings(orgName, area, { defaultAssignee: event.target.value || undefined }); setWorkspaceRevision(current => current + 1); refreshWorkspace(`${area} responsibility updated`); }} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground"><option value="">No default owner</option>{getDirectoryAssignees(orgName).map(person => <option key={person.id} value={person.name}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div>)}</div><div className="mt-4 flex gap-2 border-t border-border pt-4"><input value={newArea} onChange={event => setNewArea(event.target.value)} onKeyDown={event => event.key === "Enter" && addArea()} placeholder="New area" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-[12px] text-foreground" /><button onClick={addArea} className="rounded-xl bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground">Add Area</button></div></div></div>}
 
-          {/* Resources */}
-          <div>
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</p>
-            <div className="space-y-1.5">
-              {resources.map((r, i) => (
-                <a key={i} href={r.url}
-                  className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card border border-border hover:border-white/10 transition-colors group">
-                  <LinkIcon type={r.type} />
-                  <span className="text-[13px] text-foreground flex-1">{r.label}</span>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </a>
-              ))}
-            </div>
-          </div>
+      {orgSettingsOpen && <div className="fixed inset-0 z-[70] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Edit organization color" className="w-full max-w-lg rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><div className="mb-4 flex items-start justify-between"><div><h2 className="binnie-heading text-xl font-bold text-foreground">Edit Organization</h2><p className="mt-1 text-[11px] text-muted-foreground">Choose the soft Binnie color used to group this organization and its projects.</p></div><button onClick={() => setOrgSettingsOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><OrganizationColorPicker value={orgColorKey} onChange={setOrgColorKey} /><div className="mt-5 flex justify-end gap-2"><button onClick={() => setOrgSettingsOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void saveOrganizationColor()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save color</button></div></div></div>}
 
-          {/* Attention items */}
-          {orgTasks.some(t => t.isOverdue || t.status === "review") && (
-            <div>
-              <p className="text-[11px] font-mono text-amber-400 uppercase tracking-wider mb-2">Needs Attention</p>
-              <div className="space-y-1.5">
-                {orgTasks.filter(t => t.isOverdue || t.status === "review").map(t => (
-                  <button key={t.id} onClick={() => onTaskClick(t)}
-                    className="w-full text-left p-2.5 rounded-lg bg-amber-400/5 border border-amber-400/15 hover:border-amber-400/25 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <PriorityDot priority={t.priority} />
-                      <p className="text-[12px] text-foreground truncate flex-1">{t.title}</p>
-                      {t.isOverdue && <span className="text-[10px] text-red-400 flex-shrink-0">OD</span>}
-                      {t.status === "review" && <span className="text-[10px] text-pink-400 flex-shrink-0">Review</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      {archiveConfirmOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Archive organization" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-[0_20px_60px_rgb(35_41_61_/_0.16)]"><h2 className="binnie-heading text-xl font-bold text-foreground">Archive {orgTitle}?</h2><p className="mt-2 text-[12px] leading-5 text-muted-foreground">The work will stay available for reference, but this organization will no longer appear as active.</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setArchiveConfirmOpen(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => { setArchiveConfirmOpen(false); setArchived(true); refreshWorkspace("Organization archived"); }} className="rounded-xl bg-overdue px-4 py-2 text-[12px] font-medium text-white">Archive Organization</button></div></div></div>}
     </div>
   );
 }
 
 // ─── PROJECT DETAIL VIEW (NEW) ────────────────────────────────────────────────
 
-type ProjectTab = "active" | "mine" | "delegated" | "waiting" | "review" | "completed";
+type ProjectTab = "overview" | "board" | "timeline" | "roadmap" | "people" | "links-files" | "activity" | "resources";
 
-function ProjectDetailView({ projectId, onBack, onTaskClick }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void }) {
-  const [tab, setTab] = useState<ProjectTab>("active");
-  const detail = PROJECT_DETAILS[projectId];
-  const basicProj = STRATEGIC_PROJECTS.find(p => p.id === projectId);
-  if (!detail || !basicProj) return null;
+const PLANNING_COLUMNS: { id: TaskStatus; label: string; help: string; tint: string; text: string }[] = [
+  { id: "ready", label: "Ready", help: "Can start now", tint: "bg-primary/[0.055]", text: "text-primary" },
+  { id: "in_progress", label: "In Progress", help: "Actively moving", tint: "bg-success/[0.055]", text: "text-success" },
+  { id: "waiting", label: "Waiting", help: "May still move", tint: "bg-info/[0.055]", text: "text-info" },
+  { id: "blocked", label: "Blocked", help: "Cannot continue", tint: "bg-overdue/[0.055]", text: "text-overdue" },
+  { id: "review", label: "Review", help: "Needs a decision", tint: "bg-review/[0.055]", text: "text-review" },
+  { id: "done", label: "Done", help: "Complete", tint: "bg-success/[0.04]", text: "text-success" },
+];
 
-  const c = ORG_COLORS[detail.org];
-  const projTasks = TASKS.filter(t => t.project === detail.name);
+const PLANNING_AREA_STYLES: Record<string, { bar: string; label: string }> = {
+  Marketing: { bar: "bg-[#f7e2e4] border-[#e9bec6] text-[#9a5f6d]", label: "text-[#9a5f6d]" },
+  Finance: { bar: "bg-[#e4f3ee] border-[#badacb] text-[#517c69]", label: "text-[#517c69]" },
+  Operations: { bar: "bg-[#e8f1f8] border-[#c5d9e9] text-[#557d9e]", label: "text-[#557d9e]" },
+  "System Development": { bar: "bg-[#e7eeff] border-[#cbd8fa] text-[#5d72b3]", label: "text-[#5d72b3]" },
+  HR: { bar: "bg-[#fff4d8] border-[#f0ddb1] text-[#9d7732]", label: "text-[#9d7732]" },
+  Purchasing: { bar: "bg-[#e8f3e8] border-[#cce1cb] text-[#5f8668]", label: "text-[#5f8668]" },
+};
 
-  const tabTasks: Record<ProjectTab, Task[]> = {
-    active: projTasks.filter(t => t.status !== "done"),
-    mine: projTasks.filter(t => t.nextActionBy === "me"),
-    delegated: projTasks.filter(t => t.isDelegated),
-    waiting: projTasks.filter(t => t.isWaiting),
-    review: projTasks.filter(t => t.status === "review"),
-    completed: projTasks.filter(t => t.status === "done"),
+function PlanningAreaFilter({ areas, value, onChange }: { areas: AreaName[]; value: AreaName | "all"; onChange: (area: AreaName | "all") => void }) {
+  return <label className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground"><Users className="h-3.5 w-3.5" /><select value={value} onChange={event => onChange(event.target.value as AreaName | "all")} className="bg-transparent text-[11px] font-medium text-foreground outline-none"><option value="all">All Teams</option>{areas.map(area => <option key={area} value={area}>{area}</option>)}</select></label>;
+}
+
+function taskSchedule(task: Task, index: number, windowDays = 42) {
+  const start = new Date(`${task.startDate || `2026-08-${String(12 + index).padStart(2, "0")}`}T00:00:00Z`);
+  const target = new Date(`${task.targetDate || `2026-08-${String(17 + index).padStart(2, "0")}`}T00:00:00Z`);
+  const startMs = Number.isNaN(start.getTime()) ? Date.UTC(2026, 7, 12 + index) : start.getTime();
+  const targetMs = Number.isNaN(target.getTime()) ? startMs + 5 * 86400000 : Math.max(target.getTime(), startMs + 2 * 86400000);
+  const timelineStart = Date.UTC(2026, 7, 10);
+  return {
+    left: Math.max(0, Math.min(94, ((startMs - timelineStart) / 86400000 / windowDays) * 100)),
+    width: Math.max(8, Math.min(42, ((targetMs - startMs) / 86400000 / windowDays) * 100)),
+    start: start.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+    target: target.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+    startMs,
+    targetMs,
   };
+}
 
-  const tabs: { id: ProjectTab; label: string }[] = [
-    { id: "active", label: "Active" },
-    { id: "mine", label: "My Tasks" },
-    { id: "delegated", label: "Delegated" },
-    { id: "waiting", label: "Waiting" },
-    { id: "review", label: "Needs Review" },
-    { id: "completed", label: "Completed" },
-  ];
+function planningIsoDate(milliseconds: number) {
+  return new Date(milliseconds).toISOString().slice(0, 10);
+}
 
-  const statusConfig = {
-    on_track: { label: "On Track", color: "text-emerald-400", bg: "bg-emerald-400/10" },
-    at_risk: { label: "At Risk", color: "text-orange-400", bg: "bg-orange-400/10" },
-    behind: { label: "Behind", color: "text-red-400", bg: "bg-red-400/10" },
+function milestonePosition(date: string, windowDays = 42) {
+  const parsed = new Date(`${date}T00:00:00Z`).getTime();
+  return Math.max(1, Math.min(98, ((parsed - Date.UTC(2026, 7, 10)) / 86400000 / windowDays) * 100));
+}
+
+function getBottlenecks(tasks: Task[]) {
+  return tasks.filter(task => task.status !== "done").map(task => {
+    const dependents = tasks.filter(candidate => candidate.status !== "done" && candidate.blockedBy?.taskId === task.id);
+    return { task, dependents };
+  }).filter(item => item.dependents.length > 1 || (item.task.isOverdue && item.dependents.length > 0));
+}
+
+function MilestonePlanner({ tasks, onRefresh }: { tasks: Task[]; onRefresh: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [date, setDate] = useState("2026-08-26");
+  const [owner, setOwner] = useState(tasks[0]?.area || "Project owner");
+  const project = tasks[0]?.project;
+  const projectId = tasks[0]?.projectId;
+  const canonicalProject = projectId ? getCanonicalProject(projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || "", project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const }))
+    : MILESTONES.filter(milestone => milestone.project === project);
+  const addMilestone = async () => {
+    if (!project || !name.trim() || !date) return;
+    if (taskStoreUsesServer && projectId) {
+      const ownerPrincipalId = PEOPLE_DIRECTORY.find(person => person.name === owner)?.id;
+      const result = await addProjectMilestoneAction({ projectId, milestone: { title: name.trim(), targetDate: date, ownerPrincipalId } });
+      if (!result.ok) return;
+      setName(""); setAdding(false); onRefresh();
+      return;
+    }
+    MILESTONES.push({ id: `milestone-${Date.now()}`, name: name.trim(), date, project, owner: owner.trim() || "Project owner", status: "planned" });
+    setName(""); setAdding(false); onRefresh();
   };
-  const sc = statusConfig[detail.status];
+  const toggleMilestone = async (milestone: typeof milestones[number]) => {
+    if (taskStoreUsesServer && projectId) {
+      const result = await updateProjectMilestoneAction({ projectId, milestoneId: milestone.id, status: milestone.status === "done" ? "planned" : "done" });
+      if (result.ok) applyCanonicalProject(result.data, result.revision);
+      onRefresh();
+      return;
+    }
+    const local = MILESTONES.find(item => item.id === milestone.id);
+    if (local) local.status = local.status === "done" ? "planned" : "done";
+    onRefresh();
+  };
+  const renameMilestone = async (milestone: typeof milestones[number]) => {
+    const title = window.prompt("Milestone name", milestone.name)?.trim();
+    if (!title || title === milestone.name) return;
+    if (taskStoreUsesServer && projectId) {
+      const result = await updateProjectMilestoneAction({ projectId, milestoneId: milestone.id, title });
+      if (result.ok) applyCanonicalProject(result.data, result.revision);
+      onRefresh();
+      return;
+    }
+    const local = MILESTONES.find(item => item.id === milestone.id);
+    if (local) local.name = title;
+    onRefresh();
+  };
+  const removeMilestone = async (milestone: typeof milestones[number]) => {
+    if (!window.confirm(`Remove milestone “${milestone.name}”?`)) return;
+    if (taskStoreUsesServer && projectId) {
+      const result = await deleteProjectMilestoneAction({ projectId, milestoneId: milestone.id });
+      if (result.ok) applyCanonicalProject(result.data, result.revision);
+      onRefresh();
+      return;
+    }
+    const index = MILESTONES.findIndex(item => item.id === milestone.id);
+    if (index >= 0) MILESTONES.splice(index, 1);
+    onRefresh();
+  };
+  if (!project) return null;
+  return <section className="mb-4 rounded-2xl border border-border bg-card p-3">
+    <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Milestones</p><p className="text-[10px] text-muted-foreground">Major deliveries shared across timeline and roadmap.</p></div><button onClick={() => setAdding(current => !current)} className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add Milestone</button></div>
+    <div className="mt-2 flex flex-wrap gap-1.5"><span className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Project: {project}</span>{milestones.map(milestone => <span key={milestone.id} className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px]", milestone.status === "done" ? "border-success/20 bg-success/[0.05] text-success" : "border-primary/15 bg-primary/[0.04] text-primary")}><button onClick={() => void toggleMilestone(milestone)} title={milestone.status === "done" ? "Mark planned" : "Mark complete"} className="inline-flex items-center gap-1"><Target className="h-3 w-3" />{milestone.name} · {milestone.date ? milestone.date.slice(5) : "No date"}</button><button onClick={() => void renameMilestone(milestone)} aria-label={`Rename ${milestone.name}`} className="ml-1 opacity-65 hover:opacity-100"><Pencil className="h-2.5 w-2.5" /></button><button onClick={() => void removeMilestone(milestone)} aria-label={`Remove ${milestone.name}`} className="opacity-65 hover:text-overdue hover:opacity-100"><X className="h-2.5 w-2.5" /></button></span>)}{!milestones.length && <span className="text-[10px] text-muted-foreground">No milestones yet.</span>}</div>
+    {adding && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_9rem_10rem_auto]"><label className="text-[10px] font-medium text-muted-foreground">Milestone name<input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && void addMilestone()} placeholder="Website ready" className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Owner<input value={owner} onChange={event => setOwner(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /></label><div className="flex items-end gap-2"><button onClick={() => void addMilestone()} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Save</button><button onClick={() => setAdding(false)} className="rounded-lg px-2 py-2 text-[11px] text-muted-foreground">Cancel</button></div></div>}
+  </section>;
+}
 
+type PlanningFilter = { status: TaskStatus | "all"; priority: Priority | "all"; project: string; assignee: string; blockedOnly: boolean; waitingOnly: boolean; reviewOnly: boolean };
+const DEFAULT_PLANNING_FILTER: PlanningFilter = { status: "all", priority: "all", project: "", assignee: "", blockedOnly: false, waitingOnly: false, reviewOnly: false };
+
+function matchesPlanningFilter(task: Task, filter: PlanningFilter) {
+  return (filter.status === "all" || task.status === filter.status) && (filter.priority === "all" || task.priority === filter.priority) && (!filter.project || task.project === filter.project) && (!filter.assignee || task.assignee === filter.assignee) && (!filter.blockedOnly || task.status === "blocked") && (!filter.waitingOnly || task.status === "waiting") && (!filter.reviewOnly || task.status === "review");
+}
+
+function PlanningFilterMenu({ tasks, value, onChange }: { tasks: Task[]; value: PlanningFilter; onChange: (value: PlanningFilter) => void }) {
+  const [open, setOpen] = useState(false);
+  const activeCount = Number(value.status !== "all") + Number(value.priority !== "all") + Number(Boolean(value.project)) + Number(Boolean(value.assignee)) + Number(value.blockedOnly) + Number(value.waitingOnly) + Number(value.reviewOnly);
+  const assignees = Array.from(new Set(tasks.map(task => task.assignee).filter((assignee): assignee is string => Boolean(assignee))));
+  const projects = Array.from(new Set(tasks.map(task => task.project).filter((project): project is string => Boolean(project))));
+  return <div className="relative"><button onClick={() => setOpen(current => !current)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", open || activeCount ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}><SlidersHorizontal className="mr-1 inline h-3.5 w-3.5" />{activeCount ? `Filters · ${activeCount}` : "Filters"}</button>{open && <div className="absolute right-0 z-20 mt-2 grid w-72 gap-2 rounded-2xl border border-border bg-popover p-3 shadow-[0_12px_30px_var(--theme-shadow)] sm:grid-cols-2"><label className="text-[10px] font-medium text-muted-foreground">Status<select value={value.status} onChange={event => onChange({ ...value, status: event.target.value as TaskStatus | "all" })} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] text-foreground"><option value="all">All states</option>{PLANNING_COLUMNS.map(column => <option key={column.id} value={column.id}>{column.label}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={value.priority} onChange={event => onChange({ ...value, priority: event.target.value as Priority | "all" })} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] text-foreground"><option value="all">Any priority</option>{(["urgent", "high", "medium", "low"] as Priority[]).map(priority => <option key={priority} value={priority}>{priority}</option>)}</select></label>{projects.length > 1 && <label className="col-span-2 text-[10px] font-medium text-muted-foreground">Project<select value={value.project} onChange={event => onChange({ ...value, project: event.target.value })} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] text-foreground"><option value="">All projects</option>{projects.map(project => <option key={project}>{project}</option>)}</select></label>}<label className="col-span-2 text-[10px] font-medium text-muted-foreground">Assignee<select value={value.assignee} onChange={event => onChange({ ...value, assignee: event.target.value })} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] text-foreground"><option value="">Anyone</option>{assignees.map(assignee => <option key={assignee}>{assignee}</option>)}</select></label>{(["blockedOnly", "waitingOnly", "reviewOnly"] as const).map(key => <label key={key} className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground"><input type="checkbox" checked={value[key]} onChange={event => onChange({ ...value, [key]: event.target.checked })} className="accent-primary" />{key === "blockedOnly" ? "Blocked only" : key === "waitingOnly" ? "Waiting only" : "Needs review"}</label>)}<button onClick={() => onChange(DEFAULT_PLANNING_FILTER)} className="text-left text-[10px] font-medium text-primary">Clear filters</button></div>}</div>;
+}
+
+function PlanningBoard({ tasks, areas, selectedArea, onAreaChange, onTaskClick, onRefresh }: { tasks: Task[]; areas: AreaName[]; selectedArea: AreaName | "all"; onAreaChange: (area: AreaName | "all") => void; onTaskClick: (task: Task) => void; onRefresh: () => void }) {
+  const [pendingWaiting, setPendingWaiting] = useState<Task | null>(null);
+  const [blockerId, setBlockerId] = useState("");
+  const [filters, setFilters] = useState<PlanningFilter>(DEFAULT_PLANNING_FILTER);
+  const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => matchesPlanningFilter(task, filters));
+  const bottlenecks = getBottlenecks(tasks);
+  const setStatus = async (task: Task, status: TaskStatus) => {
+    if (status === "waiting" || status === "blocked") { setPendingWaiting(task); return; }
+    if (taskStoreUsesServer && task.version) {
+      const result = await transitionTaskAction({ taskId: task.id, expectedVersion: task.version, status });
+      if (result.ok) { applyCanonicalTask(result.data, result.revision); onRefresh(); }
+      return;
+    }
+    Object.assign(task, { status, isWaiting: false, blockedBy: undefined, lastUpdate: "Updated just now" });
+    commitTaskStore();
+    onRefresh();
+  };
+  const confirmWaiting = async (blocked: boolean) => {
+    if (!pendingWaiting) return;
+    const blocker = tasks.find(task => task.id === blockerId);
+    if (taskStoreUsesServer && pendingWaiting.version) {
+      const result = await transitionTaskAction({ taskId: pendingWaiting.id, expectedVersion: pendingWaiting.version, status: blocked ? "blocked" : "waiting", blocker: blocked ? { type: "start_blocker", label: blocker?.title || "A decision or approval", prerequisiteTaskId: blocker?.id, ownerDepartmentId: blocker ? getRemoteDepartmentId(blocker.org, blocker.area) : undefined } : undefined });
+      if (result.ok) { applyCanonicalTask(result.data, result.revision); setPendingWaiting(null); setBlockerId(""); onRefresh(); }
+      return;
+    }
+    Object.assign(pendingWaiting, blocked ? {
+      status: "blocked" as TaskStatus, isWaiting: false, nextActionBy: blocker?.area || pendingWaiting.nextActionBy,
+      blockedBy: blocker ? { kind: "task" as DependencyKind, type: "blocking" as DependencyType, label: blocker.title, taskId: blocker.id, owner: blocker.area } : { kind: "decision" as DependencyKind, type: "blocking" as DependencyType, label: "A decision or approval", owner: pendingWaiting.nextActionBy },
+      lastUpdate: "Blocker noted just now",
+    } : { status: "waiting" as TaskStatus, isWaiting: true, lastUpdate: "Waiting noted just now" });
+    commitTaskStore();
+    setPendingWaiting(null); setBlockerId(""); onRefresh();
+  };
+  return <div>
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="binnie-heading text-lg font-bold text-foreground">Work board</h2><p className="mt-1 text-[11px] text-muted-foreground">Move a card when its work state changes. Waiting and Blocked stay intentionally separate.</p></div><div className="flex items-center gap-2"><PlanningFilterMenu tasks={tasks} value={filters} onChange={setFilters} /><PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} /></div></div>
+    {tasks[0]?.project && <div className="mb-4"><QuickCapture organization={tasks[0].org} project={tasks[0].project} area={selectedArea === "all" ? undefined : selectedArea} onSaved={onRefresh} onOpenTask={onTaskClick} /></div>}
+    <MilestonePlanner tasks={tasks} onRefresh={onRefresh} />
+    {bottlenecks.length > 0 && <div className="mb-4 rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-3"><div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-overdue" /><div><p className="text-[12px] font-semibold text-foreground">Bottlenecks</p><p className="text-[10px] text-muted-foreground">Only work blocking multiple downstream tasks is surfaced here.</p></div></div><div className="mt-2 flex flex-wrap gap-2">{bottlenecks.map(({ task, dependents }) => <button key={task.id} onClick={() => onTaskClick(task)} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-foreground shadow-sm">{task.area} · {task.title} <span className="text-overdue">→ {dependents.length} blocked</span></button>)}</div></div>}
+    <div className="mb-4 rounded-2xl border border-border bg-card p-3"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Team workload</p><p className="text-[10px] text-muted-foreground">A light capacity view based only on saved estimates—unestimated work stays visible as such.</p></div><BarChart2 className="h-4 w-4 text-primary" /></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from(new Set(tasks.filter(task => task.status !== "done").map(task => task.assignee || task.area))).map(owner => { const ownerTasks = tasks.filter(task => task.status !== "done" && (task.assignee || task.area) === owner); const minutes = ownerTasks.reduce((total, task) => total + (task.estimatedMinutes || 0), 0); const unestimated = ownerTasks.filter(task => !task.estimatedMinutes).length; const blocked = ownerTasks.filter(task => task.status === "blocked").length; const loadLabel = minutes ? `~${formatEstimatedMinutes(minutes)} planned${unestimated ? ` · ${unestimated} unestimated` : ""}` : unestimated ? `${unestimated} unestimated` : "Not estimated yet"; return <div key={owner} className="rounded-xl bg-muted/45 p-2.5"><div className="flex items-center gap-2"><Avatar name={owner} size="xs" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-foreground">{owner}</span><span className={cn("text-[10px]", blocked ? "text-overdue" : "text-muted-foreground")}>{blocked ? `${blocked} blocked` : loadLabel}</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-card"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.round((minutes / 480) * 100))}%` }} /></div></div>; })}</div></div>
+    {pendingWaiting && <div className="mb-4 rounded-2xl border border-info/20 bg-info/[0.055] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end"><div className="flex-1"><p className="text-[12px] font-semibold text-foreground">Does this stop “{pendingWaiting.title}” from moving forward?</p><p className="mt-1 text-[11px] text-muted-foreground">Waiting means someone owes an input; Blocked means there is a real dependency.</p></div><label className="text-[10px] font-medium text-muted-foreground">Blocked by<select value={blockerId} onChange={event => setBlockerId(event.target.value)} className="mt-1 block rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Decision or approval</option>{tasks.filter(task => task.id !== pendingWaiting.id).map(task => <option key={task.id} value={task.id}>{task.area} · {task.title}</option>)}</select></label><div className="flex gap-2"><button onClick={() => confirmWaiting(false)} className="rounded-xl border border-info/25 bg-card px-3 py-2 text-[11px] font-medium text-info">Can still continue</button><button onClick={() => confirmWaiting(true)} className="rounded-xl bg-overdue px-3 py-2 text-[11px] font-medium text-white">Task is blocked</button></div></div></div>}
+    <div className="grid gap-3 xl:grid-cols-6">{PLANNING_COLUMNS.map(column => { const columnTasks = visibleTasks.filter(task => task.status === column.id); return <div key={column.id} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); const task = TASKS.find(item => item.id === id); if (task) void setStatus(task, column.id); }} className={cn("min-h-56 rounded-2xl border border-border p-2.5", column.tint)}><div className="mb-2 flex items-start gap-2 px-1"><StatusDot status={column.id} /><div className="min-w-0"><p className={cn("text-[12px] font-semibold", column.text)}>{column.label}</p><p className="text-[10px] text-muted-foreground">{column.help}</p></div><span className="ml-auto rounded-full bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground">{columnTasks.length}</span></div><div className="space-y-2">{columnTasks.map(task => <div key={task.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", task.id)} onClick={() => onTaskClick(task)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter") onTaskClick(task); }} className="cursor-grab rounded-xl border border-border bg-card p-3 text-left shadow-[0_2px_8px_var(--theme-shadow)] transition hover:-translate-y-px hover:border-primary/35 active:cursor-grabbing"><div className="flex gap-2"><p className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-foreground">{task.title}</p>{(task.priority === "urgent" || task.priority === "high") && <PriorityDot priority={task.priority} />}</div><div className="mt-2 flex items-center justify-between gap-2"><AreaBadge area={task.area} />{task.assignee && <Avatar name={task.assignee} size="xs" />}</div><div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground"><span>{task.targetDate || task.deadline || "No target"}</span>{task.blockedBy && <span className="inline-flex items-center gap-1 text-overdue"><GitBranch className="h-3 w-3" />Dependency</span>}</div></div>)}{columnTasks.length === 0 && <p className="px-1 py-6 text-center text-[10px] text-muted-foreground">Drop work here</p>}</div></div>; })}</div>
+  </div>;
+}
+
+// Kept as a compact display fallback while the interactive timeline is used by planning views.
+type TimelineComposerMode = "binnie" | "manual" | "milestone";
+
+interface TimelineWorkDraft {
+  id: string; title: string; area: AreaName; assignee?: string; startDate: string; targetDate: string;
+  deadlineLabel: string; status: TaskStatus; priority: Priority; dependencyTitle?: string; link?: string;
+  attachments: string[]; notes?: string; needsDependencyConfirmation?: boolean;
+}
+
+const TIMELINE_DEPARTMENTS: AreaName[] = ["Marketing", "Finance", "Design", "System Development", "Operations", "Purchasing", "HR", "Front Office", "F&B", "Maintenance", "Warehouse", "Housekeeping"];
+let timelineCreationSequence = 0;
+
+function nextTimelineCreationId(prefix: string) {
+  timelineCreationSequence += 1;
+  return `${prefix}-${timelineCreationSequence}`;
+}
+
+function timelineAreaFromText(value: string, fallback: AreaName = "Operations"): AreaName {
+  const found = TIMELINE_DEPARTMENTS.find(area => new RegExp(`\\b${area.replace(" ", "\\s+")}\\b`, "i").test(value));
+  if (found) return found;
+  if (/design|figma|banner|website copy/i.test(value)) return "Marketing";
+  if (/system|development|code|website build|booking flow/i.test(value)) return "System Development";
+  return fallback;
+}
+
+function titleFromTimelineAction(value: string, inheritedVerb?: string) {
+  const clean = value.replace(/https?:\/\/\S+/gi, "").replace(/\b(?:this week|next week|by\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|today|tomorrow)\b/gi, "").replace(/\s+/g, " ").trim().replace(/^[,;:.\s]+|[,;:.\s]+$/g, "");
+  if (!clean) return "New work";
+  if (/^website copy$/i.test(clean)) return "Draft website copy";
+  if (/^promo materials$/i.test(clean)) return "Prepare promo materials";
+  if (/^staffing plan$/i.test(clean)) return "Prepare staffing plan";
+  if (/^(prepare|draft|create|update|approve|confirm|finalize|publish|review|write|design|plan|brief)\b/i.test(clean)) return clean[0].toUpperCase() + clean.slice(1);
+  return `${inheritedVerb || "Prepare"} ${clean}`.replace(/^./, letter => letter.toUpperCase());
+}
+
+function timelineDateFromText(value: string) {
+  const match = value.match(/\b(today|tomorrow|this week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i)?.[1]?.toLowerCase();
+  const base = Date.UTC(2026, 7, 13);
+  if (!match) return { startDate: "2026-08-13", targetDate: "2026-08-20", deadlineLabel: "This week" };
+  if (match === "today") return { startDate: "2026-08-13", targetDate: "2026-08-13", deadlineLabel: "Today" };
+  if (match === "tomorrow") return { startDate: "2026-08-13", targetDate: "2026-08-14", deadlineLabel: "Tomorrow" };
+  if (match === "this week") return { startDate: "2026-08-13", targetDate: "2026-08-16", deadlineLabel: "This week" };
+  const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const wanted = weekdays.indexOf(match);
+  const current = new Date(base).getUTCDay();
+  const daysAway = (wanted - current + 7) % 7 || 7;
+  const target = base + daysAway * 86400000;
+  return { startDate: "2026-08-13", targetDate: planningIsoDate(target), deadlineLabel: `Due ${match[0].toUpperCase()}${match.slice(1)}` };
+}
+
+function linkTypeFromUrl(url: string): ResourceType {
+  if (/figma\.com/i.test(url)) return "figma";
+  if (/docs\.google\.com\/spreadsheets/i.test(url) || /\.xlsx?($|\?)/i.test(url)) return "sheet";
+  if (/github\.com/i.test(url)) return "github";
+  if (/drive\.google\.com/i.test(url)) return "drive";
+  if (/notion\.so/i.test(url)) return "notion";
+  return "website";
+}
+
+function fileTypeFromName(name: string): TaskFile["type"] {
+  return /\.(xlsx?|csv)$/i.test(name) ? "excel" : /\.(png|jpe?g|webp|gif)$/i.test(name) ? "screenshot" : /\.pdf$/i.test(name) ? "pdf" : "doc";
+}
+
+function findTimelineDependency(title: string, candidates: Task[]) {
+  const words = title.toLowerCase().split(/\W+/).filter(word => word.length > 3);
+  return candidates.find(task => words.length > 0 && words.some(word => task.title.toLowerCase().includes(word)));
+}
+
+function createTimelineWorkDrafts(input: string, fallbackArea: AreaName, attachments: string[] = []): TimelineWorkDraft[] {
+  const source = input.trim();
+  if (!source) return [];
+  const departmentMatches = Array.from(source.matchAll(/\b(Marketing|Finance|System Development|Operations|Purchasing|HR|Front Office|F&B|Maintenance|Warehouse|Housekeeping|Design)\b/gi));
+  const sections = departmentMatches.length
+    ? departmentMatches.map((match, index) => ({ area: timelineAreaFromText(match[1]), text: source.slice((match.index || 0) + match[0].length, departmentMatches[index + 1]?.index || source.length) }))
+    : source.split(/\n|(?<=\.)\s+/).filter(Boolean).map(text => ({ area: timelineAreaFromText(text, fallbackArea), text }));
+
+  return sections.flatMap((section, sectionIndex) => {
+    const text = section.text.replace(/^\s*(?:and|,)?\s*/i, "");
+    const explicitMatch = text.match(/\b(after|once|cannot\s+start\s+until|can(?:not|'t)\s+start\s+until)\s+(.+?)(?:[.!]|$)/i);
+    const needsBeforeMatch = explicitMatch ? null : text.match(/\bneeds\s+(.+?)\s+before(?:\s+it)?(?:[.!]|$)/i);
+    const ambiguousMatch = explicitMatch || needsBeforeMatch ? null : text.match(/\b(depends on|waiting for|needs)\s+(.+?)(?:[.!]|$)/i);
+    const actionText = text.slice(0, explicitMatch?.index ?? needsBeforeMatch?.index ?? ambiguousMatch?.index ?? text.length).replace(/^\s*(?:can|should|will)\s+/i, "").trim();
+    const verb = actionText.match(/^(prepare|draft|create|update|approve|confirm|finalize|publish|review|write|design|plan|brief)\b/i)?.[1];
+    const actions = actionText.split(/\s+and\s+|\s*,\s*/i).map(action => action.trim()).filter(Boolean);
+    const dates = timelineDateFromText(text);
+    const dependencySource = explicitMatch?.[2] || needsBeforeMatch?.[1] || ambiguousMatch?.[2];
+    const dependencyTitle = dependencySource && /price/i.test(dependencySource) ? "Confirm accommodation prices" : dependencySource?.replace(/^(?:Finance|Marketing|Operations|Purchasing|HR|Design|System Development)\s+/i, "").replace(/\b(?:approves?|confirms?|finishes|completes?)\b/i, "").replace(/\s+/g, " ").trim();
+    return actions.map((action, actionIndex) => ({
+      id: `timeline-draft-${sectionIndex}-${actionIndex}-${Date.now()}`,
+      title: titleFromTimelineAction(action, verb), area: section.area, startDate: dates.startDate, targetDate: dates.targetDate,
+      deadlineLabel: dates.deadlineLabel, status: (explicitMatch || needsBeforeMatch ? "blocked" : "ready") as TaskStatus, priority: (/urgent|asap|critical/i.test(text) ? "urgent" : /important|priority/i.test(text) ? "high" : "medium") as Priority,
+      dependencyTitle, link: text.match(/https?:\/\/[^\s,]+/i)?.[0], attachments, needsDependencyConfirmation: Boolean(ambiguousMatch),
+    }));
+  }).filter(draft => draft.title !== "New work");
+}
+
+async function saveTimelineWorkDrafts(drafts: TimelineWorkDraft[], project: string, org: OrgName) {
+  if (taskStoreUsesServer) {
+    const canonicalProject = CANONICAL_PROJECTS.find(candidate => candidate.name === project && candidate.organization === org);
+    const organizationId = remoteOrganizationIds.get(org);
+    const created: Task[] = [];
+    for (const draft of drafts) {
+      const leadDepartmentId = getRemoteDepartmentId(org, draft.area);
+      const assigneeId = draft.assignee ? getDirectoryPerson(draft.assignee)?.id : undefined;
+      const result = await createTaskAction({
+        title: draft.title, organizationId, projectId: canonicalProject?.id, leadDepartmentId,
+        priority: draft.priority, startDate: draft.startDate, targetDate: draft.targetDate,
+        deadlineDate: draft.targetDate, originalCapture: draft.notes,
+        assignments: assigneeId ? [{ principalId: assigneeId, role: "primary_owner" }] : undefined,
+        nextAction: assigneeId ? { kind: "principal", principalId: assigneeId } : leadDepartmentId ? { kind: "department", departmentId: leadDepartmentId } : { kind: "ready" },
+      });
+      if (!result.ok) continue;
+      created.push(applyCanonicalTask(result.data, result.revision));
+    }
+    for (const draft of drafts) {
+      if (draft.status !== "blocked" || !draft.dependencyTitle) continue;
+      const task = created.find(candidate => candidate.title === draft.title);
+      if (!task?.version) continue;
+      const dependency = findTimelineDependency(draft.dependencyTitle, [...created, ...TASKS.filter(candidate => candidate.projectId === canonicalProject?.id)]);
+      const dependencyResult = await addTaskDependencyAction({ taskId: task.id, expectedVersion: task.version, dependency: { type: "start_blocker", label: draft.dependencyTitle, prerequisiteTaskId: dependency?.id } });
+      if (!dependencyResult.ok) continue;
+      const blocked = applyCanonicalTask(dependencyResult.data, dependencyResult.revision);
+      const status = await transitionTaskAction({ taskId: blocked.id, expectedVersion: blocked.version, status: "blocked" });
+      if (status.ok) applyCanonicalTask(status.data, status.revision);
+    }
+    return created;
+  }
+  const created: Task[] = drafts.map((draft, index) => ({
+    id: `timeline-${Date.now()}-${TASKS.length + index}`, title: draft.title, org, area: draft.area, project,
+    priority: draft.priority, status: draft.status, assignee: draft.assignee, nextActionBy: draft.assignee || draft.area,
+    startDate: draft.startDate, targetDate: draft.targetDate, deadline: draft.deadlineLabel, isDelegated: Boolean(draft.assignee),
+    isWaiting: draft.status === "waiting", links: draft.link ? [{ label: "Captured link", url: draft.link, type: linkTypeFromUrl(draft.link) }] : undefined,
+    files: draft.attachments.length ? draft.attachments.map(name => ({ name, type: fileTypeFromName(name) })) : undefined,
+    originalCapture: draft.notes, lastUpdate: "Just now", activity: [{ type: "assigned" as const, actor: "You", text: "Created with Binnie from the project timeline", time: "Just now" }],
+  }));
+  drafts.forEach((draft, index) => {
+    if (draft.status !== "blocked" || !draft.dependencyTitle) return;
+    const dependency = findTimelineDependency(draft.dependencyTitle, [...created, ...TASKS.filter(task => task.project === project)]);
+    created[index].blockedBy = dependency ? { kind: "task", type: "blocking", label: dependency.title, taskId: dependency.id, owner: dependency.area } : { kind: "decision", type: "blocking", label: draft.dependencyTitle };
+  });
+  created.forEach(task => createTask(task));
+  return created;
+}
+
+function TimelineWorkComposer({ mode, project, org, areas, defaultArea, onCreated, onClose }: { mode: TimelineComposerMode; project: string; org: OrgName; areas: AreaName[]; defaultArea?: AreaName; onCreated: () => void; onClose: () => void }) {
+  const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<TimelineWorkDraft[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [manual, setManual] = useState({ title: "", area: defaultArea || areas[0] || "Operations", assignee: "", startDate: "2026-08-13", targetDate: "2026-08-20", status: "ready" as TaskStatus, priority: "medium" as Priority, blockedBy: "", notes: "" });
+  const [milestone, setMilestone] = useState({ name: "", date: "2026-08-26", owner: defaultArea || "Project owner", description: "" });
+  const allProjectTasks = TASKS.filter(task => task.project === project);
+  const updateDraft = (id: string, patch: Partial<TimelineWorkDraft>) => setDrafts(current => current.map(draft => draft.id === id ? { ...draft, ...patch } : draft));
+  const organize = () => setDrafts(createTimelineWorkDrafts(input, defaultArea || areas[0] || "Operations", attachments));
+  const readyCount = drafts.filter(draft => draft.status !== "blocked").length;
+  const blockedCount = drafts.filter(draft => draft.status === "blocked").length;
+  const addManual = async () => {
+    if (!manual.title.trim()) return;
+    const blocker = allProjectTasks.find(task => task.id === manual.blockedBy);
+    if (taskStoreUsesServer) {
+      const canonicalProject = CANONICAL_PROJECTS.find(candidate => candidate.name === project && candidate.organization === org);
+      const leadDepartmentId = getRemoteDepartmentId(org, manual.area);
+      const assigneeId = manual.assignee ? getDirectoryPerson(manual.assignee)?.id : undefined;
+      const result = await createTaskAction({ title: manual.title.trim(), description: manual.notes || undefined, organizationId: remoteOrganizationIds.get(org), projectId: canonicalProject?.id, leadDepartmentId, priority: manual.priority, startDate: manual.startDate, targetDate: manual.targetDate, deadlineDate: manual.targetDate, assignments: assigneeId ? [{ principalId: assigneeId, role: "primary_owner" }] : undefined, nextAction: assigneeId ? { kind: "principal", principalId: assigneeId } : leadDepartmentId ? { kind: "department", departmentId: leadDepartmentId } : { kind: "ready" } });
+      if (!result.ok) return;
+      let saved = applyCanonicalTask(result.data, result.revision);
+      if (manual.status === "blocked") {
+        const dependency = await addTaskDependencyAction({ taskId: saved.id, expectedVersion: saved.version!, dependency: { type: "start_blocker", label: blocker?.title || "A decision or approval", prerequisiteTaskId: blocker?.id } });
+        if (dependency.ok) {
+          saved = applyCanonicalTask(dependency.data, dependency.revision);
+          const status = await transitionTaskAction({ taskId: saved.id, expectedVersion: saved.version!, status: "blocked" });
+          if (status.ok) saved = applyCanonicalTask(status.data, status.revision);
+        }
+      } else if (manual.status !== "ready") {
+        const status = await transitionTaskAction({ taskId: saved.id, expectedVersion: saved.version!, status: manual.status });
+        if (status.ok) applyCanonicalTask(status.data, status.revision);
+      }
+      onCreated(); onClose(); return;
+    }
+    createTask({ title: manual.title.trim(), org, area: manual.area, project, priority: manual.priority, status: manual.status, assignee: manual.assignee || undefined, nextActionBy: manual.assignee || manual.area, startDate: manual.startDate, targetDate: manual.targetDate, deadline: manual.targetDate, isDelegated: Boolean(manual.assignee), isWaiting: manual.status === "waiting", blockedBy: manual.status === "blocked" ? blocker ? { kind: "task", type: "blocking", label: blocker.title, taskId: blocker.id, owner: blocker.area } : { kind: "decision", type: "blocking", label: "A decision or approval" } : undefined, originalCapture: manual.notes || undefined, lastUpdate: "Just now", activity: [{ type: "assigned", actor: "You", text: "Added manually from the project timeline", time: "Just now" }] });
+    onCreated(); onClose();
+  };
+  const addMilestone = async () => {
+    if (!milestone.name.trim() || !milestone.date) return;
+    if (taskStoreUsesServer) {
+      const canonicalProject = CANONICAL_PROJECTS.find(candidate => candidate.name === project && candidate.organization === org);
+      if (!canonicalProject) return;
+      const result = await addProjectMilestoneAction({ projectId: canonicalProject.id, milestone: { title: milestone.name.trim(), targetDate: milestone.date } });
+      if (!result.ok) return;
+      applyCanonicalProject(result.data, result.revision);
+      onCreated(); onClose(); return;
+    }
+    MILESTONES.push({ id: nextTimelineCreationId("milestone"), name: milestone.name.trim(), date: milestone.date, project, owner: milestone.owner.trim() || "Project owner", status: "planned", description: milestone.description.trim() || undefined });
+    onCreated(); onClose();
+  };
+  return <section className="mb-4 rounded-2xl border border-primary/20 bg-primary/[0.035] p-4 shadow-[0_10px_24px_var(--theme-shadow)]"><div className="mb-3 flex items-start justify-between gap-3"><div className="flex items-start gap-2.5"><span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-3.5 w-3.5" /></span><div><h3 className="text-[13px] font-semibold text-foreground">{mode === "binnie" ? "Tell Binnie what needs to happen" : mode === "manual" ? "Add work manually" : "Add milestone"}</h3><p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{mode === "binnie" ? "Write it naturally. Binnie will organize the work, teams, dates, and dependencies." : mode === "manual" ? "Project is already selected. Add only the details that matter." : "Keep major project deliveries separate from day-to-day work."}</p><span className="mt-2 inline-flex rounded-full bg-card px-2 py-1 text-[10px] font-medium text-muted-foreground">Project: {project}</span></div></div><button onClick={onClose} aria-label="Close add work" className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><X className="h-4 w-4" /></button></div>{mode === "binnie" && <div><textarea value={input} onChange={event => setInput(event.target.value)} rows={4} placeholder="What needs to happen for this project?" className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] leading-5 text-foreground placeholder:text-muted-foreground focus:border-primary/45" />{attachments.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{attachments.map((name, index) => <span key={`${name}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-1 text-[10px] text-muted-foreground"><Paperclip className="h-3 w-3" />{name}<button onClick={() => setAttachments(current => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${name}`}><X className="h-3 w-3" /></button></span>)}</div>}<div className="mt-3 flex flex-wrap items-center gap-2"><label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-card hover:text-foreground"><Paperclip className="h-3.5 w-3.5" />Attach file<input type="file" multiple className="sr-only" onChange={event => setAttachments(current => [...current, ...Array.from(event.target.files || []).map(file => file.name)])} /></label><button onClick={organize} disabled={!input.trim()} className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45"><Sparkles className="h-3.5 w-3.5" />Organize with Binnie</button></div>{drafts.length > 0 && <div className="mt-4 border-t border-primary/15 pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[12px] font-semibold text-foreground">Binnie found {drafts.length} {drafts.length === 1 ? "piece" : "pieces"} of work</p><p className="mt-0.5 text-[10px] text-muted-foreground">{readyCount ? `${readyCount} ${readyCount === 1 ? "task can" : "tasks can"} start now.` : ""}{readyCount && blockedCount ? " " : ""}{blockedCount ? `${blockedCount} ${blockedCount === 1 ? "task needs" : "tasks need"} to wait for a real dependency.` : ""}</p></div><button onClick={() => { saveTimelineWorkDrafts(drafts, project, org); onCreated(); onClose(); }} className="rounded-xl bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Add All to Timeline</button></div><div className="mt-3 space-y-2">{drafts.map(draft => <div key={draft.id} className="rounded-xl border border-border bg-card p-3"><div className="flex gap-2.5"><span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-3 w-3" /></span><div className="min-w-0 flex-1"><p className="text-[12px] font-semibold text-foreground">{draft.title}</p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-muted-foreground"><AreaBadge area={draft.area} /><span>{draft.status === "blocked" ? <span className="text-overdue">Blocked by → {draft.dependencyTitle || "a dependency"}</span> : "Ready"}</span><span>{draft.deadlineLabel}</span>{draft.link && <span className="inline-flex items-center gap-1 text-primary"><Link2 className="h-3 w-3" />Related link</span>}{draft.attachments.length > 0 && <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" />{draft.attachments.join(", ")}</span>}</div>{draft.needsDependencyConfirmation && <div className="mt-2 rounded-lg border border-info/20 bg-info/[0.05] p-2"><p className="text-[10px] font-medium text-foreground">Does this work actually need to wait?</p><div className="mt-1.5 flex gap-2"><button onClick={() => updateDraft(draft.id, { status: "blocked", needsDependencyConfirmation: false })} className="rounded-md bg-overdue/10 px-2 py-1 text-[10px] font-medium text-overdue">Yes, it cannot start yet</button><button onClick={() => updateDraft(draft.id, { status: "ready", dependencyTitle: undefined, needsDependencyConfirmation: false })} className="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">No, it can happen in parallel</button></div></div>}{editingId === draft.id && <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-3"><input value={draft.title} onChange={event => updateDraft(draft.id, { title: event.target.value })} className="rounded-lg border border-border px-2 py-1.5 text-[11px] text-foreground" /><select value={draft.area} onChange={event => updateDraft(draft.id, { area: event.target.value as AreaName })} className="rounded-lg border border-border px-2 py-1.5 text-[11px] text-foreground">{Array.from(new Set([...areas, ...TIMELINE_DEPARTMENTS])).map(area => <option key={area}>{area}</option>)}</select><select value={draft.status} onChange={event => updateDraft(draft.id, { status: event.target.value as TaskStatus })} className="rounded-lg border border-border px-2 py-1.5 text-[11px] text-foreground"><option value="ready">Ready</option><option value="in_progress">In progress</option><option value="waiting">Waiting</option><option value="blocked">Blocked</option></select></div>}</div><div className="flex flex-col gap-1"><button onClick={() => setEditingId(current => current === draft.id ? null : draft.id)} className="rounded-lg px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">Edit</button><button onClick={() => setDrafts(current => current.filter(item => item.id !== draft.id))} aria-label={`Remove ${draft.title}`} className="rounded-lg p-1 text-muted-foreground hover:bg-overdue/10 hover:text-overdue"><X className="h-3.5 w-3.5" /></button></div></div></div>)}</div>{readyCount > 1 && <p className="mt-3 rounded-xl bg-primary/[0.045] px-3 py-2 text-[11px] text-primary">These workstreams can move in parallel. Waiting does not mean stopping.</p>}</div>}</div>}{mode === "manual" && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><label className="sm:col-span-2 lg:col-span-3 text-[10px] font-medium text-muted-foreground">Work / Task Name<input autoFocus value={manual.title} onChange={event => setManual(current => ({ ...current, title: event.target.value }))} placeholder="What needs to happen?" className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Department / Area<select value={manual.area} onChange={event => setManual(current => ({ ...current, area: event.target.value as AreaName }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground">{Array.from(new Set([...areas, ...TIMELINE_DEPARTMENTS])).map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Assignee<input value={manual.assignee} onChange={event => setManual(current => ({ ...current, assignee: event.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Status<select value={manual.status} onChange={event => setManual(current => ({ ...current, status: event.target.value as TaskStatus }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground">{(["ready", "in_progress", "waiting", "blocked", "review"] as TaskStatus[]).map(status => <option key={status} value={status}>{status.replace("_", " ")}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Start Date<input type="date" value={manual.startDate} onChange={event => setManual(current => ({ ...current, startDate: event.target.value }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Target / End Date<input type="date" value={manual.targetDate} onChange={event => setManual(current => ({ ...current, targetDate: event.target.value }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Priority<select value={manual.priority} onChange={event => setManual(current => ({ ...current, priority: event.target.value as Priority }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground">{(["low", "medium", "high", "urgent"] as Priority[]).map(priority => <option key={priority}>{priority}</option>)}</select></label><label className="text-[10px] font-medium text-muted-foreground">Blocked By<select value={manual.blockedBy} onChange={event => setManual(current => ({ ...current, blockedBy: event.target.value }))} disabled={manual.status !== "blocked"} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground disabled:opacity-50"><option value="">Decision or approval</option>{allProjectTasks.map(task => <option key={task.id} value={task.id}>{task.area} · {task.title}</option>)}</select></label><label className="sm:col-span-2 lg:col-span-3 text-[10px] font-medium text-muted-foreground">Notes<input value={manual.notes} onChange={event => setManual(current => ({ ...current, notes: event.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-2"><button onClick={onClose} className="rounded-xl px-3 py-2 text-[11px] text-muted-foreground">Cancel</button><button onClick={addManual} disabled={!manual.title.trim()} className="rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Add to Timeline</button></div></div>}{mode === "milestone" && <div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[10px] font-medium text-muted-foreground">Milestone Name<input autoFocus value={milestone.name} onChange={event => setMilestone(current => ({ ...current, name: event.target.value }))} placeholder="Website Ready" className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Date<input type="date" value={milestone.date} onChange={event => setMilestone(current => ({ ...current, date: event.target.value }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><label className="text-[10px] font-medium text-muted-foreground">Owner<input value={milestone.owner} onChange={event => setMilestone(current => ({ ...current, owner: event.target.value }))} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><label className="sm:col-span-2 text-[10px] font-medium text-muted-foreground">Description<input value={milestone.description} onChange={event => setMilestone(current => ({ ...current, description: event.target.value }))} placeholder="Optional" className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2 text-[11px] text-foreground" /></label><div className="sm:col-span-2 flex justify-end gap-2"><button onClick={onClose} className="rounded-xl px-3 py-2 text-[11px] text-muted-foreground">Cancel</button><button onClick={addMilestone} disabled={!milestone.name.trim()} className="rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground disabled:opacity-45">Add Milestone</button></div></div>}</section>;
+}
+
+function PlanningTimeline({ tasks, areas, selectedArea, onAreaChange, onTaskClick, onRefresh }: { tasks: Task[]; areas: AreaName[]; selectedArea: AreaName | "all"; onAreaChange: (area: AreaName | "all") => void; onTaskClick: (task: Task) => void; onRefresh?: () => void }) {
+  const [, setRevision] = useState(0);
+  const [filters, setFilters] = useState<PlanningFilter>(DEFAULT_PLANNING_FILTER);
+  const [scale, setScale] = useState<"days" | "weeks" | "months">("weeks");
+  const [showDependencies, setShowDependencies] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [composer, setComposer] = useState<TimelineComposerMode | null>(null);
+  const [composerArea, setComposerArea] = useState<AreaName | undefined>();
+  const [rowMenuArea, setRowMenuArea] = useState<AreaName | null>(null);
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
+  const [rescheduleConflict, setRescheduleConflict] = useState<{ task: Task; start: number; target: number } | null>(null);
+  const range = scale === "days" ? { windowDays: 14, tickDays: 2 } : scale === "weeks" ? { windowDays: 42, tickDays: 7 } : { windowDays: 90, tickDays: 30 };
+  const timeLabels = Array.from({ length: range.windowDays / range.tickDays }, (_, index) => new Date(Date.UTC(2026, 7, 10 + index * range.tickDays)).toLocaleDateString("en-US", scale === "months" ? { month: "short", year: "numeric", timeZone: "UTC" } : { month: "short", day: "numeric", timeZone: "UTC" }));
+  const todayPosition = Math.max(1, Math.min(98, (3 / range.windowDays) * 100));
+  const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done" && matchesPlanningFilter(task, filters));
+  const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
+  const canonicalProject = tasks[0]?.projectId ? getCanonicalProject(tasks[0].projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || isoDate(getWorkspaceCalendarDate()), project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const, description: undefined }))
+    : MILESTONES.filter(milestone => visibleTasks.some(task => task.project === milestone.project));
+  const lanes = visibleAreas.map((area, laneIndex) => {
+    const laneTasks = visibleTasks.filter(task => taskInvolvesArea(task, area));
+    const height = Math.max(104, 38 + laneTasks.length * 44);
+    const top = visibleAreas.slice(0, laneIndex).reduce((total, previousArea) => total + Math.max(104, 38 + visibleTasks.filter(task => taskInvolvesArea(task, previousArea)).length * 44), 0);
+    return { area, tasks: laneTasks, top, height };
+  });
+  const totalLaneHeight = lanes.reduce((total, lane) => total + lane.height, 0);
+  const positions = new Map<string, { x: number; y: number }>();
+  lanes.forEach(lane => lane.tasks.forEach((task, index) => {
+    const schedule = taskSchedule(task, tasks.indexOf(task), range.windowDays);
+    positions.set(task.id, { x: 155 + ((schedule.left + schedule.width) / 100) * 845, y: lane.top + 42 + index * 42 });
+  }));
+  const dependencyLines = visibleTasks.flatMap(task => {
+    if (!task.blockedBy?.taskId) return [];
+    const source = positions.get(task.blockedBy.taskId);
+    const target = positions.get(task.id);
+    return source && target ? [{ id: `${task.blockedBy.taskId}-${task.id}`, source, target, sourceId: task.blockedBy.taskId, targetId: task.id }] : [];
+  });
+  const dependencyFocus = selectedTaskId || focusedTaskId;
+  const visibleDependencyLines = showDependencies ? dependencyLines : dependencyFocus ? dependencyLines.filter(line => line.sourceId === dependencyFocus || line.targetId === dependencyFocus) : [];
+  const project = tasks[0]?.project;
+  const projectOrg = tasks[0]?.org;
+  const refresh = () => { commitTaskStore(); setRevision(current => current + 1); onRefresh?.(); };
+  const applyReschedule = async (task: Task, start: number, target: number) => {
+    if (taskStoreUsesServer && task.version) {
+      const result = await updateTaskAction({ taskId: task.id, expectedVersion: task.version, startDate: planningIsoDate(start), targetDate: planningIsoDate(target), deadlineDate: planningIsoDate(target) });
+      if (result.ok) { applyCanonicalTask(result.data, result.revision); setRescheduleConflict(null); refresh(); }
+      return;
+    }
+    Object.assign(task, { startDate: planningIsoDate(start), targetDate: planningIsoDate(target), deadline: new Date(target).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }), lastUpdate: "Rescheduled on timeline just now" });
+    setRescheduleConflict(null); refresh();
+  };
+  const reschedule = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const task = TASKS.find(item => item.id === event.dataTransfer.getData("text/plain"));
+    if (!task) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(0.94, (event.clientX - bounds.left) / bounds.width));
+    const existing = taskSchedule(task, tasks.indexOf(task), range.windowDays);
+    const duration = Math.max(2, Math.round((existing.targetMs - existing.startMs) / 86400000));
+    const start = Date.UTC(2026, 7, 10) + Math.round(ratio * range.windowDays) * 86400000;
+    const target = start + duration * 86400000;
+    const blocker = task.blockedBy?.taskId ? TASKS.find(item => item.id === task.blockedBy?.taskId) : undefined;
+    const blockerTarget = blocker ? taskSchedule(blocker, TASKS.indexOf(blocker), range.windowDays).targetMs : undefined;
+    if (blockerTarget && start < blockerTarget) { setRescheduleConflict({ task, start, target }); return; }
+    void applyReschedule(task, start, target);
+  };
+  const openComposer = (mode: TimelineComposerMode, area?: AreaName) => { setComposerArea(area); setComposer(mode); setAddMenuOpen(false); setRowMenuArea(null); };
+  const openTask = (task: Task) => { setSelectedTaskId(task.id); setHoveredTask(task); onTaskClick(task); };
+  return <div><div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div><h2 className="binnie-heading text-lg font-bold text-foreground">Parallel Timeline</h2><p className="mt-1 text-[11px] text-muted-foreground">Different departments can move together. Dependencies stay quiet until you need them.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex rounded-xl border border-border bg-card p-1">{(["days", "weeks", "months"] as const).map(value => <button key={value} onClick={() => setScale(value)} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium capitalize", scale === value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{value}</button>)}</div><PlanningFilterMenu tasks={tasks} value={filters} onChange={setFilters} /><PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} /><button onClick={() => setShowDependencies(current => !current)} aria-pressed={showDependencies} className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-medium", showDependencies ? "border-info/25 bg-info/[0.08] text-info" : "border-border bg-card text-muted-foreground hover:text-foreground")}><GitBranch className="h-3.5 w-3.5" />Dependencies</button><div className="relative"><button onClick={() => setAddMenuOpen(current => !current)} aria-expanded={addMenuOpen} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/85"><Plus className="h-3.5 w-3.5" />Add Work</button>{addMenuOpen && <div className="absolute right-0 z-30 mt-2 w-48 rounded-2xl border border-border bg-popover p-1.5 shadow-[0_12px_28px_var(--theme-shadow)]"><button onClick={() => openComposer("binnie")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[11px] font-medium text-foreground hover:bg-primary/[0.06]"><Sparkles className="h-3.5 w-3.5 text-primary" />Add with Binnie</button><button onClick={() => openComposer("manual")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"><Plus className="h-3.5 w-3.5" />Add Manually</button><button onClick={() => openComposer("milestone")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"><Target className="h-3.5 w-3.5" />Add Milestone</button></div>}</div></div></div>{composer && project && projectOrg && <TimelineWorkComposer key={`${composer}-${composerArea || "project"}`} mode={composer} project={project} org={projectOrg} areas={areas} defaultArea={composerArea} onCreated={refresh} onClose={() => setComposer(null)} />}{rowMenuArea && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-3"><AreaBadge area={rowMenuArea} /><span className="text-[11px] text-muted-foreground">Add work to this department</span><button onClick={() => openComposer("binnie", rowMenuArea)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary"><Sparkles className="h-3.5 w-3.5" />Ask Binnie</button><button onClick={() => openComposer("manual", rowMenuArea)} className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground">Add Manually</button><button onClick={() => setRowMenuArea(null)} aria-label="Close department creation" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="h-3.5 w-3.5" /></button></div>}{hoveredTask && <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-info/15 bg-info/[0.035] px-3 py-2 text-[10px] text-muted-foreground"><span className="font-semibold text-foreground">{hoveredTask.title}</span><AreaBadge area={hoveredTask.area} /><span>{taskSchedule(hoveredTask, tasks.indexOf(hoveredTask), range.windowDays).start} – {taskSchedule(hoveredTask, tasks.indexOf(hoveredTask), range.windowDays).target}</span><span>Owner: {hoveredTask.assignee || hoveredTask.area}</span>{hoveredTask.blockedBy && <button onClick={() => setSelectedTaskId(hoveredTask.blockedBy?.taskId || null)} className="inline-flex items-center gap-1 text-overdue hover:underline"><GitBranch className="h-3 w-3" />Blocked by {hoveredTask.blockedBy.label}</button>}</div>}{rescheduleConflict && <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-warning/25 bg-warning/[0.06] p-3 sm:flex-row sm:items-center"><div className="flex-1"><p className="text-[12px] font-semibold text-foreground">This work now starts before its prerequisite is complete.</p><p className="mt-0.5 text-[10px] text-muted-foreground">Binnie will not move any other work automatically.</p></div><div className="flex gap-2"><button onClick={() => { const blocker = rescheduleConflict.task.blockedBy?.taskId ? TASKS.find(item => item.id === rescheduleConflict.task.blockedBy?.taskId) : undefined; const blockerEnd = blocker ? taskSchedule(blocker, TASKS.indexOf(blocker), range.windowDays).targetMs : rescheduleConflict.start; const duration = rescheduleConflict.target - rescheduleConflict.start; applyReschedule(rescheduleConflict.task, blockerEnd, blockerEnd + duration); }} className="rounded-lg border border-warning/25 bg-card px-2.5 py-2 text-[10px] font-medium text-warning">Adjust date</button><button onClick={() => applyReschedule(rescheduleConflict.task, rescheduleConflict.start, rescheduleConflict.target)} className="rounded-lg bg-primary px-2.5 py-2 text-[10px] font-medium text-primary-foreground">Keep anyway</button></div></div>}{visibleTasks.length === 0 ? <section className="rounded-2xl border border-dashed border-border bg-card px-5 py-14 text-center"><Sparkles className="mx-auto h-6 w-6 text-primary" /><h3 className="mt-3 text-sm font-semibold text-foreground">Nothing planned yet.</h3><p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-muted-foreground">Tell Binnie what needs to happen and we&apos;ll help organize it across your teams.</p><div className="mt-4 flex justify-center gap-2"><button onClick={() => openComposer("binnie")} className="rounded-xl bg-primary px-3.5 py-2 text-[11px] font-medium text-primary-foreground">Add with Binnie</button><button onClick={() => openComposer("manual")} className="rounded-xl border border-border px-3.5 py-2 text-[11px] font-medium text-muted-foreground">Add Manually</button></div></section> : <div className="overflow-x-auto rounded-2xl border border-border bg-card"><div className="min-w-[820px]"><div className="grid grid-cols-[155px_1fr] border-b border-border bg-muted/35"><div className="px-4 py-3 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">Department</div><div className="grid" style={{ gridTemplateColumns: `repeat(${timeLabels.length}, minmax(0, 1fr))` }}>{timeLabels.map(label => <div key={label} className="border-l border-border px-3 py-3 text-[10px] font-medium text-muted-foreground">{label}</div>)}</div></div><div className="grid grid-cols-[155px_1fr] border-b border-border"><div className="bg-muted/20 px-4 py-3 text-[10px] font-medium text-muted-foreground">Milestones</div><div className="relative h-14" style={{ backgroundImage: "linear-gradient(to right, var(--border) 1px, transparent 1px)", backgroundSize: `${100 / timeLabels.length}% 100%` }}>{milestones.map(milestone => <span key={milestone.id} title={`${milestone.name} · ${milestone.owner}${milestone.description ? ` · ${milestone.description}` : ""}`} className={cn("absolute top-3 -translate-x-1/2 text-center", milestone.status === "at_risk" ? "text-overdue" : milestone.status === "done" ? "text-success" : "text-primary")} style={{ left: `${milestonePosition(milestone.date, range.windowDays)}%` }}><span className="mx-auto block h-3 w-3 rotate-45 border border-current bg-card" /><span className="mt-1 block max-w-20 truncate text-[9px] font-medium">{milestone.name}</span></span>)}</div></div><div className="relative"><svg aria-label="Visible blocking dependencies" className="pointer-events-none absolute inset-0 z-[3] h-full w-full" preserveAspectRatio="none" viewBox={`0 0 1000 ${Math.max(totalLaneHeight, 1)}`}><defs><marker id="binnie-subtle-dependency-arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L0,5 L5,2.5 z" fill="var(--info)" /></marker></defs>{visibleDependencyLines.map(line => { const middle = Math.max(line.source.x + 12, Math.min(line.target.x - 12, (line.source.x + line.target.x) / 2)); return <path key={line.id} d={`M ${line.source.x} ${line.source.y} H ${middle} V ${line.target.y} H ${line.target.x}`} fill="none" stroke="var(--info)" strokeWidth="1" markerEnd="url(#binnie-subtle-dependency-arrow)" opacity="0.58" />; })}</svg>{lanes.map(lane => { const style = PLANNING_AREA_STYLES[lane.area] || { bar: "bg-muted border-border text-foreground", label: "text-foreground" }; return <div key={lane.area} className="group grid grid-cols-[155px_1fr] border-b border-border last:border-b-0"><div className="border-r border-border bg-muted/20 px-4 py-4"><div className="flex items-center gap-1"><p className={cn("text-[12px] font-semibold", style.label)}>{lane.area}</p><button onClick={() => setRowMenuArea(lane.area)} aria-label={`Add work to ${lane.area}`} className="ml-auto rounded-md p-1 text-muted-foreground opacity-0 transition hover:bg-card hover:text-primary group-hover:opacity-100 focus:opacity-100"><Plus className="h-3.5 w-3.5" /></button></div><p className="mt-1 text-[10px] text-muted-foreground">{lane.tasks.length} active</p></div><div onDragOver={event => event.preventDefault()} onDrop={reschedule} className="relative" style={{ height: lane.height, backgroundImage: "linear-gradient(to right, var(--border) 1px, transparent 1px)", backgroundSize: `${100 / timeLabels.length}% 100%` }}><div className="absolute inset-y-0 z-[1] w-px bg-primary/55" style={{ left: `${todayPosition}%` }}><span className="absolute -top-5 -translate-x-1/2 rounded bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">Today</span></div>{lane.tasks.map((task, index) => { const schedule = taskSchedule(task, tasks.indexOf(task), range.windowDays); const highlighted = dependencyFocus === task.id || visibleDependencyLines.some(line => (line.sourceId === task.id || line.targetId === task.id) && dependencyFocus && (line.sourceId === dependencyFocus || line.targetId === dependencyFocus)); return <button key={task.id} draggable onDragStart={event => event.dataTransfer.setData("text/plain", task.id)} onMouseEnter={() => { setFocusedTaskId(task.id); setHoveredTask(task); }} onMouseLeave={() => setFocusedTaskId(null)} title={`${task.title}\n${schedule.start} – ${schedule.target}\n${task.area}${task.assignee ? ` · ${task.assignee}` : ""}${task.blockedBy ? `\nBlocked by: ${task.blockedBy.label}` : ""}`} onClick={() => openTask(task)} className={cn("absolute z-[4] flex h-8 cursor-grab items-center gap-1.5 rounded-lg border px-2 text-left text-[10px] font-medium shadow-[0_2px_6px_var(--theme-shadow)] transition hover:brightness-[0.98] active:cursor-grabbing", style.bar, task.status === "blocked" && "border-l-4 border-l-overdue", highlighted && "ring-2 ring-info/35")} style={{ left: `${schedule.left}%`, top: 28 + index * 42, width: `${schedule.width}%` }}><span className="min-w-0 flex-1 truncate">{task.title}</span>{task.blockedBy && <GitBranch className="h-3 w-3 flex-shrink-0" aria-label={`Blocked by ${task.blockedBy.label}`} />}</button>; })}</div></div>; })}</div></div></div>}{visibleDependencyLines.length > 0 && <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground"><GitBranch className="h-3.5 w-3.5 text-info" />{showDependencies ? "Showing real blocking dependencies only." : "Showing the selected task’s real dependency only."}</p>}</div>;
+}
+
+// Kept as a compact display fallback while the interactive roadmap is used by planning views.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function PlanningRoadmapLegacy({ tasks, areas, selectedArea, onAreaChange, onTaskClick }: { tasks: Task[]; areas: AreaName[]; selectedArea: AreaName | "all"; onAreaChange: (area: AreaName | "all") => void; onTaskClick: (task: Task) => void }) {
+  const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done");
+  const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
+  return <div><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="binnie-heading text-lg font-bold text-foreground">Project roadmap</h2><p className="mt-1 text-[11px] text-muted-foreground">A calm month-level view of the same work, without creating duplicate roadmap items.</p></div><div className="flex items-center gap-2"><span className="rounded-lg bg-primary/10 px-2.5 py-2 text-[10px] font-medium text-primary">Months</span><PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} /></div></div><div className="overflow-x-auto rounded-2xl border border-border bg-card"><div className="min-w-[760px]"><div className="grid grid-cols-[155px_repeat(3,1fr)] border-b border-border bg-muted/35 text-[10px] font-medium text-muted-foreground"><div className="px-4 py-3 uppercase tracking-[0.1em]">Workstream</div><div className="border-l border-border px-4 py-3">August</div><div className="border-l border-border px-4 py-3">September</div><div className="border-l border-border px-4 py-3">October</div></div>{visibleAreas.map(area => { const areaTasks = visibleTasks.filter(task => task.area === area).slice(0, 3); const style = PLANNING_AREA_STYLES[area] || { bar: "bg-muted border-border text-foreground", label: "text-foreground" }; return <div key={area} className="grid grid-cols-[155px_1fr] border-b border-border last:border-b-0"><div className="bg-muted/20 px-4 py-4"><p className={cn("text-[12px] font-semibold", style.label)}>{area}</p><p className="mt-1 text-[10px] text-muted-foreground">{areaTasks.length} initiatives</p></div><div className="grid grid-cols-3 gap-2 p-3">{areaTasks.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className={cn("rounded-xl border p-3 text-left transition hover:border-primary/35", style.bar)}><p className="truncate text-[11px] font-semibold">{task.title}</p><p className="mt-1 text-[10px] opacity-75">{task.targetDate || task.deadline || "Planned"}</p><div className="mt-2 h-1 overflow-hidden rounded-full bg-card/70"><div className="h-full rounded-full bg-primary/70" style={{ width: task.status === "in_progress" ? "55%" : task.status === "blocked" ? "18%" : "32%" }} /></div></button>)}</div></div>; })}</div></div></div>;
+}
+
+function PlanningRoadmap({ tasks, areas, selectedArea, onAreaChange, onTaskClick }: { tasks: Task[]; areas: AreaName[]; selectedArea: AreaName | "all"; onAreaChange: (area: AreaName | "all") => void; onTaskClick: (task: Task) => void }) {
+  const [scale, setScale] = useState<"weeks" | "months" | "quarters">("months");
+  const visibleTasks = (selectedArea === "all" ? tasks : tasks.filter(task => taskInvolvesArea(task, selectedArea))).filter(task => task.status !== "done");
+  const visibleAreas = selectedArea === "all" ? areas.filter(area => visibleTasks.some(task => taskInvolvesArea(task, area))) : [selectedArea];
+  const roadmapDependencies = deriveRoadmapDependencies(visibleTasks.map(task => ({ id: task.id, title: task.title, dependencies: task.dependencyRecords })));
+  const unresolvedDependencies = roadmapDependencies.filter(dependency => !dependency.resolved && dependency.type !== "related");
+  const dependenciesFor = (taskId: string) => unresolvedDependencies.filter(dependency => dependency.toTaskId === taskId);
+  const taskName = (taskId: string) => visibleTasks.find(task => task.id === taskId)?.title || "Related work";
+  const headings = scale === "weeks" ? ["Aug 10", "Aug 17", "Aug 24", "Aug 31", "Sep 7", "Sep 14"] : scale === "months" ? ["August", "September", "October"] : ["Q3 2026", "Q4 2026", "Q1 2027"];
+  const canonicalProject = tasks[0]?.projectId ? getCanonicalProject(tasks[0].projectId) : undefined;
+  const milestones = canonicalProject
+    ? canonicalProject.milestones.map(milestone => ({ id: milestone.id, name: milestone.title, date: milestone.targetDate || isoDate(getWorkspaceCalendarDate()), project: canonicalProject.name, owner: milestone.owner || "Project owner", status: milestone.status === "done" ? "done" as const : "planned" as const, description: undefined }))
+    : MILESTONES.filter(milestone => tasks.some(task => task.project === milestone.project));
+  const milestoneNames = new Set(milestones.map(milestone => milestone.name));
+  const columnFor = (task: Task) => {
+    const schedule = taskSchedule(task, tasks.indexOf(task));
+    const days = Math.max(0, Math.round((schedule.startMs - Date.UTC(2026, 7, 10)) / 86400000));
+    return scale === "weeks" ? Math.min(5, Math.floor(days / 7)) : scale === "months" ? Math.min(2, Math.floor(days / 30)) : Math.min(2, Math.floor(days / 90));
+  };
   return (
-    <div className="p-8 max-w-[1100px] mx-auto">
-      <BackButton label="Projects" onClick={onBack} />
-
-      {/* Hero */}
-      <div className="bg-card rounded-2xl border border-border p-6 mb-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <OrgBadge org={detail.org} />
-              <AreaBadge area={detail.area} />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>{detail.name}</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <span className={cn("text-[11px] font-mono px-2 py-0.5 rounded", sc.bg, sc.color)}>{sc.label}</span>
-              <span className="text-[11px] font-mono text-muted-foreground">Due {detail.deadline}</span>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className={cn("text-4xl font-bold", c.text)} style={{ fontFamily: "var(--font-display)" }}>{detail.progress}%</p>
-            <p className="text-[11px] font-mono text-muted-foreground">complete</p>
-          </div>
+    <div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="binnie-heading text-lg font-bold text-foreground">Project roadmap</h2>
+          <p className="mt-1 text-[11px] text-muted-foreground">Major workstream commitments across {scale}. It reflects the same task and milestone data as the timeline.</p>
         </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">
-          <div className={cn("h-full rounded-full transition-all", c.dot)} style={{ width: `${detail.progress}%` }} />
-        </div>
-        <div className="grid grid-cols-5 gap-3">
-          {[
-            { label: "Total Tasks", value: detail.tasks },
-            { label: "Done", value: detail.done, color: "text-emerald-400" },
-            { label: "Active", value: tabTasks.active.length, color: "text-indigo-400" },
-            { label: "Waiting", value: tabTasks.waiting.length, color: "text-amber-400" },
-            { label: "Delegated", value: tabTasks.delegated.length, color: "text-sky-400" },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="bg-muted/40 rounded-lg p-3 text-center">
-              <p className={cn("text-xl font-bold", color || "text-foreground")} style={{ fontFamily: "var(--font-display)" }}>{value}</p>
-              <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{label}</p>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-border bg-card p-1">
+            {(["weeks", "months", "quarters"] as const).map(value => <button key={value} onClick={() => setScale(value)} className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-medium capitalize", scale === value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{value}</button>)}
+          </div>
+          <PlanningAreaFilter areas={areas} value={selectedArea} onChange={onAreaChange} />
         </div>
       </div>
-
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left: Current Focus + Tasks */}
-        <div className="col-span-2 space-y-5">
-          {/* Current Focus */}
-          <div className="bg-card rounded-xl border border-border p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Target className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Current Focus</h2>
-            </div>
-            <div className="space-y-2">
-              {detail.currentFocus.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-primary/[0.04] border border-primary/10">
-                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0">{i + 1}</div>
-                  <p className="text-[13px] text-foreground">{item}</p>
-                </div>
-              ))}
-            </div>
+      {roadmapDependencies.length > 0 && <section className="mb-4 rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Work relationships</p><p className="mt-0.5 text-[10px] text-muted-foreground">Only actual dependencies appear here. Completion blockers preserve parallel work.</p></div><div className="flex flex-wrap gap-1.5 text-[9px] font-medium"><span className="rounded-full bg-overdue/10 px-2 py-1 text-overdue">{unresolvedDependencies.filter(item => item.type === "start_blocker").length} start blockers</span><span className="rounded-full bg-info/10 px-2 py-1 text-info">{unresolvedDependencies.filter(item => item.type === "completion_blocker").length} finish blockers</span><span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">{roadmapDependencies.filter(item => item.type === "related").length} related</span></div></div><div className="mt-3 grid gap-1.5 lg:grid-cols-2">{roadmapDependencies.slice(0, 8).map(dependency => <div key={`${dependency.fromTaskId}-${dependency.toTaskId}-${dependency.type}`} className={cn("flex items-center gap-2 rounded-xl border px-2.5 py-2 text-[10px]", dependency.resolved ? "border-success/15 bg-success/[0.035] text-muted-foreground" : dependency.type === "start_blocker" ? "border-overdue/15 bg-overdue/[0.035] text-foreground" : dependency.type === "completion_blocker" ? "border-info/15 bg-info/[0.035] text-foreground" : "border-border bg-card text-muted-foreground")}><GitBranch className="h-3 w-3 flex-shrink-0" /><span className="min-w-0 flex-1 truncate">{taskName(dependency.fromTaskId)} <span className="text-muted-foreground">→</span> {taskName(dependency.toTaskId)}</span><span className="rounded-full bg-card/70 px-1.5 py-0.5 text-[8px]">{dependency.type === "start_blocker" ? "Start" : dependency.type === "completion_blocker" ? "Finish" : "Related"}</span></div>)}</div></section>}
+      <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+        <div className="min-w-[760px]">
+          <div className={cn("grid border-b border-border bg-muted/35 text-[10px] font-medium text-muted-foreground", headings.length === 6 ? "grid-cols-[155px_repeat(6,1fr)]" : "grid-cols-[155px_repeat(3,1fr)]")}>
+            <div className="px-4 py-3 uppercase tracking-[0.1em]">Workstream</div>
+            {headings.map(heading => <div key={heading} className="border-l border-border px-3 py-3">{heading}</div>)}
           </div>
-
-          {/* Task tabs */}
-          <div>
-            <div className="flex gap-1 mb-3 p-1 bg-muted/20 rounded-lg border border-border">
-              {tabs.map(t => (
-                <button key={t.id} onClick={() => setTab(t.id)}
-                  className={cn("flex-1 py-1.5 px-2 rounded-md text-[11px] font-medium transition-all", tab === t.id ? "bg-card text-foreground border border-border shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  {t.label}
-                  {tabTasks[t.id].length > 0 && (
-                    <span className={cn("ml-1 text-[10px]", tab === t.id ? "text-primary" : "text-muted-foreground/60")}>{tabTasks[t.id].length}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
-              {tabTasks[tab].length === 0
-                ? <div className="py-8 text-center text-muted-foreground text-sm">No tasks in this view.</div>
-                : tabTasks[tab].map(t => <TaskRow key={t.id} task={t} onClick={() => onTaskClick(t)} />)}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Resources + Activity */}
-        <div className="space-y-5">
-          <div>
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Resources</p>
-            <div className="space-y-1.5">
-              {detail.resources.map((r, i) => (
-                <a key={i} href={r.url}
-                  className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card border border-border hover:border-white/10 transition-colors group">
-                  <LinkIcon type={r.type} />
-                  <span className="text-[13px] text-foreground flex-1">{r.label}</span>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </a>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Recent Activity</p>
-            <div className="space-y-3">
-              {detail.recentActivity.map((act, i) => {
-                const actorColor = getPersonColor(act.actor);
-                return (
-                  <div key={i} className="flex gap-2.5">
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
-                      style={{ backgroundColor: actorColor + "22", color: actorColor }}>
-                      {getInitials(act.actor)}
-                    </div>
-                    <div>
-                      <p className="text-[12px] text-foreground leading-snug">{act.text}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{act.actor} · {act.time}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {visibleAreas.map(area => {
+            const areaTasks = visibleTasks.filter(task => taskInvolvesArea(task, area));
+            const style = PLANNING_AREA_STYLES[area] || { bar: "bg-muted border-border text-foreground", label: "text-foreground" };
+            return <div key={area} className="grid grid-cols-[155px_1fr] border-b border-border last:border-b-0">
+              <div className="bg-muted/20 px-4 py-4"><p className={cn("text-[12px] font-semibold", style.label)}>{area}</p><p className="mt-1 text-[10px] text-muted-foreground">{areaTasks.length} initiatives</p></div>
+              <div className={cn("grid gap-2 p-3", headings.length === 6 ? "grid-cols-6" : "grid-cols-3")}>
+                {headings.map((heading, index) => <div key={heading} className="min-h-18 space-y-2 border-l border-border/70 pl-2 first:border-l-0">
+                  {areaTasks.filter(task => columnFor(task) === index).map(task => { const dependencies = dependenciesFor(task.id); const startBlocker = dependencies.find(dependency => dependency.type === "start_blocker"); const completionBlocker = dependencies.find(dependency => dependency.type === "completion_blocker"); return <button key={task.id} onClick={() => onTaskClick(task)} className={cn("w-full rounded-xl border p-2.5 text-left transition hover:border-primary/35", style.bar)}><p className="truncate text-[10px] font-semibold">{task.title}</p><p className="mt-1 text-[9px] opacity-75">{task.targetDate || task.deadline || "Planned"}</p>{startBlocker ? <p className="mt-1 truncate text-[8px] text-overdue">Starts after {taskName(startBlocker.fromTaskId)}</p> : completionBlocker ? <p className="mt-1 truncate text-[8px] text-info">Can move now · finish after {taskName(completionBlocker.fromTaskId)}</p> : <p className="mt-1 text-[8px] opacity-70">Ready to move independently</p>}<div className="mt-2 h-1 overflow-hidden rounded-full bg-card/70"><div className="h-full rounded-full bg-primary/70" style={{ width: task.status === "in_progress" ? "55%" : task.status === "blocked" ? "18%" : "32%" }} /></div></button>; })}
+                </div>)}
+              </div>
+            </div>;
+          })}
         </div>
       </div>
+      <div className="mt-3 flex flex-wrap gap-2">{milestones.map(milestone => <span key={milestone.id} className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px]", milestone.status === "at_risk" ? "border-overdue/20 bg-overdue/[0.05] text-overdue" : "border-primary/15 bg-primary/[0.04] text-primary")}><Target className="h-3 w-3" />{milestone.name} · {milestone.owner}</span>)}</div>
+      {milestoneNames.size === 0 && <p className="mt-3 text-[11px] text-muted-foreground">Add a milestone to make a major delivery visible here.</p>}
     </div>
   );
 }
@@ -1946,16 +6407,108 @@ const FOLLOWUP_STATUS_CONFIG: Record<FollowUpItem["status"], { label: string; co
   no_update: { label: "No Update", color: "text-slate-400", bg: "bg-slate-400/10" },
 };
 
-function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+function CanonicalProjectDetailContent({ project, onBack, onTaskClick, onAddWork }: { project: ProjectDTO; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  const [tab, setTab] = useState<ProjectTab>("overview");
+  const [selectedArea, setSelectedArea] = useState<AreaName | "all">("all");
+  const [milestoneTitle, setMilestoneTitle] = useState("");
+  const [milestoneDate, setMilestoneDate] = useState("");
+  const [focusText, setFocusText] = useState("");
+  const [resourceLink, setResourceLink] = useState("");
+  const [memberEditorOpen, setMemberEditorOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
+  const projectProgress = getProjectProgress(TASKS, project.id);
+  const projectTasks = projectProgress.tasks as Task[];
+  const statusCounts = projectProgress.statusCounts;
+  const done = projectProgress.done;
+  const progress = projectProgress.progress;
+  const readyTasks = getProjectMovableTasks(TASKS, project.id) as Task[];
+  const waitingOnTeams = projectTasks.filter(task => task.status === "blocked" && task.blockedBy);
+  const projectAreas = Array.from(new Set([project.leadArea, ...project.involvedDepartments.map(department => department.name), ...projectTasks.flatMap(task => getTaskAreas(task))].filter((area): area is AreaName => Boolean(area))));
+  const people = Array.from(new Map([
+    ...project.members.map(member => [member.principalId, member] as const),
+    ...projectTasks.flatMap(task => getTaskAssignees(task).map(person => [person.id, { principalId: person.id, name: person.name, type: person.type, role: "collaborator" as const }] as const)),
+  ]).values());
+  const attention = projectTasks.some(task => isTaskOverdue(task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && done < projectTasks.length);
+  const tabs: { id: ProjectTab; label: string }[] = [{ id: "overview", label: "Overview" }, { id: "board", label: "Board" }, { id: "timeline", label: "Timeline" }, { id: "roadmap", label: "Roadmap" }, { id: "people", label: "People" }, { id: "links-files", label: "Links & Files" }, { id: "activity", label: "Activity" }];
+  async function addMilestone() {
+    const result = await addProjectMilestoneAction({ projectId: project.id, milestone: { title: milestoneTitle, targetDate: milestoneDate || undefined } });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setMilestoneTitle(""); setMilestoneDate("");
+  }
+  async function addFocus() {
+    const result = await addProjectFocusItemAction({ projectId: project.id, text: focusText });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setFocusText("");
+  }
+  async function removeFocus(focusItemId: string) {
+    const result = await deleteProjectFocusItemAction({ projectId: project.id, focusItemId });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+  }
+  async function toggleProjectMember(principalId: string) {
+    const existing = project.members.find(member => member.principalId === principalId);
+    const members = existing
+      ? project.members.filter(member => member.principalId !== principalId)
+      : [...project.members, { principalId, role: "collaborator" as const }];
+    const result = await setProjectMembersAction({ projectId: project.id, members: members.map(member => ({ principalId: member.principalId, role: member.role })) });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+  }
+  async function addProjectLink() {
+    const result = await addProjectLinkAction({ projectId: project.id, url: resourceLink });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    setResourceLink("");
+  }
+  async function uploadProjectFiles(files: FileList | null) {
+    if (!files?.length) return;
+    for (const file of Array.from(files)) {
+      const body = new FormData(); body.set("projectId", project.id); body.set("file", file);
+      const result = await uploadProjectFileAction(body);
+      if (!result.ok) { setMessage(result.message); return; }
+      applyCanonicalProject(result.data, result.revision);
+    }
+  }
+  async function removeProjectResource(resourceId: string) {
+    const result = await deleteProjectResourceAction({ projectId: project.id, resourceId });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+  }
+  return <div className="mx-auto max-w-[1180px] p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card mb-5 overflow-hidden"><div className="p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="mb-2 flex flex-wrap items-center gap-2"><OrgBadge org={project.organization} />{project.leadArea && <AreaBadge area={project.leadArea} />}{attention && <span className="rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">Needs attention</span>}</div><h1 className="binnie-heading text-2xl font-bold text-foreground">{project.name}</h1>{project.description && <p className="mt-1 max-w-2xl text-[12px] text-muted-foreground">{project.description}</p>}<p className="mt-2 text-[11px] text-muted-foreground">{project.targetDate ? `Target ${taskDateLabel(project.targetDate)}` : "No target date"} · {projectAreas.length} areas involved</p></div><div className="min-w-32 text-left sm:text-right"><p className="text-3xl font-bold text-primary">{projectTasks.length ? `${progress}%` : "Not started"}</p><p className="text-[10px] text-muted-foreground">{projectTasks.length ? `${done} of ${projectTasks.length} tasks complete` : "No active work yet"}</p></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} /></div><div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">{PLANNING_COLUMNS.map(column => <div key={column.id} className="rounded-xl bg-muted/45 p-2.5 text-center"><p className={cn("text-lg font-bold", column.text)}>{statusCounts[column.id]}</p><p className="text-[9px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{column.label}</p></div>)}</div></div><div className="flex gap-1 overflow-x-auto border-t border-border bg-muted/25 p-1.5">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium", tab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:bg-card/70 hover:text-foreground")}>{item.label}</button>)}</div></div>{message && <p role="status" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}{tab === "overview" && <div className="grid gap-5 lg:grid-cols-3"><div className="space-y-5 lg:col-span-2"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project progress</h2><p className="mt-1 text-[11px] text-muted-foreground">Derived from the work in this project.</p></div>{projectTasks.length ? <span className="text-[12px] font-medium text-primary">{done} / {projectTasks.length} complete</span> : null}</div>{!projectTasks.length && <div className="mt-5 rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">No work added yet.</p><button onClick={() => onAddWork?.(project)} className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button></div>}</section><section className="binnie-card p-5"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-semibold text-foreground">What can move now</h2><p className="mt-1 text-[11px] text-muted-foreground">Work that is ready or in progress without a start blocker.</p></div><span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">{readyTasks.length} available</span></div>{readyTasks.length ? <div className="space-y-2">{readyTasks.slice(0, 5).map(task => <TaskCard key={task.id} task={task} compact onClick={() => onTaskClick(task)} />)}</div> : <div className="rounded-xl bg-muted/45 p-4"><p className="text-[12px] text-muted-foreground">No work added yet.</p><div className="mt-3 flex gap-2"><button onClick={() => onAddWork?.(project)} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">+ Add Task</button><button onClick={() => onAddWork?.(project)} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary">Capture with Binnie</button></div></div>}</section><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Current focus</h2><p className="mt-1 text-[11px] text-muted-foreground">A short summary, separate from tasks.</p></div></div>{project.focusItems.length ? <div className="mt-4 space-y-2">{project.focusItems.map((item, index) => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.035] p-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{index + 1}</span><p className="min-w-0 flex-1 text-[12px] text-foreground">{item.text}</p><button onClick={() => void removeFocus(item.id)} className="rounded-lg p-1 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove focus ${item.text}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No focus items yet.</p>}<div className="mt-3 flex gap-2"><input value={focusText} onChange={event => setFocusText(event.target.value)} onKeyDown={event => event.key === "Enter" && void addFocus()} placeholder="Add focus" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addFocus()} disabled={!focusText.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Focus</button></div></section></div><div className="space-y-5"><section className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Milestones</h2><p className="mt-1 text-[10px] text-muted-foreground">Project-level deliveries, not task cards.</p></div></div>{project.milestones.length ? <div className="mt-4 space-y-2">{project.milestones.map(milestone => <div key={milestone.id} className="rounded-xl border border-border p-3"><p className="text-[12px] font-medium text-foreground">{milestone.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{milestone.targetDate ? taskDateLabel(milestone.targetDate) : "No target date"}{milestone.owner ? ` · ${milestone.owner}` : ""}</p></div>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No milestones yet.</p>}<div className="mt-3 grid gap-2"><input value={milestoneTitle} onChange={event => setMilestoneTitle(event.target.value)} placeholder="Website Ready" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><div className="flex gap-2"><input type="date" value={milestoneDate} onChange={event => setMilestoneDate(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addMilestone()} disabled={!milestoneTitle.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">+ Add Milestone</button></div></div></section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Other teams waiting on this project</h2><p className="mt-1 text-[10px] text-muted-foreground">Only real task dependencies appear here.</p>{waitingOnTeams.length ? <div className="mt-3 space-y-2">{waitingOnTeams.map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="w-full rounded-xl border border-overdue/15 bg-overdue/[0.035] p-3 text-left"><p className="text-[12px] font-medium text-foreground">{task.area} is waiting on {task.blockedBy?.owner || "a dependency"}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.title} · {task.blockedBy?.label}</p></button>)}</div> : <p className="mt-4 text-[11px] text-muted-foreground">No blockers yet.</p>}</section><section className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Teams involved</h2><div className="mt-3 flex flex-wrap gap-2">{projectAreas.length ? projectAreas.map(area => <span key={area} className="rounded-full border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground">{area}</span>) : <p className="text-[11px] text-muted-foreground">No teams added yet.</p>}</div></section></div></div>}{tab === "board" && <PlanningBoard tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "timeline" && <PlanningTimeline tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} onRefresh={commitTaskStore} />}{tab === "roadmap" && <PlanningRoadmap tasks={projectTasks} areas={projectAreas} selectedArea={selectedArea} onAreaChange={setSelectedArea} onTaskClick={onTaskClick} />}{tab === "people" && <div className="binnie-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-foreground">Project people</h2><p className="mt-1 text-[11px] text-muted-foreground">Project members and people actively assigned to this work.</p></div><button onClick={() => setMemberEditorOpen(current => !current)} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">{memberEditorOpen ? "Done" : "+ Add people"}</button></div>{memberEditorOpen && <div className="mt-4 rounded-xl border border-border bg-muted/25 p-3"><p className="text-[10px] text-muted-foreground">Project members support visibility and ownership; task assignees remain unchanged.</p><div className="mt-2 flex flex-wrap gap-1.5">{PEOPLE_DIRECTORY.filter(person => person.active && person.memberships.some(membership => membership.organization === project.organization)).map(person => <button key={person.id} onClick={() => void toggleProjectMember(person.id)} className={cn("rounded-full border px-2.5 py-1 text-[10px] font-medium", project.members.some(member => member.principalId === person.id) ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground")}>{project.members.some(member => member.principalId === person.id) ? "✓ " : ""}{person.name}{person.type === "team" ? " · Team" : ""}</button>)}</div></div>}{people.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2">{people.map(person => <div key={person.principalId} className="flex items-center gap-3 rounded-xl border border-border p-3"><Avatar name={person.name} size="md" /><div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-foreground">{person.name}</p><p className="text-[10px] text-muted-foreground">{person.role === "owner" ? "Project owner" : person.type === "team" ? "Team" : "Contributor"}</p></div></div>)}</div> : <p className="mt-4 text-[12px] text-muted-foreground">No additional people or teams added yet.</p>}</div>}{tab === "links-files" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Links &amp; Files</h2><p className="mt-1 text-[11px] text-muted-foreground">Shared project resources.</p>{project.resources.length ? <div className="mt-4 space-y-2">{project.resources.map(resource => <div key={resource.id} className="flex items-center gap-3 rounded-xl border border-border p-3"><a href={resource.url} target={resource.url?.startsWith("/api/") ? undefined : "_blank"} rel={resource.url?.startsWith("/api/") ? undefined : "noopener noreferrer"} className="min-w-0 flex-1 truncate text-[12px] text-primary"><Link2 className="mr-1 inline h-3.5 w-3.5" />{resource.label}</a><button onClick={() => void removeProjectResource(resource.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-overdue/10 hover:text-overdue" aria-label={`Remove ${resource.label}`}><X className="h-3.5 w-3.5" /></button></div>)}</div> : <p className="mt-5 text-[12px] text-muted-foreground">No links or files yet.</p>}<div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4"><input value={resourceLink} onChange={event => setResourceLink(event.target.value)} onKeyDown={event => event.key === "Enter" && void addProjectLink()} placeholder="Paste a shared link" className="min-w-48 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => void addProjectLink()} disabled={!resourceLink.trim()} className="rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary disabled:opacity-40">Add link</button><input ref={projectFileInputRef} type="file" multiple className="hidden" onChange={event => void uploadProjectFiles(event.target.files)} /><button onClick={() => projectFileInputRef.current?.click()} className="rounded-lg border border-border bg-card px-3 py-2 text-[11px] font-medium text-primary"><Paperclip className="mr-1 inline h-3.5 w-3.5" />Attach file</button></div></div>}{tab === "activity" && <div className="binnie-card p-5"><h2 className="text-sm font-semibold text-foreground">Activity</h2><div className="mt-4 space-y-3"><div className="flex gap-3"><Avatar name="Binnie" size="xs" /><div><p className="text-[12px] text-foreground">Project created</p><p className="mt-0.5 text-[10px] text-muted-foreground">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(project.createdAt))}</p></div></div>{projectTasks.flatMap(task => (task.activity || []).slice(0, 2).map(activity => ({ task, activity }))).slice(0, 12).map(({ task, activity }, index) => <div key={`${task.id}-${index}`} className="flex gap-3"><Avatar name={activity.actor} size="xs" /><div><p className="text-[12px] text-foreground">{activity.text}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{task.title} · {activity.time}</p></div></div>)}</div></div>}</div>;
+}
+
+function ProjectDetailSettingsMenu({ project, onDelete }: { project: ProjectDTO; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  if (!canManageCanonicalProject(project)) return null;
+  return <div className="relative" onClick={event => event.stopPropagation()}><button onClick={() => setOpen(current => !current)} aria-label={`Project settings for ${project.name}`} aria-expanded={open} className="rounded-xl border border-border bg-card p-2 text-muted-foreground shadow-sm hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>{open && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]"><p className="px-2.5 pb-1 pt-1 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Project settings</p><button onClick={() => { setOpen(false); onDelete(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] font-medium text-overdue hover:bg-overdue/10">Delete Project</button></div>}</div>;
+}
+
+function CanonicalProjectDetail({ project, onBack, onTaskClick, onAddWork }: { project: ProjectDTO; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  const [deleting, setDeleting] = useState(false);
+  return <div className="relative"><div className="absolute right-5 top-[4.5rem] z-20 sm:right-8 lg:right-10"><ProjectDetailSettingsMenu project={project} onDelete={() => setDeleting(true)} /></div><CanonicalProjectDetailContent project={project} onBack={onBack} onTaskClick={onTaskClick} onAddWork={onAddWork} />{deleting && <DeleteProjectConfirmation project={project} onClose={() => setDeleting(false)} onDeleted={onBack} />}</div>;
+}
+
+function ProjectDetailView({ projectId, onBack, onTaskClick, onAddWork }: { projectId: string; onBack: () => void; onTaskClick: (t: Task) => void; onAddWork?: (project: ProjectDTO) => void }) {
+  const project = getCanonicalProject(projectId);
+  if (project) return <CanonicalProjectDetail project={project} onBack={onBack} onTaskClick={onTaskClick} onAddWork={onAddWork} />;
+  return <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10"><BackButton label="Projects" onClick={onBack} /><div className="binnie-card p-8 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><h1 className="text-lg font-semibold text-foreground">Project not found</h1><p className="mt-1 text-sm text-muted-foreground">It may have been archived or moved.</p></div></div>;
+}
+
+function LegacyFollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [tab, setTab] = useState<FollowUpTab>("today");
   const [generated, setGenerated] = useState<Set<string>>(new Set());
   const [followedUp, setFollowedUp] = useState<Set<string>>(new Set());
+  const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<string | null>(null);
 
-  const todayData = FOLLOWUP_DATA.filter(d => d.section === "today" && !followedUp.has(d.person));
-  const laterData = FOLLOWUP_DATA.filter(d => d.section === "later" && !followedUp.has(d.person));
-  const overdueData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "overdue") && !followedUp.has(d.person));
-  const noUpdateData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "no_update") && !followedUp.has(d.person));
+  const isVisible = (person: string) => !followedUp.has(person) && !snoozed.has(person);
+  const todayData = FOLLOWUP_DATA.filter(d => d.section === "today" && isVisible(d.person));
+  const laterData = FOLLOWUP_DATA.filter(d => d.section === "later" && isVisible(d.person));
+  const overdueData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "overdue") && isVisible(d.person));
+  const noUpdateData = FOLLOWUP_DATA.filter(d => d.items.some(i => i.status === "no_update") && isVisible(d.person));
 
   const tabs: { id: FollowUpTab; label: string; count: number; urgentColor?: string }[] = [
     { id: "today", label: "Follow Up Today", count: todayData.length, urgentColor: "text-amber-400" },
@@ -1979,12 +6532,17 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
     setGenerated(prev => { const n = new Set(prev); n.delete(person); return n; });
   }
 
+  function handleSnooze(person: string) {
+    setSnoozed(prev => new Set([...prev, person]));
+    setGenerated(prev => { const next = new Set(prev); next.delete(person); return next; });
+  }
+
   const totalNeedFollowUp = todayData.length;
-  const totalItems = FOLLOWUP_DATA.filter(d => !followedUp.has(d.person)).reduce((a, d) => a + d.items.length, 0);
-  const overdueResponses = FOLLOWUP_DATA.filter(d => !followedUp.has(d.person)).flatMap(d => d.items.filter(i => i.status === "overdue")).length;
+  const totalItems = FOLLOWUP_DATA.filter(d => isVisible(d.person)).reduce((a, d) => a + d.items.length, 0);
+  const overdueResponses = FOLLOWUP_DATA.filter(d => isVisible(d.person)).flatMap(d => d.items.filter(i => i.status === "overdue")).length;
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-3xl p-5 sm:p-8 lg:p-10">
       <div className="mb-6">
         <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Action Center</p>
         <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Follow-Up</h1>
@@ -1992,7 +6550,7 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { value: totalNeedFollowUp, label: "people need follow-up", color: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
           { value: totalItems, label: "items waiting", color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
@@ -2007,10 +6565,10 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 p-1 bg-muted/20 rounded-lg border border-border">
+    <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/30 p-1">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn("flex-1 py-2 px-2 rounded-md text-[11px] font-medium transition-all", tab === t.id ? "bg-card text-foreground border border-border shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            className={cn("flex-shrink-0 rounded-lg px-2 py-2 text-[11px] font-medium transition-all", tab === t.id ? "border border-border bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             <span>{t.label}</span>
             {t.count > 0 && (
               <span className={cn("ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full", tab === t.id ? (t.urgentColor ? cn("bg-amber-400/15", t.urgentColor) : "bg-primary/20 text-primary") : "bg-muted text-muted-foreground")}>
@@ -2029,11 +6587,11 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
           const fp_data = FOLLOWUP_DATA.find(d => d.person === fp.person)!;
 
           return (
-            <div key={fp.person} className="bg-card rounded-xl border border-border overflow-hidden">
+            <div key={fp.person} className="binnie-card overflow-hidden">
               {/* Person header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}>
+                  style={personColorStyle(color)}>
                   {getInitials(fp.person)}
                 </div>
                 <div className="flex-1">
@@ -2043,10 +6601,10 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 {!isGenerated ? (
                   <button onClick={() => setGenerated(prev => new Set([...prev, fp.person]))}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors">
-                    <Sparkles className="w-3.5 h-3.5" />Generate Follow-Up
+                    <Sparkles className="w-3.5 h-3.5" />Draft with Binnie
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 text-[11px] text-emerald-400">
+                  <div className="flex items-center gap-1 text-[11px] text-success">
                     <Check className="w-3.5 h-3.5" />Message ready
                   </div>
                 )}
@@ -2084,7 +6642,7 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                 <div className="mx-4 mb-4 rounded-xl border border-primary/20 bg-primary/[0.04] overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-primary/15">
                     <MessageSquare className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-[11px] font-medium text-primary">AI Generated Message</span>
+                    <span className="text-[11px] font-medium text-primary">Binnie suggested message</span>
                     <span className="text-[10px] text-muted-foreground ml-auto">Preview</span>
                   </div>
                   <div className="p-4">
@@ -2093,13 +6651,13 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
                   <div className="flex items-center gap-2 px-4 py-3 border-t border-primary/15">
                     <button onClick={() => handleCopy(fp.person, fp_data.suggestedMessage)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted border border-border text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-                      {copied === fp.person ? <><Check className="w-3 h-3 text-emerald-400" />Copied!</> : <><Copy className="w-3 h-3" />Copy Message</>}
+                      {copied === fp.person ? <><Check className="w-3 h-3 text-success" />Copied!</> : <><Copy className="w-3 h-3" />Copy Message</>}
                     </button>
                     <button onClick={() => handleMarkDone(fp.person)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[11px] font-medium hover:bg-emerald-500/20 transition-colors">
+                      className="flex items-center gap-1.5 rounded-lg bg-success/10 px-3 py-1.5 text-[11px] font-medium text-success transition-colors hover:bg-success/15">
                       <Check className="w-3 h-3" />Mark Followed Up
                     </button>
-                    <button onClick={() => setGenerated(prev => { const n = new Set(prev); n.delete(fp.person); return n; })}
+                    <button onClick={() => handleSnooze(fp.person)}
                       className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
                       <ChevronDown className="w-3.5 h-3.5" />Snooze
                     </button>
@@ -2121,53 +6679,102 @@ function FollowUpView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   );
 }
 
+function FollowUpView({ onTaskClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
+  return taskStoreUsesServer ? <CanonicalFollowUpView onTaskClick={onTaskClick} embedded={embedded} tasks={tasks} principalId={principalId} /> : <LegacyFollowUpView onTaskClick={onTaskClick} />;
+}
+
 // ─── ORGANIZATIONS VIEW ───────────────────────────────────────────────────────
 
+function OrganizationColorPicker({ value, onChange, allowDefault = false }: { value?: OrganizationColorKey; onChange: (colorKey: OrganizationColorKey) => void; allowDefault?: boolean }) {
+  return <fieldset>
+    <legend className="text-[11px] font-medium text-muted-foreground">Organization color</legend>
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {ORGANIZATION_COLOR_KEYS.map(colorKey => {
+        const option = ORGANIZATION_COLOR_STYLES[colorKey];
+        const selected = value === colorKey;
+        return <button key={colorKey} type="button" onClick={() => onChange(colorKey)} aria-pressed={selected} title={option.label} className={cn("flex items-center gap-2 rounded-xl border p-2 text-left text-[10px] font-medium transition-colors", option.scope, selected ? "border-primary/35 ring-2 ring-primary/15" : "border-border hover:border-primary/25 hover:bg-muted/35")}><span aria-hidden="true" className={cn("h-4 w-4 shrink-0 rounded-full", option.swatch)} /><span className="min-w-0 flex-1 truncate text-foreground">{option.label}</span>{selected && <Check aria-label={`${option.label} selected`} className="h-3.5 w-3.5 shrink-0 text-primary" />}</button>;
+      })}
+    </div>
+    {allowDefault && !value && <p className="mt-2 text-[10px] text-muted-foreground">Optional — Binnie will choose a stable default if you leave this unset.</p>}
+  </fieldset>;
+}
+
 function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void }) {
+  useTaskStoreVersion();
+  const [isAdding, setIsAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [colorKey, setColorKey] = useState<OrganizationColorKey | "">("");
+  const [formMessage, setFormMessage] = useState("");
+  const [, setRevision] = useState(0);
+
+  async function addOrganization() {
+    const organizationName = name.trim();
+    if (!organizationName) { setFormMessage("Add a workspace name to continue."); return; }
+    if (ORGS_META.some(org => org.name.toLowerCase() === organizationName.toLowerCase())) { setFormMessage("That workspace already exists."); return; }
+    const result = await createOrganizationAction({ name: organizationName, description: description.trim() || undefined, colorKey: colorKey || undefined });
+    if (!result.ok) {
+      console.error("Could not create Binnie organization", result.message);
+      setFormMessage(result.message || "Couldn't create organization. Please try again.");
+      return;
+    }
+    applyCanonicalOrganization(result.data);
+    ORG_RESOURCES[organizationName] = [];
+    setRevision(current => current + 1);
+    setName("");
+    setDescription("");
+    setColorKey("");
+    setFormMessage("");
+    setIsAdding(false);
+  }
+
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Portfolio</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Organizations</h1>
+    <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
+      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="binnie-heading text-3xl font-bold text-foreground">Organizations</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">Your workspaces, all in one place.</p>
+        </div>
+        <button onClick={() => { setIsAdding(current => !current); setFormMessage(""); }} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85"><Plus className="h-3.5 w-3.5" /> Add Organization</button>
       </div>
-      <div className="grid grid-cols-3 gap-5">
+      {isAdding && <div className="binnie-card mb-5 bg-[#fdfcff] p-4"><div className="grid gap-3 sm:grid-cols-[1fr_1.4fr_auto]"><input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Workspace name" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><input value={description} onChange={event => setDescription(event.target.value)} onKeyDown={event => event.key === "Enter" && void addOrganization()} placeholder="Short description (optional)" className="rounded-xl border border-border bg-card px-3 py-2.5 text-[12px] text-foreground placeholder:text-muted-foreground" /><div className="flex gap-2"><button onClick={() => void addOrganization()} className="rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground">Create</button><button onClick={() => setIsAdding(false)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button></div></div><div className="mt-4 border-t border-border/65 pt-3"><OrganizationColorPicker value={colorKey || undefined} onChange={setColorKey} allowDefault /></div>{formMessage && <p className="mt-3 text-[11px] text-overdue">{formMessage}</p>}</div>}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {ORGS_META.map(org => {
-          const c = ORG_COLORS[org.name];
-          const orgTasks = TASKS.filter(t => t.org === org.name);
-          const overdue = orgTasks.filter(t => t.isOverdue).length;
+          const color = getOrganizationColorStyles(org.colorKey);
+          const activeTasks = getOrganizationActiveWork(org.name);
+          const orgProjects = CANONICAL_PROJECTS.filter(project => project.organization === org.name && project.status !== "archived");
+          const waiting = getOrganizationWaitingWork(org.name).length;
+          const revisit = getOrganizationRevisitWork(org.name).length;
+          const visibleAreas = org.areas.slice(0, 3);
+          const currentFocus = getOrganizationCurrentFocus(orgProjects)[0] || "No current focus";
           return (
             <button key={org.name} onClick={() => onOrgClick(org.name)}
-              className="text-left bg-card rounded-xl border border-border overflow-hidden hover:border-white/10 transition-all group">
-              <div className={cn("h-1", c.dot)} />
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h2 className={cn("text-base font-bold", c.text)} style={{ fontFamily: "var(--font-display)" }}>{org.name}</h2>
-                    <p className="text-[12px] text-muted-foreground mt-0.5">{org.desc}</p>
-                  </div>
-                  {overdue > 0 && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-400/10 text-red-400">{overdue} OD</span>}
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                    <p className={cn("text-xl font-bold", c.text)}>{orgTasks.length}</p>
-                    <p className="text-[10px] text-muted-foreground">Active Tasks</p>
-                  </div>
-                  <div className="bg-muted/40 rounded-lg p-2.5 text-center">
-                    <p className="text-xl font-bold text-foreground">{STRATEGIC_PROJECTS.filter(p => p.org === org.name).length}</p>
-                    <p className="text-[10px] text-muted-foreground">Projects</p>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  {org.areas.map(area => (
-                    <div key={area} className="flex items-center justify-between py-1 px-2 rounded hover:bg-muted/40 transition-colors">
-                      <span className={cn("text-[12px]", AREA_COLORS[area])}>{area}</span>
-                      <span className="text-[10px] font-mono text-muted-foreground">{TASKS.filter(t => t.org === org.name && t.area === area).length} tasks</span>
+              className={cn("binnie-card binnie-card-hover group relative flex h-full min-h-[15.5rem] overflow-hidden p-4 text-left sm:p-[1.125rem]", color.card)}>
+              <div aria-hidden="true" className={cn("absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-70 blur-2xl", color.accent)} />
+              <div className="relative flex h-full w-full flex-col">
+                <div className="grid min-h-[3.75rem] grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-start gap-x-2.5">
+                  <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", color.icon)}><Building2 className="h-4 w-4" /></span>
+                  <div className="min-w-0">
+                    <div className="flex h-5 items-center gap-1.5">
+                      <h2 className="binnie-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{org.name}</h2>
+                      {revisit > 0 && <span className="flex-shrink-0 rounded-full bg-overdue/10 px-1.5 py-0.5 text-[9px] font-medium text-overdue">{revisit} to revisit</span>}
                     </div>
-                  ))}
+                    <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">{org.desc}</p>
+                  </div>
+                  <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                 </div>
-                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">View details</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                <div className="mt-3 flex items-center gap-3 border-y border-border/65 py-2 text-[10px] text-muted-foreground">
+                  <span><strong className="font-semibold text-foreground">{activeTasks.length}</strong> Active</span>
+                  <span><strong className="font-semibold text-foreground">{orgProjects.length}</strong> Projects</span>
+                  <span><strong className="font-semibold text-info">{waiting}</strong> Waiting</span>
+                </div>
+                <div className="mt-3 flex min-h-6 flex-wrap content-start gap-1.5">
+                  {visibleAreas.map(area => <span key={area} className={cn("rounded-full px-2 py-1 text-[9px] font-medium", color.chip)}>{area}</span>)}
+                  {org.areas.length > visibleAreas.length && <span className="rounded-full bg-muted px-2 py-1 text-[9px] font-medium text-muted-foreground">+{org.areas.length - visibleAreas.length}</span>}
+                </div>
+                <div className="mt-auto border-t border-border/65 pt-2.5">
+                  <p className="mb-0.5 text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Current focus</p>
+                  <p className="truncate text-[11px] font-medium text-foreground">{currentFocus}</p>
                 </div>
               </div>
             </button>
@@ -2180,92 +6787,432 @@ function OrganizationsView({ onOrgClick }: { onOrgClick: (org: OrgName) => void 
 
 // ─── PROJECTS VIEW ────────────────────────────────────────────────────────────
 
-function ProjectsView({ onProjectClick }: { onProjectClick: (id: string) => void }) {
-  return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Long-term</p>
-        <h1 className="text-2xl font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Projects</h1>
-      </div>
-      <div className="grid grid-cols-2 gap-5">
-        {STRATEGIC_PROJECTS.map(proj => {
-          const c = ORG_COLORS[proj.org];
-          const projTasks = TASKS.filter(t => t.project === proj.name);
-          const detail = PROJECT_DETAILS[proj.id];
-          return (
-            <button key={proj.id} onClick={() => onProjectClick(proj.id)}
-              className="text-left bg-card rounded-xl border border-border overflow-hidden hover:border-white/10 transition-all group">
-              <div className={cn("h-1", c.dot)} />
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "var(--font-display)" }}>{proj.name}</h2>
-                    <OrgBadge org={proj.org} />
-                  </div>
-                  <span className={cn("text-2xl font-bold", c.text)}>{proj.progress}%</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3 mb-2">
-                  <div className={cn("h-full rounded-full", c.dot)} style={{ width: `${proj.progress}%` }} />
-                </div>
-                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-3">
-                  <span>{proj.done}/{proj.tasks} tasks</span>
-                  <span>Due {proj.deadline}</span>
-                </div>
-                {detail && detail.currentFocus.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-[10px] font-mono text-muted-foreground uppercase mb-1.5">Current Focus</p>
-                    <div className="space-y-1">
-                      {detail.currentFocus.slice(0, 2).map((f, i) => (
-                        <div key={i} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <div className="w-1 h-1 rounded-full bg-primary/50 flex-shrink-0" />{f}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {projTasks.length > 0 && (
-                  <div className="space-y-1 pt-2 border-t border-border">
-                    {projTasks.slice(0, 2).map(t => (
-                      <div key={t.id} className="flex items-center gap-2 py-1">
-                        <StatusDot status={t.status} />
-                        <span className="text-[12px] text-foreground truncate">{t.title}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">Open project</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+type ProjectCreationStep = 1 | 2 | 3;
+type ProjectMilestoneDraft = { title: string; targetDate: string };
+
+function archiveCanonicalProjectFromClient(projectId: string, revision?: number) {
+  CANONICAL_PROJECTS = CANONICAL_PROJECTS.filter(project => project.id !== projectId);
+  if (revision) taskStoreServerRevision = revision;
+  publishTaskStore();
+}
+
+function ProjectOverflowMenu({ project, onEdit, onDuplicate, onArchived, onDelete }: {
+  project: ProjectDTO;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onArchived?: () => void;
+  onDelete: () => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [error, setError] = useState("");
+  const allowed = canManageCanonicalProject(project);
+  if (!allowed) return null;
+  async function archive() {
+    setArchiving(true); setError("");
+    const result = await archiveProjectAction({ projectId: project.id });
+    if (!result.ok) {
+      console.error("Couldn't archive project", result.message);
+      setError(result.message || "Couldn't archive project. Please try again.");
+      setArchiving(false);
+      return;
+    }
+    archiveCanonicalProjectFromClient(project.id, result.revision);
+    setOpen(false);
+    onArchived?.();
+    router.refresh();
+  }
+  return <div className="relative shrink-0" onClick={event => event.stopPropagation()}>
+    <button onClick={() => { setOpen(current => !current); setError(""); }} aria-label={`Project actions for ${project.name}`} aria-expanded={open} className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>
+    {open && <div className="absolute right-0 top-[calc(100%+0.35rem)] z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_24px_rgb(35_41_61_/_0.12)]">
+      <button onClick={() => { setOpen(false); onEdit(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Edit</button>
+      <button onClick={() => { setOpen(false); onDuplicate(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Duplicate</button>
+      <button onClick={() => void archive()} disabled={archiving} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted disabled:opacity-50">{archiving ? "Archiving…" : "Archive"}</button>
+      <div className="my-1 border-t border-border" />
+      <button onClick={() => { setOpen(false); onDelete(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] font-medium text-overdue hover:bg-overdue/10">Delete Project</button>
+      {error && <p role="alert" className="px-2.5 pb-1 pt-1 text-[10px] text-overdue">{error}</p>}
+    </div>}
+  </div>;
+}
+
+function DeleteProjectConfirmation({ project, onClose, onDeleted }: { project: ProjectDTO; onClose: () => void; onDeleted: () => void }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const taskCount = [...TASKS, ...ARCHIVED_TASKS].filter(task => task.projectId === project.id).length;
+  async function confirmDeletion() {
+    setDeleting(true); setError("");
+    const result = await deleteProjectAction({ projectId: project.id, confirm: true });
+    if (!result.ok) {
+      console.error("Couldn't delete project", result.message);
+      setError(result.message || "Couldn't delete project. Please try again.");
+      setDeleting(false);
+      return;
+    }
+    removeCanonicalProject(project.id, result.revision);
+    onDeleted();
+    router.refresh();
+  }
+  return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-foreground/20 p-4 backdrop-blur-[1px] sm:items-center" onMouseDown={event => { if (event.target === event.currentTarget && !deleting) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="delete-project-title" className="w-full max-w-md rounded-[1.5rem] border border-overdue/20 bg-card p-5 shadow-xl">
+      <div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-overdue/10 text-overdue"><Trash2 className="h-4 w-4" /></span><div><p className="text-[10px] font-medium uppercase tracking-[0.1em] text-overdue">Permanent action</p><h2 id="delete-project-title" className="binnie-heading mt-1 text-lg font-bold text-foreground">Delete “{project.name}”?</h2></div></div>
+      <div className="mt-4 space-y-3 text-[12px] leading-5 text-muted-foreground"><p>This permanently deletes the project, including its milestones, focus items, and project-only links and files.</p>{taskCount ? <p><strong className="font-semibold text-foreground">{taskCount} {taskCount === 1 ? "task is" : "tasks are"} currently associated.</strong> Those tasks will be kept as standalone work; only their project connection will be removed.</p> : <p>No tasks are currently associated with this project.</p>}<p className="font-medium text-overdue">This cannot be undone.</p></div>
+      {error && <p role="alert" className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2"><button onClick={onClose} disabled={deleting} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted disabled:opacity-50">Cancel</button><button onClick={() => void confirmDeletion()} disabled={deleting} className="rounded-xl bg-overdue px-3.5 py-2 text-[12px] font-medium text-white hover:bg-overdue/90 disabled:opacity-50">{deleting ? "Deleting…" : "Delete Project"}</button></div>
     </div>
-  );
+  </div>;
+}
+
+function CreateProjectDrawer({ onClose, onCreated, defaultOrganization, initialProject }: {
+  onClose: () => void;
+  onCreated: (project: ProjectDTO, addWork: boolean) => void;
+  defaultOrganization?: OrgName;
+  initialProject?: ProjectDTO;
+}) {
+  const router = useRouter();
+  const [step, setStep] = useState<ProjectCreationStep>(1);
+  const [name, setName] = useState(initialProject ? `${initialProject.name} copy` : "");
+  const [organization, setOrganization] = useState<OrgName>(initialProject?.organization || defaultOrganization || "");
+  const [description, setDescription] = useState(initialProject?.description || "");
+  const [leadArea, setLeadArea] = useState<AreaName | "">(initialProject?.leadArea as AreaName || "");
+  const [targetDate, setTargetDate] = useState(initialProject?.targetDate || "");
+  const [ownerId, setOwnerId] = useState(initialProject?.members.find(member => member.role === "owner")?.principalId || "");
+  const [involvedAreas, setInvolvedAreas] = useState<AreaName[]>(() => initialProject?.involvedDepartments.map(department => department.name as AreaName) || []);
+  const [teamIds, setTeamIds] = useState<string[]>(() => initialProject?.members.filter(member => member.type === "team").map(member => member.principalId) || []);
+  const [personIds, setPersonIds] = useState<string[]>(() => initialProject?.members.filter(member => member.type === "person" && member.role !== "owner").map(member => member.principalId) || []);
+  const [milestones, setMilestones] = useState<ProjectMilestoneDraft[]>(() => initialProject?.milestones.map(milestone => ({ title: milestone.title, targetDate: milestone.targetDate || "" })) || []);
+  const [focusItems, setFocusItems] = useState<string[]>(() => initialProject?.focusItems.map(item => item.text) || []);
+  const [firstTask, setFirstTask] = useState({ title: "", area: "" as AreaName | "", assigneeId: "", targetDate: "" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [similarProject, setSimilarProject] = useState<ProjectDTO | null>(null);
+  const areas = organization ? captureOrgAreas(organization) : [];
+  const organizationId = organization ? remoteOrganizationIds.get(organization) : undefined;
+  const allSelectedAreas = Array.from(new Set([...(leadArea ? [leadArea] : []), ...involvedAreas]));
+  const directory = PEOPLE_DIRECTORY.filter(person => person.active && (!organization || person.memberships.some(membership => membership.organization === organization)));
+
+  function changeOrganization(next: OrgName) {
+    setOrganization(next);
+    setLeadArea("");
+    setInvolvedAreas([]);
+    setOwnerId("");
+    setTeamIds([]);
+    setPersonIds([]);
+    setFirstTask(current => ({ ...current, area: "", assigneeId: "" }));
+    setError("");
+  }
+
+  function toggleArea(area: AreaName) {
+    setInvolvedAreas(current => current.includes(area) ? current.filter(item => item !== area) : [...current, area]);
+  }
+
+  function togglePerson(id: string) {
+    setPersonIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+
+  function toggleTeam(id: string) {
+    setTeamIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+
+  function addMilestone() {
+    setMilestones(current => [...current, { title: "", targetDate: "" }]);
+  }
+
+  function addFocus() {
+    setFocusItems(current => [...current, ""]);
+  }
+
+  function validateBasics() {
+    if (!name.trim()) { setError("Project name is required."); return false; }
+    if (!organizationId) { setError("Organization is required."); return false; }
+    setError("");
+    return true;
+  }
+
+  async function create(addWork: boolean, createDespiteSimilar = false) {
+    if (!validateBasics()) { setStep(1); return; }
+    const similar = CANONICAL_PROJECTS.find(project => project.organizationId === organizationId && project.name.toLowerCase() !== name.trim().toLowerCase() && project.name.toLowerCase().split(/\W+/).filter(word => word.length > 2).some(word => name.toLowerCase().includes(word)));
+    if (similar && !createDespiteSimilar) { setSimilarProject(similar); return; }
+    const leadDepartmentId = leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined;
+    const involvedDepartmentIds = allSelectedAreas.map(area => getRemoteDepartmentId(organization, area)).filter((id): id is string => Boolean(id));
+    const teamMemberIds = allSelectedAreas.map(area => getAreaTeam(organization, area)?.id).filter((id): id is string => Boolean(id));
+    const memberIds = Array.from(new Set([...teamMemberIds, ...teamIds, ...personIds, ...(ownerId ? [ownerId] : [])]));
+    setSaving(true);
+    try {
+      const result = await createProjectAction({
+        name: name.trim(),
+        organizationId,
+        description: description.trim() || undefined,
+        leadDepartmentId,
+        involvedDepartmentIds,
+        targetDate: targetDate || undefined,
+        members: memberIds.map(principalId => ({ principalId, role: principalId === ownerId ? "owner" as const : teamMemberIds.includes(principalId) ? "member" as const : "collaborator" as const })),
+        milestones: milestones.filter(item => item.title.trim()).map(item => ({ title: item.title.trim(), targetDate: item.targetDate || undefined })),
+        focusItems: focusItems.map(item => item.trim()).filter(Boolean),
+        firstTask: firstTask.title.trim() ? {
+          title: firstTask.title.trim(),
+          leadDepartmentId: firstTask.area ? getRemoteDepartmentId(organization, firstTask.area) : leadDepartmentId,
+          assignments: firstTask.assigneeId ? [{ principalId: firstTask.assigneeId, role: "primary_owner" as const }] : undefined,
+          targetDate: firstTask.targetDate || undefined,
+        } : undefined,
+      });
+      if (!result.ok) { setError(result.message); return; }
+      applyCanonicalProject(result.data, result.revision);
+      // A project may have created its first canonical task in the same
+      // transaction; refresh the snapshot so progress and board counts update.
+      router.refresh();
+      onCreated(result.data, addWork);
+    } catch (caught) {
+      console.error("Could not create project", caught);
+      setError("Couldn't create project. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const steps = [{ id: 1 as const, label: "Basics" }, { id: 2 as const, label: "Teams" }, { id: 3 as const, label: "Plan" }];
+  return <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create Project" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="border-b border-border px-5 py-5 sm:px-6"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Create Project</p><h2 className="binnie-heading mt-1 text-2xl font-bold text-foreground">Set the foundation.</h2><p className="mt-1 text-[12px] text-muted-foreground">You can refine everything later.</p></div><button onClick={onClose} aria-label="Close project creation" className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="mt-5 flex gap-1.5">{steps.map(item => <button key={item.id} onClick={() => item.id < step || validateBasics() ? setStep(item.id) : undefined} className={cn("flex-1 rounded-lg px-2 py-2 text-[10px] font-medium", step === item.id ? "bg-primary/10 text-primary" : item.id < step ? "bg-muted text-foreground" : "text-muted-foreground")}><span className="mr-1 opacity-70">{item.id}</span>{item.label}</button>)}</div></div><div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{step === 1 && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={name} onChange={event => { setName(event.target.value); setError(""); }} placeholder="Website Revamp" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><label className="block text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => changeOrganization(event.target.value as OrgName)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground"><option value="">Choose organization</option>{Array.from(remoteOrganizationIds.keys()).map(org => <option key={org} value={org}>{org}</option>)}</select></label><label className="block text-[11px] font-medium text-muted-foreground">Project description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} placeholder="What is this project trying to accomplish?" rows={3} className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">Lead area <span className="font-normal">(recommended)</span><select value={leadArea} onChange={event => { const area = event.target.value as AreaName; setLeadArea(area); setInvolvedAreas(current => area && !current.includes(area) ? [area, ...current] : current); }} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Target date <span className="font-normal">(optional)</span><input type="date" value={targetDate} onChange={event => setTargetDate(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground" /></label></div><label className="block text-[11px] font-medium text-muted-foreground">Project owner <span className="font-normal">(optional)</span><select value={ownerId} onChange={event => setOwnerId(event.target.value)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[13px] text-foreground disabled:opacity-50"><option value="">Not set yet</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}{person.type === "team" ? " · Team" : ""}</option>)}</select></label></div>}{step === 2 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Who&apos;s involved?</h3><p className="mt-1 text-[12px] text-muted-foreground">Add the areas, teams, and people that will contribute. You can change this anytime.</p></div><div><p className="mb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Areas involved</p><div className="flex flex-wrap gap-2">{areas.map(area => <button key={area} onClick={() => toggleArea(area)} className={cn("rounded-xl border px-3 py-2 text-[11px] font-medium", allSelectedAreas.includes(area) ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}>{allSelectedAreas.includes(area) && <Check className="mr-1 inline h-3 w-3" />}{area}</button>)}</div>{leadArea && <p className="mt-2 text-[10px] text-muted-foreground">{leadArea} is included as the lead area.</p>}</div><div className="border-t border-border pt-4"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Teams</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add existing teams without creating a second directory.</p></div><span className="text-[10px] text-muted-foreground">Optional</span></div><div className="mt-3 flex flex-wrap gap-1.5">{directory.filter(person => person.type === "team").map(team => <button key={team.id} onClick={() => toggleTeam(team.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[10px]", teamIds.includes(team.id) ? "border-primary/25 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{teamIds.includes(team.id) && <Check className="mr-1 inline h-3 w-3" />}{team.name}</button>)}</div></div><div className="border-t border-border pt-4"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">People</p><p className="mt-0.5 text-[10px] text-muted-foreground">Add existing people without duplicating records.</p></div><span className="text-[10px] text-muted-foreground">Optional</span></div><div className="mt-3 flex flex-wrap gap-1.5">{directory.filter(person => person.type === "person").map(person => <button key={person.id} onClick={() => togglePerson(person.id)} className={cn("rounded-full border px-2.5 py-1.5 text-[10px]", personIds.includes(person.id) ? "border-primary/25 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{personIds.includes(person.id) && <Check className="mr-1 inline h-3 w-3" />}{person.name}</button>)}</div></div></div>}{step === 3 && <div className="space-y-5"><div><h3 className="text-sm font-semibold text-foreground">Give the project a starting point</h3><p className="mt-1 text-[12px] text-muted-foreground">Optional. Start with a milestone, a focus, first work—or an empty project.</p></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Milestones</p><p className="text-[10px] text-muted-foreground">A meaningful delivery, not another task.</p></div><button onClick={addMilestone} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add milestone</button></div>{milestones.map((milestone, index) => <div key={index} className="mt-3 grid gap-2 sm:grid-cols-[1fr_9rem]"><input value={milestone.title} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Website Ready" className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /><input type="date" value={milestone.targetDate} onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetDate: event.target.value } : item))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-semibold text-foreground">Current focus</p><p className="text-[10px] text-muted-foreground">A short summary of where attention is concentrated.</p></div><button onClick={addFocus} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm">+ Add focus</button></div>{focusItems.map((focus, index) => <input key={index} value={focus} onChange={event => setFocusItems(current => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="Mobile booking flow redesign" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />)}</section><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><p className="text-[12px] font-semibold text-foreground">First task</p><p className="mt-0.5 text-[10px] text-muted-foreground">Optional. This creates normal Binnie work inside the project.</p><input value={firstTask.title} onChange={event => setFirstTask(current => ({ ...current, title: event.target.value }))} placeholder="Add the first piece of work" className="mt-3 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" />{firstTask.title && <div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={firstTask.area} onChange={event => setFirstTask(current => ({ ...current, area: event.target.value as AreaName }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Lead area</option>{allSelectedAreas.map(area => <option key={area}>{area}</option>)}</select><select value={firstTask.assigneeId} onChange={event => setFirstTask(current => ({ ...current, assigneeId: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground"><option value="">Assignee / team</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><input type="date" value={firstTask.targetDate} onChange={event => setFirstTask(current => ({ ...current, targetDate: event.target.value }))} className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] text-foreground" /></div>}</section></div>}{error && <p role="alert" className="mt-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{error}</p>}</div><div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4 sm:px-6"><button onClick={() => step === 1 ? onClose() : setStep(current => (current - 1) as ProjectCreationStep)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">{step === 1 ? "Cancel" : "← Back"}</button><div className="ml-auto flex flex-wrap gap-2">{step === 1 && <button onClick={() => void create(false)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create now</button>}{step < 3 ? <button onClick={() => validateBasics() && setStep(current => (current + 1) as ProjectCreationStep)} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Continue →</button> : <><button onClick={() => void create(true)} disabled={saving} className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-[12px] font-medium text-primary disabled:opacity-50">Create &amp; Add Work</button><button onClick={() => void create(false)} disabled={saving} className="rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50">{saving ? "Creating…" : "Create Project"}</button></>}</div></div>{similarProject && <div className="absolute inset-0 flex items-center justify-center bg-foreground/10 p-5"><div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl"><p className="text-sm font-semibold text-foreground">A similar project already exists.</p><button onClick={() => { onClose(); onCreated(similarProject, false); }} className="mt-2 w-full rounded-xl border border-border bg-muted/35 p-3 text-left text-[12px] font-medium text-primary hover:bg-muted">{similarProject.name}<span className="mt-1 block text-[10px] font-normal text-muted-foreground">Open existing</span></button><div className="mt-4 flex justify-end gap-2"><button onClick={() => setSimilarProject(null)} className="rounded-lg px-2.5 py-2 text-[11px] text-muted-foreground">Cancel</button><button onClick={() => { setSimilarProject(null); void create(false, true); }} className="rounded-lg bg-primary px-3 py-2 text-[11px] font-medium text-primary-foreground">Create Anyway</button></div></div></div>}</div></div>;
+}
+
+/* The compact JSX card renderer intentionally uses several inline expressions. */
+/* eslint-disable @typescript-eslint/no-unused-expressions */
+function ProjectsView({ onProjectClick, onAddWork, onManageTemplates }: { onProjectClick: (id: string) => void; onAddWork: (project: ProjectDTO) => void; onManageTemplates: () => void }) {
+  useTaskStoreVersion();
+  const getInitialPreferences = (): { filter: "all" | "active" | "attention" | "completed"; organization: string; viewMode: "grid" | "list" } => {
+    if (typeof window === "undefined") return { filter: "all" as const, organization: "", viewMode: "grid" as const };
+    const params = new URLSearchParams(window.location.search);
+    const rawFilter = params.get("projectStatus");
+    const rawView = params.get("projectView");
+    return {
+      filter: rawFilter === "active" || rawFilter === "attention" || rawFilter === "completed" ? rawFilter : "all",
+      organization: params.get("projectOrg") || "",
+      viewMode: rawView === "list" ? "list" : "grid",
+    };
+  };
+  const [filter, setFilter] = useState<"all" | "active" | "attention" | "completed">(() => getInitialPreferences().filter);
+  const [organizationFilter, setOrganizationFilter] = useState(() => getInitialPreferences().organization);
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => getInitialPreferences().viewMode);
+  const [creating, setCreating] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [duplicateSource, setDuplicateSource] = useState<ProjectDTO | null>(null);
+  const [deleting, setDeleting] = useState<ProjectDTO | null>(null);
+  const projects = CANONICAL_PROJECTS.filter(project => project.status !== "archived");
+  const taskSummary = (project: ProjectDTO) => {
+    const progress = getProjectProgress(TASKS, project.id);
+    const attention = progress.tasks.some(task => isTaskOverdue(task as Task) || task.status === "blocked" || task.status === "review") || Boolean(project.targetDate && project.targetDate < isoDate(getWorkspaceCalendarDate()) && progress.done < progress.total);
+    return { ...progress, attention };
+  };
+  const summaries = new Map(projects.map(project => [project.id, taskSummary(project)]));
+  const permittedOrganizations = ORGS_META;
+  const selectedOrganization = permittedOrganizations.some(organization => organization.name === organizationFilter) ? organizationFilter : "";
+  const filteredByOrganization = selectedOrganization ? projects.filter(project => project.organization === selectedOrganization) : projects;
+  const completedProjects = filteredByOrganization.filter(project => {
+    const summary = summaries.get(project.id)!;
+    return project.status === "completed" || (summary.tasks.length > 0 && summary.done === summary.tasks.length);
+  });
+  const activeProjects = filteredByOrganization.filter(project => {
+    const summary = summaries.get(project.id)!;
+    return project.status === "active" && !summary.attention && !completedProjects.some(candidate => candidate.id === project.id);
+  });
+  const attentionProjects = filteredByOrganization.filter(project => summaries.get(project.id)!.attention);
+  const visible = filter === "attention" ? attentionProjects : filter === "active" ? activeProjects : filter === "completed" ? completedProjects : filteredByOrganization;
+  const gridClass = viewMode === "grid" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 gap-3";
+  const selectedOrganizationColor = selectedOrganization ? getOrganizationColorStyles(permittedOrganizations.find(organization => organization.name === selectedOrganization)?.colorKey) : undefined;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (filter === "all") url.searchParams.delete("projectStatus"); else url.searchParams.set("projectStatus", filter);
+    if (!selectedOrganization) url.searchParams.delete("projectOrg"); else url.searchParams.set("projectOrg", selectedOrganization);
+    if (viewMode === "grid") url.searchParams.delete("projectView"); else url.searchParams.set("projectView", viewMode);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [filter, selectedOrganization, viewMode]);
+
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10">
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div><h1 className="binnie-heading text-3xl font-bold text-foreground">Projects</h1><p className="mt-1.5 text-sm text-muted-foreground">Keep important work moving.</p></div>
+      <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-1"><button onClick={() => setViewMode("grid")} aria-label="Project grid" className={cn("rounded-lg p-1.5", viewMode === "grid" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><Layers className="h-3.5 w-3.5" /></button><button onClick={() => setViewMode("list")} aria-label="Project list" className={cn("rounded-lg p-1.5", viewMode === "list" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")}><ListTodo className="h-3.5 w-3.5" /></button></div><div className="relative"><button onClick={() => setCreateMenuOpen(current => !current)} aria-expanded={createMenuOpen} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Add Project</button>{createMenuOpen && <div className="absolute right-0 top-[calc(100%+0.4rem)] z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-[0_10px_28px_rgb(35_41_61_/_0.12)]"><button onClick={() => { setCreateMenuOpen(false); setCreating(true); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Start blank</button><button onClick={() => { setCreateMenuOpen(false); onManageTemplates(); }} className="w-full rounded-lg px-2.5 py-2 text-left text-[11px] text-foreground hover:bg-muted">Use template</button><div className="my-1 border-t border-border" /><button onClick={() => { setCreateMenuOpen(false); onManageTemplates(); }} className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"><Settings className="h-3 w-3" />Manage templates</button></div>}</div></div>
+    </div>
+    <div className="mb-5 flex flex-wrap items-center gap-2">{[{ id: "all" as const, label: "All", count: filteredByOrganization.length }, { id: "active" as const, label: "Active", count: activeProjects.length }, { id: "attention" as const, label: "Needs Attention", count: attentionProjects.length }, { id: "completed" as const, label: "Completed", count: completedProjects.length }].map(item => <button key={item.id} onClick={() => setFilter(item.id)} className={cn("rounded-full border px-3 py-1.5 text-[11px] font-medium", filter === item.id ? "border-primary/25 bg-secondary text-secondary-foreground" : "border-border bg-card text-muted-foreground")}>{item.label}<span className="ml-1.5 opacity-65">{item.count}</span></button>)}<label className="ml-0 flex h-8 items-center gap-2 rounded-full border border-border bg-card px-2.5 text-[11px] text-muted-foreground sm:ml-1"><span className={cn("h-2 w-2 shrink-0 rounded-full", selectedOrganizationColor?.dot || "bg-muted-foreground/35")} /><span className="sr-only">Organization</span><select value={selectedOrganization} onChange={event => setOrganizationFilter(event.target.value)} className="min-w-0 max-w-44 bg-transparent pr-1 text-[11px] font-medium text-foreground outline-none"><option value="">All organizations</option>{permittedOrganizations.map(organization => <option key={organization.id} value={organization.name}>{organization.name}</option>)}</select></label></div>
+    {visible.length ? <div className={gridClass}>{visible.map(project => {
+      const summary = summaries.get(project.id)!;
+      const organization = permittedOrganizations.find(candidate => candidate.name === project.organization);
+      const color = getOrganizationColorStyles(organization?.colorKey);
+      const next = getProjectNextTask(TASKS, project.id);
+      const completed = completedProjects.some(candidate => candidate.id === project.id);
+      const status = completed ? { label: "Completed", className: "bg-success/10 text-success" } : summary.attention ? { label: "Needs attention", className: "bg-warning/12 text-warning" } : { label: "Active", className: "bg-muted text-muted-foreground" };
+      return <article key={project.id} role="button" tabIndex={0} onClick={() => onProjectClick(project.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onProjectClick(project.id); } }} className={cn("binnie-card binnie-card-hover group relative flex h-full cursor-pointer overflow-hidden p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/45", viewMode === "grid" ? "min-h-[17.5rem]" : "min-h-0", viewMode === "grid" ? color.card : color.listCard)}>
+        <div aria-hidden="true" className={cn("absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-65 blur-2xl", color.accent)} />
+        <div className="relative flex h-full w-full flex-col pr-7">
+          <div className="flex min-h-[3.25rem] items-start gap-2.5">
+            <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", color.icon)}><FolderKanban className="h-4 w-4" /></span>
+            <div className="min-w-0 flex-1"><div className="flex items-start gap-2"><h2 className="binnie-heading min-w-0 flex-1 truncate text-[15px] font-bold leading-5 text-foreground">{project.name}</h2><span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium", status.className)}>{status.label}</span></div><div className="mt-1.5 flex min-h-5 flex-wrap items-center gap-1.5"><span className={cn("inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[9px] font-medium", color.chip)}><span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", color.dot)} />{project.organization}</span>{project.leadArea && <span className="truncate text-[10px] text-muted-foreground">{project.leadArea}</span>}</div></div>
+          </div>
+          {summary.tasks.length ? <><div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground"><span><strong className="font-semibold text-foreground">{summary.done} / {summary.tasks.length}</strong> tasks</span><span>{summary.progress}%</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/80"><div className={cn("h-full rounded-full", color.dot)} style={{ width: `${summary.progress}%` }} /></div><p className="mt-2 text-[10px] text-muted-foreground">{project.targetDate ? `Target ${taskDateLabel(project.targetDate)}` : "No target date"}</p><div className="mt-3 grid gap-2 border-t border-border/65 pt-2.5"><div><p className="text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Current focus</p><p className="mt-0.5 truncate text-[11px] font-medium text-foreground">{project.focusItems[0]?.text || "Set a focused next step"}</p></div><div><p className="text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground">Next</p><p className="mt-0.5 truncate text-[11px] text-foreground">{next?.title || "No next task scheduled"}</p></div></div></> : <div className="mt-auto border-t border-border/65 pt-3"><p className="text-[11px] font-medium text-foreground">No work added yet</p><button onClick={event => { event.stopPropagation(); onAddWork(project); }} className="mt-1.5 text-[10px] font-medium text-primary hover:underline">+ Add first task</button></div>}
+        </div>
+        <div className="absolute right-3 top-3"><ProjectOverflowMenu project={project} onEdit={() => onProjectClick(project.id)} onDuplicate={() => { setDuplicateSource(project); setCreating(true); }} onDelete={() => setDeleting(project)} /></div>
+      </article>;
+    })}</div> : <div className="binnie-card py-16 text-center"><FolderKanban className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No projects match these filters.</p><p className="mt-1 text-[12px] text-muted-foreground">Try another organization or status.</p><button onClick={() => { setFilter("all"); setOrganizationFilter(""); }} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">Show all projects</button></div>}
+    {creating && <CreateProjectDrawer initialProject={duplicateSource || undefined} onClose={() => { setCreating(false); setDuplicateSource(null); }} onCreated={(project, addWork) => { setCreating(false); setDuplicateSource(null); addWork ? onAddWork(project) : onProjectClick(project.id); }} />}
+    {deleting && <DeleteProjectConfirmation project={deleting} onClose={() => setDeleting(null)} onDeleted={() => setDeleting(null)} />}
+  </div>;
+}
+
+/* eslint-enable @typescript-eslint/no-unused-expressions */
+
+// ─── PHASE 3: WORKLOAD, NUDGES, AND TEMPLATES ─────────────────────────────────
+
+function WorkloadView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
+  useTaskStoreVersion();
+  const [kind, setKind] = useState<"all" | "person" | "team">("all");
+  const today = isoDate(getWorkspaceCalendarDate());
+  const activeTasks = TASKS.filter(task => !task.archived && task.status !== "done");
+  const workload = deriveWorkload(activeTasks.map(task => ({
+    id: task.id,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    isFollowUpDue: Boolean(task.followUpDate && task.followUpDate <= today),
+    assigneeIds: task.assigneeIds,
+    currentResponsibilityId: task.currentResponsibilityId,
+    nextActionPrincipalId: task.nextActionPrincipalId,
+    createdByPrincipalId: task.createdByPrincipalId,
+    reviewerPrincipalId: task.reviewerPrincipalId,
+    dependencyActionOwnerIds: task.dependencyActionOwnerIds,
+    blockedDependentCount: activeTasks.filter(candidate => candidate.dependencyRecords?.some(dependency => dependency.prerequisiteTaskId === task.id && !dependency.resolvedAt && dependency.type !== "related")).length,
+  })), PEOPLE_DIRECTORY.map(person => ({ id: person.id, name: person.name, type: person.type, active: person.active })));
+  const visible = workload.filter(item => kind === "all" || item.type === kind);
+  const focus = visible.filter(item => item.needsAttention > 0 || item.load === "full");
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workload</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">See where work is landing.</h1><p className="mt-1.5 text-sm text-muted-foreground">A directional view of active work, attention, reviews, and blockers—not capacity forecasting.</p></div><div className="flex rounded-xl border border-border bg-card p-1">{([{ id: "all", label: "Everyone" }, { id: "person", label: "People" }, { id: "team", label: "Teams" }] as const).map(option => <button key={option.id} onClick={() => setKind(option.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", kind === option.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>)}</div></div><div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Active work</p><p className="mt-1 text-2xl font-bold text-primary">{activeTasks.length}</p><p className="mt-1 text-[10px] text-muted-foreground">shared task records, counted once</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-warning">{visible.reduce((sum, item) => sum + item.needsAttention, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">overdue, follow-up, blocked, or review work</p></div><div className="binnie-card p-4"><p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Blocking others</p><p className="mt-1 text-2xl font-bold text-overdue">{visible.reduce((sum, item) => sum + item.blockingOthers, 0)}</p><p className="mt-1 text-[10px] text-muted-foreground">downstream work waiting on the current responsible party</p></div></div>{focus.length > 0 && <section className="mb-5 rounded-2xl border border-warning/20 bg-warning/[0.055] p-4"><p className="text-[12px] font-semibold text-foreground">Where a conversation could help</p><p className="mt-1 text-[10px] text-muted-foreground">These are signals to look at, not automatic judgments about people.</p><div className="mt-3 flex flex-wrap gap-2">{focus.slice(0, 6).map(item => <span key={item.principalId} className="rounded-full border border-warning/15 bg-card px-2.5 py-1.5 text-[10px] text-foreground">{item.name} · {item.needsAttention ? `${item.needsAttention} attention` : "full focus"}</span>)}</div></section>}<div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="hidden grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] border-b border-border bg-muted/35 px-4 py-3 text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground lg:grid"><span>Responsibility</span><span>Ready</span><span>Moving</span><span>Waiting</span><span>Blocked</span><span>Review</span><span>Overdue</span><span>Signal</span></div>{visible.length ? visible.map(item => { const assigned = activeTasks.filter(task => task.currentResponsibilityId === item.principalId); return <div key={item.principalId} className="grid gap-2 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(10rem,1.4fr)_repeat(6,minmax(4rem,0.55fr))_minmax(5rem,0.65fr)] lg:items-center"><div><p className="text-[12px] font-semibold text-foreground">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.type === "team" ? "Team queue" : "Individual"} · {item.primaryOwned} current</p>{assigned.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{assigned.slice(0, 2).map(task => <button key={task.id} onClick={() => onTaskClick(task)} className="max-w-40 truncate rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-primary">{task.title}</button>)}</div>}</div>{[[item.ready, "Ready"], [item.inProgress, "Moving"], [item.waiting, "Waiting"], [item.blocked, "Blocked"], [item.review, "Review"], [item.overdue, "Overdue"]].map(([count, label]) => <div key={String(label)} className="flex items-center justify-between text-[11px] text-muted-foreground lg:block"><span className="lg:hidden">{label}</span><span className={cn("font-semibold", Number(count) > 0 && (label === "Blocked" || label === "Overdue") ? "text-overdue" : label === "Review" && Number(count) > 0 ? "text-review" : "text-foreground")}>{count}</span></div>)}<span className={cn("w-fit rounded-full px-2 py-1 text-[9px] font-medium", item.load === "full" ? "bg-warning/10 text-warning" : item.load === "steady" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{item.load === "full" ? "Full focus" : item.load === "steady" ? "Steady" : "Light"}</span></div>; }) : <div className="px-5 py-12 text-center text-[12px] text-muted-foreground">No active work is assigned yet.</div>}</div></div>;
+}
+
+function canViewWorkload(profile: UserProfile) {
+  return profile.role === "owner" || profile.role === "organization_manager" || profile.role === "department_manager";
+}
+
+function PeopleHub({ tab, onTabChange, onPersonClick, onTaskClick, profile }: { tab: PeopleHubTab; onTabChange: (tab: PeopleHubTab) => void; onPersonClick: (name: string) => void; onTaskClick: (task: Task) => void; profile: UserProfile }) {
+  const workloadAvailable = canViewWorkload(profile);
+  const tabs: Array<{ id: PeopleHubTab; label: string }> = [
+    { id: "people", label: "People" },
+    { id: "teams", label: "Teams" },
+    ...(workloadAvailable ? [{ id: "workload" as const, label: "Workload" }] : []),
+  ];
+  const activeTab = tab === "workload" && !workloadAvailable ? "people" : tab;
+  return <div><div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><section aria-label="People workspace" className="border-b border-border/70 pb-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">People workspace</p><p className="mt-1 text-[11px] text-muted-foreground">Directory, team queues, and workload in one place.</p></div><div role="tablist" aria-label="People workspace views" className="flex w-fit rounded-xl border border-border bg-muted/35 p-1">{tabs.map(item => <button key={item.id} role="tab" aria-selected={activeTab === item.id} onClick={() => onTabChange(item.id)} className={cn("rounded-lg px-3 py-2 text-[11px] font-medium", activeTab === item.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div></section></div>{activeTab === "people" && <PeopleView entityType="person" onPersonClick={onPersonClick} />}{activeTab === "teams" && <PeopleView entityType="team" onPersonClick={onPersonClick} />}{activeTab === "workload" && workloadAvailable && <WorkloadView onTaskClick={onTaskClick} />}</div>;
+}
+
+function CanonicalFollowUpView({ onTaskClick, embedded = false, tasks, principalId }: { onTaskClick: (task: Task) => void; embedded?: boolean; tasks?: Task[]; principalId?: string }) {
+  const router = useRouter();
+  useTaskStoreVersion();
+  const currentUserId = useContext(CurrentUserContext) || DEFAULT_CURRENT_USER_ID;
+  const [draftFor, setDraftFor] = useState<string | null>(null);
+  const { allTasks, candidates: nudgeCandidates, today } = getFollowUpNudgeCandidates(tasks || TASKS, principalId || currentUserId);
+  // Follow Up is intentional reminder work only. Overdue, blocked, and review
+  // records stay in their own Attention categories instead of being relabeled.
+  const candidates = nudgeCandidates.filter(candidate => candidate.kind === "follow_up");
+  async function setState(candidate: typeof candidates[number], disposition: "dismissed" | "snoozed") {
+    const snoozeDate = new Date(`${today}T00:00:00.000Z`);
+    snoozeDate.setUTCDate(snoozeDate.getUTCDate() + 3);
+    const snoozedUntil = disposition === "snoozed" ? isoDate(snoozeDate) : undefined;
+    const result = await setNudgeStateAction({ dedupKey: candidate.dedupKey, taskId: candidate.taskId, disposition, snoozedUntil });
+    if (!result.ok) return;
+    const nextState: NudgeStateDTO = { dedupKey: candidate.dedupKey, taskId: candidate.taskId, disposition, snoozedUntil };
+    applyCanonicalNudgeState(nextState, result.revision);
+    router.refresh();
+  }
+  return <div className="mx-auto max-w-4xl p-5 sm:p-8 lg:p-10">{!embedded && <div className="mb-6"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Action center</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Follow up with purpose.</h1><p className="mt-1.5 text-sm text-muted-foreground">Only intentional check-ins appear here. Waiting by itself is never a follow-up.</p></div>}<div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">{[{ label: "Follow-ups due", value: candidates.length, color: "text-info" }, { label: "Tracked work", value: allTasks.length, color: "text-primary" }].map(item => <div key={item.label} className="binnie-card p-3.5"><p className={cn("text-2xl font-bold", item.color)}>{item.value}</p><p className="mt-1 text-[10px] text-muted-foreground">{item.label}</p></div>)}</div><div className="space-y-3">{candidates.map(candidate => { const task = allTasks.find(item => item.id === candidate.taskId); const draft = task ? `Hi ${task.nextActionBy || "there"}, just checking in on “${task.title}”. ${candidate.detail} Could you share the next update when you have a moment?` : ""; return <article key={candidate.dedupKey} className="binnie-card p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start"><span className="w-fit rounded-full bg-primary/10 px-2 py-1 text-[9px] font-medium text-primary">follow up</span><div className="min-w-0 flex-1"><button onClick={() => task && onTaskClick(task)} className="max-w-full truncate text-left text-[13px] font-semibold text-foreground hover:text-primary">{candidate.title}</button><p className="mt-1 text-[11px] text-muted-foreground">{candidate.detail}</p></div><div className="flex flex-wrap gap-1.5"><button onClick={() => setDraftFor(current => current === candidate.dedupKey ? null : candidate.dedupKey)} className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">Draft</button><button onClick={() => void setState(candidate, "snoozed")} className="rounded-lg px-2.5 py-1.5 text-[10px] text-muted-foreground hover:bg-muted">Snooze 3d</button><button onClick={() => void setState(candidate, "dismissed")} className="rounded-lg px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-muted" aria-label={`Dismiss ${candidate.title}`}><X className="h-3.5 w-3.5" /></button></div></div>{draftFor === candidate.dedupKey && <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-3"><p className="text-[11px] leading-5 text-foreground">{draft}</p><button onClick={() => navigator.clipboard?.writeText(draft).catch(() => {})} className="mt-2 rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary shadow-sm"><Copy className="mr-1 inline h-3 w-3" />Copy message</button></div>}</article>; })}{!candidates.length && <div className="binnie-card py-14 text-center"><CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-success/50" /><p className="text-sm font-medium text-foreground">No follow-up is due.</p><p className="mt-1 text-[12px] text-muted-foreground">Binnie will surface check-ins when their follow-up date arrives.</p></div>}</div></div>;
+}
+
+type TemplateTaskDraft = { title: string; area: AreaName | ""; assigneeId: string; targetOffsetDays: string; checklist: string; dependencyIndex: string; dependencyType: "start_blocker" | "completion_blocker" };
+
+function CanonicalTemplatesView({ onProjectClick, onBack }: { onProjectClick: (projectId: string) => void; onBack?: () => void }) {
+  const router = useRouter();
+  useTaskStoreVersion();
+  const [creating, setCreating] = useState(false);
+  const [applying, setApplying] = useState<WorkflowTemplateDTO | null>(null);
+  const [organization, setOrganization] = useState<OrgName>("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [leadArea, setLeadArea] = useState<AreaName | "">("");
+  const [tasks, setTasks] = useState<TemplateTaskDraft[]>([]);
+  const [milestone, setMilestone] = useState("");
+  const [focus, setFocus] = useState("");
+  const [message, setMessage] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectStart, setProjectStart] = useState(isoDate(getWorkspaceCalendarDate()));
+  const organizationId = organization ? remoteOrganizationIds.get(organization) : undefined;
+  const areas = organization ? captureOrgAreas(organization) : [];
+  const directory = PEOPLE_DIRECTORY.filter(person => person.active && (!organization || person.memberships.some(membership => membership.organization === organization)));
+  function reset() { setOrganization(""); setName(""); setDescription(""); setLeadArea(""); setTasks([]); setMilestone(""); setFocus(""); setMessage(""); setCreating(false); }
+  async function createTemplate() {
+    if (!name.trim() || !organizationId) return setMessage(!name.trim() ? "Template name is required." : "Organization is required.");
+    const numberedTasks = tasks.map((task, originalIndex) => ({ task, originalIndex })).filter(({ task }) => task.title.trim());
+    const compactIndex = new Map(numberedTasks.map(({ originalIndex }, index) => [originalIndex, index]));
+    const taskInputs = numberedTasks.map(({ task }) => {
+      const prerequisiteTaskIndex = task.dependencyIndex === "" ? undefined : compactIndex.get(Number(task.dependencyIndex));
+      return {
+        title: task.title.trim(), leadDepartmentId: task.area ? getRemoteDepartmentId(organization, task.area) : undefined, defaultAssigneeId: task.assigneeId || undefined,
+        targetOffsetDays: task.targetOffsetDays === "" ? undefined : Number(task.targetOffsetDays), checklistItems: task.checklist.split(",").map(item => item.trim()).filter(Boolean),
+        dependencies: prerequisiteTaskIndex === undefined ? undefined : [{ prerequisiteTaskIndex, type: task.dependencyType, label: task.dependencyType === "start_blocker" ? "Start after prerequisite" : "Finish after prerequisite" }],
+      };
+    });
+    const involvedDepartmentIds = Array.from(new Set([leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined, ...taskInputs.map(task => task.leadDepartmentId)].filter((id): id is string => Boolean(id))));
+    const result = await createWorkflowTemplateAction({ organizationId, name: name.trim(), description: description.trim() || undefined, leadDepartmentId: leadArea ? getRemoteDepartmentId(organization, leadArea) : undefined, involvedDepartmentIds, tasks: taskInputs, milestones: milestone.trim() ? [{ title: milestone.trim() }] : undefined, focusItems: focus.trim() ? [focus.trim()] : undefined });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalWorkflowTemplate(result.data, result.revision);
+    router.refresh(); reset();
+  }
+  async function applyTemplate() {
+    if (!applying || !projectName.trim()) return setMessage("Project name is required.");
+    const result = await applyWorkflowTemplateAction({ templateId: applying.id, name: projectName.trim(), startDate: projectStart || undefined });
+    if (!result.ok) return setMessage(result.message);
+    applyCanonicalProject(result.data, result.revision);
+    router.refresh(); setApplying(null); setProjectName(""); setMessage(""); onProjectClick(result.data.id);
+  }
+  async function archiveTemplate(template: WorkflowTemplateDTO) {
+    if (!window.confirm(`Archive “${template.name}”? Existing projects stay intact.`)) return;
+    const result = await archiveWorkflowTemplateAction({ templateId: template.id });
+    if (!result.ok) return setMessage(result.message);
+    removeCanonicalWorkflowTemplate(template.id, result.revision); router.refresh();
+  }
+  return <div className="mx-auto max-w-6xl p-5 sm:p-8 lg:p-10"><div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div>{onBack && <button onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80"><ChevronLeft className="h-3.5 w-3.5" />Projects</button>}<p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Workflow templates</p><h1 className="binnie-heading mt-1 text-3xl font-bold text-foreground">Start familiar work well.</h1><p className="mt-1.5 text-sm text-muted-foreground">Templates create normal projects and tasks—never a parallel task database.</p></div><button onClick={() => setCreating(true)} className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" />New template</button></div>{message && <p role="alert" className="mb-4 rounded-xl border border-overdue/20 bg-overdue/[0.05] px-3 py-2 text-[11px] text-overdue">{message}</p>}<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{CANONICAL_WORKFLOW_TEMPLATES.map(template => <article key={template.id} className="binnie-card flex min-h-56 flex-col p-5"><div className="flex items-start gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Layers className="h-4 w-4" /></span><div className="min-w-0 flex-1"><h2 className="truncate text-[14px] font-semibold text-foreground">{template.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{template.organization}{template.leadArea ? ` · ${template.leadArea}` : ""}</p></div></div><p className="mt-4 line-clamp-2 text-[11px] text-muted-foreground">{template.description || "A reusable starting point for recurring work."}</p><div className="mt-4 flex flex-wrap gap-1.5">{template.involvedDepartments.map(area => <span key={area.id} className="rounded-full bg-muted px-2 py-1 text-[9px] text-muted-foreground">{area.name}</span>)}</div><p className="mt-4 text-[10px] text-muted-foreground">{template.tasks.length} suggested task{template.tasks.length === 1 ? "" : "s"} · {template.milestones.length} milestone{template.milestones.length === 1 ? "" : "s"}</p><div className="mt-auto flex items-center gap-2 pt-5"><button onClick={() => { setApplying(template); setProjectName(""); setProjectStart(isoDate(getWorkspaceCalendarDate())); setMessage(""); }} className="rounded-lg bg-primary px-3 py-2 text-[10px] font-medium text-primary-foreground">Use template</button><button onClick={() => void archiveTemplate(template)} className="rounded-lg px-2.5 py-2 text-[10px] text-muted-foreground hover:bg-muted">Archive</button></div></article>)}{!CANONICAL_WORKFLOW_TEMPLATES.length && <div className="binnie-card col-span-full py-14 text-center"><Layers className="mx-auto mb-3 h-9 w-9 text-muted-foreground/35" /><p className="text-sm font-medium text-foreground">No templates yet.</p><p className="mt-1 text-[12px] text-muted-foreground">Turn a common project flow into a calm, reusable starting point.</p><button onClick={() => setCreating(true)} className="mt-4 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-medium text-primary-foreground">+ New template</button></div>}</div>{creating && <div className="fixed inset-0 z-[90] bg-foreground/10 backdrop-blur-[1px]"><div role="dialog" aria-modal="true" aria-label="Create workflow template" className="ml-auto flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-[-16px_0_48px_rgb(35_41_61_/_0.14)]"><div className="flex items-start justify-between border-b border-border px-5 py-5"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">New template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Give familiar work a head start.</h2><p className="mt-1 text-[11px] text-muted-foreground">Keep it light: setup can grow later.</p></div><button onClick={reset} className="rounded-xl p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5"><div className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Template name <span className="text-overdue">*</span><input value={name} onChange={event => setName(event.target.value)} placeholder="New promotion launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Organization <span className="text-overdue">*</span><select value={organization} onChange={event => { setOrganization(event.target.value as OrgName); setLeadArea(""); setTasks([]); }} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Choose organization</option>{Array.from(remoteOrganizationIds.keys()).map(org => <option key={org}>{org}</option>)}</select></label><label className="text-[11px] font-medium text-muted-foreground">Lead area<select value={leadArea} onChange={event => setLeadArea(event.target.value as AreaName)} disabled={!organization} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground"><option value="">Not set</option>{areas.map(area => <option key={area}>{area}</option>)}</select></label><label className="sm:col-span-2 text-[11px] font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} rows={2} placeholder="What this workflow helps the team deliver" className="mt-1.5 w-full resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label></div><section className="rounded-2xl border border-border bg-muted/25 p-3.5"><div className="flex items-center justify-between"><div><p className="text-[12px] font-semibold text-foreground">Suggested work</p><p className="mt-0.5 text-[10px] text-muted-foreground">These become regular project tasks when used.</p></div><button onClick={() => setTasks(current => [...current, { title: "", area: leadArea, assigneeId: "", targetOffsetDays: "", checklist: "", dependencyIndex: "", dependencyType: "completion_blocker" }])} className="rounded-lg bg-card px-2.5 py-1.5 text-[10px] font-medium text-primary">+ Add task</button></div>{tasks.map((task, index) => <div key={index} className="mt-3 rounded-xl border border-border bg-card p-3"><div className="flex gap-2"><input value={task.title} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Prepare campaign artwork" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-[11px] text-foreground" /><button onClick={() => setTasks(current => current.filter((_, itemIndex) => itemIndex !== index).map(item => ({ ...item, dependencyIndex: item.dependencyIndex === String(index) ? "" : item.dependencyIndex })))} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><Trash2 className="h-3.5 w-3.5" /></button></div><div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={task.area} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, area: event.target.value as AreaName } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Area</option>{areas.map(area => <option key={area}>{area}</option>)}</select><select value={task.assigneeId} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, assigneeId: event.target.value } : item))} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground"><option value="">Default owner</option>{directory.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select><label className="text-[9px] text-muted-foreground">Target days from start<input type="number" min="0" value={task.targetOffsetDays} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, targetOffsetDays: event.target.value } : item))} className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] text-foreground" /></label></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={task.checklist} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checklist: event.target.value } : item))} placeholder="Checklist, separated by commas" className="rounded-lg border border-border bg-background px-2.5 py-2 text-[10px] text-foreground" /><div className="grid grid-cols-2 gap-2"><select value={task.dependencyIndex} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyIndex: event.target.value } : item))} disabled={index === 0} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="">No dependency</option>{tasks.slice(0, index).map((item, itemIndex) => <option key={itemIndex} value={itemIndex}>{item.title || `Task ${itemIndex + 1}`}</option>)}</select><select value={task.dependencyType} onChange={event => setTasks(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, dependencyType: event.target.value as TemplateTaskDraft["dependencyType"] } : item))} disabled={!task.dependencyIndex} className="rounded-lg border border-border bg-background px-2 py-2 text-[10px] text-foreground disabled:opacity-50"><option value="completion_blocker">Finish after</option><option value="start_blocker">Start after</option></select></div></div></div>)}</section><div className="grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-medium text-muted-foreground">First milestone <span className="font-normal">(optional)</span><input value={milestone} onChange={event => setMilestone(event.target.value)} placeholder="Campaign launch" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label><label className="text-[11px] font-medium text-muted-foreground">Current focus <span className="font-normal">(optional)</span><input value={focus} onChange={event => setFocus(event.target.value)} placeholder="Launch readiness" className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] text-foreground" /></label></div></div><div className="flex justify-end gap-2 border-t border-border px-5 py-4"><button onClick={reset} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted">Cancel</button><button onClick={() => void createTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Save template</button></div></div></div>}{applying && <div className="fixed inset-0 z-[95] flex items-end justify-center bg-foreground/10 p-4 backdrop-blur-[1px] sm:items-center"><div role="dialog" aria-modal="true" aria-label="Use workflow template" className="w-full max-w-md rounded-[1.5rem] border border-border bg-card p-5 shadow-xl"><div className="flex items-start justify-between"><div><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Use template</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">{applying.name}</h2><p className="mt-1 text-[11px] text-muted-foreground">Creates one project and canonical tasks with their relationships intact.</p></div><button onClick={() => setApplying(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><label className="mt-5 block text-[11px] font-medium text-muted-foreground">Project name <span className="text-overdue">*</span><input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} placeholder={applying.name} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><label className="mt-3 block text-[11px] font-medium text-muted-foreground">Start date <span className="font-normal">(optional)</span><input type="date" value={projectStart} onChange={event => setProjectStart(event.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[12px] text-foreground" /></label><div className="mt-5 flex justify-end gap-2"><button onClick={() => setApplying(null)} className="rounded-xl px-3 py-2 text-[12px] text-muted-foreground">Cancel</button><button onClick={() => void applyTemplate()} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground">Create project</button></div></div></div>}</div>;
 }
 
 // ─── SEARCH VIEW ─────────────────────────────────────────────────────────────
 
 function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
   const [query, setQuery] = useState("");
-  const results = query.length > 1
-    ? TASKS.filter(t =>
-        t.title.toLowerCase().includes(query.toLowerCase()) ||
-        t.org.toLowerCase().includes(query.toLowerCase()) ||
-        t.area.toLowerCase().includes(query.toLowerCase()) ||
-        (t.assignee || "").toLowerCase().includes(query.toLowerCase())
-      )
-    : [];
+  const searchableTasks = [...TASKS, ...ARCHIVED_TASKS];
+  const natural = parseNaturalTaskSearch(query, {
+    organizations: Array.from(new Set(searchableTasks.map(task => task.org))),
+    departments: Array.from(new Set(searchableTasks.flatMap(getTaskAreas))),
+    assignees: Array.from(new Set(searchableTasks.flatMap(taskAssigneeNames))),
+    projects: Array.from(new Set(searchableTasks.map(task => task.project).filter((value): value is string => Boolean(value)))),
+  }, getWorkspaceCalendarDate());
+  const results = query.length > 1 ? searchableTasks.filter(task => matchesNaturalTaskSearch({
+    title: task.title,
+    description: task.description || task.notes,
+    status: task.status,
+    isOverdue: isTaskOverdue(task),
+    org: task.org,
+    areas: getTaskAreas(task),
+    assignees: taskAssigneeNames(task),
+    project: task.project,
+    nextActionBy: task.nextActionBy,
+    dependencyOwners: (task.dependencyRecords || []).map(dependency => dependency.owner).filter((owner): owner is string => Boolean(owner)),
+    deadlineDate: task.deadlineDate,
+    targetDate: task.targetDate,
+    startDate: task.startDate,
+    assigneeIds: task.assigneeIds,
+  }, natural, CANONICAL_ACTOR_ID)) : [];
   return (
-    <div className="p-8 max-w-2xl mx-auto">
+    <div className="mx-auto max-w-2xl p-5 sm:p-8 lg:p-10">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground mb-4" style={{ fontFamily: "var(--font-display)" }}>Search</h1>
         <div className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3 focus-within:border-primary/40 transition-colors">
           <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search tasks, people, organizations…"
+            placeholder="Try “waiting on purchasing” or “marketing this month”"
             className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder-muted-foreground" />
           {query && <button onClick={() => setQuery("")}><X className="w-4 h-4 text-muted-foreground" /></button>}
         </div>
@@ -2273,14 +7220,15 @@ function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
       {results.length > 0 && (
         <div>
           <p className="text-[11px] font-mono text-muted-foreground mb-3">{results.length} results</p>
-          <div className="space-y-2">{results.map(t => <TaskCard key={t.id} task={t} onClick={() => onTaskClick(t)} />)}</div>
+          <div className="space-y-2">{results.map(t => <div key={t.id} className="relative">{t.archived && <span className="absolute right-3 top-3 z-10 rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Archived</span>}<TaskCard task={t} onClick={() => onTaskClick(t)} /></div>)}</div>
         </div>
       )}
       {query.length > 1 && results.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">No results for &ldquo;{query}&rdquo;</p>}
       {query.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Type to search across all tasks and people</p>
+          <p className="text-sm">Search naturally, or use the structured filters on Tasks.</p>
+          <p className="mt-2 text-[11px]">Examples: overdue khayangan work · marketing tasks this month · waiting on purchasing</p>
         </div>
       )}
     </div>
@@ -2291,13 +7239,15 @@ function SearchView({ onTaskClick }: { onTaskClick: (task: Task) => void }) {
 
 const NAV_GROUPS = [
   {
+    label: "Home",
     items: [{ id: "home" as NavView, label: "Home", icon: <Home className="w-4 h-4" /> }]
   },
   {
-    label: "Planning",
+    label: "Plan",
     items: [
-      { id: "today" as NavView, label: "Today", icon: <CalendarDays className="w-4 h-4" />, badge: TASKS.filter(t => t.isToday && t.nextActionBy === "me").length },
+      { id: "today" as NavView, label: "Today", icon: <CalendarDays className="w-4 h-4" />, badge: TASKS.filter(t => t.isToday && t.nextActionPrincipalId === CANONICAL_ACTOR_ID).length },
       { id: "this-week" as NavView, label: "This Week", icon: <Calendar className="w-4 h-4" /> },
+      { id: "all-tasks" as NavView, label: "Tasks", icon: <ListTodo className="w-4 h-4" /> },
     ]
   },
   {
@@ -2307,100 +7257,187 @@ const NAV_GROUPS = [
     ]
   },
   {
-    label: "Track",
+    label: "Manage",
     items: [
-      { id: "delegated" as NavView, label: "Delegated", icon: <Users className="w-4 h-4" />, badge: TASKS.filter(t => t.isDelegated).length },
-      { id: "waiting" as NavView, label: "Waiting", icon: <Hourglass className="w-4 h-4" />, badge: TASKS.filter(t => t.isWaiting).length },
-      { id: "review" as NavView, label: "Needs My Review", icon: <Eye className="w-4 h-4" />, badge: TASKS.filter(t => t.status === "review" && t.nextActionBy === "me").length },
-      { id: "overdue" as NavView, label: "Overdue", icon: <AlertTriangle className="w-4 h-4" />, badge: TASKS.filter(t => t.isOverdue).length, urgent: true },
-      { id: "followup" as NavView, label: "Follow-Up", icon: <MessageSquare className="w-4 h-4" />, badge: FOLLOWUP_DATA.filter(d => d.section === "today").length },
-    ]
-  },
-  {
-    label: "People",
-    items: [
-      { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" />, badge: PEOPLE_DATA.filter(p => p.needsFollowUp).length },
+      { id: "attention" as NavView, label: "Attention", icon: <AlertTriangle className="w-4 h-4" /> },
+      { id: "people" as NavView, label: "People", icon: <UserCheck className="w-4 h-4" /> },
     ]
   },
   {
     label: "Organize",
     items: [
-      { id: "all-tasks" as NavView, label: "All Tasks", icon: <ListTodo className="w-4 h-4" /> },
       { id: "organizations" as NavView, label: "Organizations", icon: <Building2 className="w-4 h-4" /> },
       { id: "projects" as NavView, label: "Projects", icon: <FolderKanban className="w-4 h-4" /> },
-      { id: "search" as NavView, label: "Search", icon: <Search className="w-4 h-4" /> },
     ]
   },
 ];
 
-function Sidebar({ view, onNav }: { view: NavView; onNav: (v: NavView) => void }) {
-  const activeView = (["org-detail", "person-detail", "project-detail"].includes(view))
-    ? (view === "org-detail" ? "organizations" : view === "project-detail" ? "projects" : "people") as NavView
-    : view;
+function BinnieMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Image src="/binnie-brandmark.png" alt="Binnie" width={505} height={665} className={cn("w-auto flex-shrink-0 object-contain", compact ? "h-9" : "h-10")} />
+      {!compact && <div><p className="binnie-heading text-[17px] font-bold text-foreground">Binnie</p><p className="-mt-0.5 text-[10px] text-muted-foreground">Less to remember. More room to think.</p></div>}
+    </div>
+  );
+}
+
+const WORKSPACE_THEME_OPTIONS: { id: WorkspaceTheme; label: string; description: string; preview: string }[] = [
+  { id: "soft", label: "Soft", description: "Warm, pastel, and airy.", preview: "binnie-theme-preview-soft" },
+  { id: "clear", label: "Clear", description: "Cool, crisp, and focused.", preview: "binnie-theme-preview-clear" },
+  { id: "dark", label: "Dark", description: "Calm, low-light, and refined.", preview: "binnie-theme-preview-dark" },
+];
+
+function ProfilePanel({ profile, theme, onSave, onResetDemoData, onClose, onSignOut }: { profile: UserProfile; theme: WorkspaceTheme; onSave: (profile: UserProfile, theme: WorkspaceTheme) => Promise<void>; onResetDemoData?: () => Promise<void>; onClose: () => void; onSignOut: () => void }) {
+  const [draft, setDraft] = useState(profile);
+  const [draftTheme, setDraftTheme] = useState(theme);
+  const [section, setSection] = useState<"profile" | "preferences" | "settings">("profile");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [resettingDemo, setResettingDemo] = useState(false);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+  const update = (patch: Partial<UserProfile>) => setDraft(current => ({ ...current, ...patch }));
+  async function save() {
+    setSaveError("");
+    setSaved(false);
+    setSaving(true);
+    try {
+      await onSave(draft, draftTheme);
+      setSaved(true);
+    } catch (error) {
+      console.error("Could not save Binnie profile", error);
+      setSaveError(error instanceof Error ? error.message : "Couldn't save changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function resetDemoData() {
+    if (!onResetDemoData) return;
+    const confirmation = window.prompt('Type RESET DEMO DATA to rebuild the development workspace. This permanently removes current workspace records.');
+    if (confirmation !== "RESET DEMO DATA") {
+      setSaveError("Demo data was not reset.");
+      return;
+    }
+    setSaveError("");
+    setResettingDemo(true);
+    try {
+      await onResetDemoData();
+    } catch (error) {
+      console.error("Could not reset Binnie demo data", error);
+      setSaveError(error instanceof Error ? error.message : "Couldn't reset demo data. Please try again.");
+    } finally {
+      setResettingDemo(false);
+    }
+  }
+  return (
+    <div className="fixed inset-0 z-[80] flex justify-end" role="dialog" aria-modal="true" aria-label="Profile settings">
+      <button aria-label="Close profile settings" onClick={onClose} className="absolute inset-0 cursor-default bg-foreground/10 backdrop-blur-[1px]" />
+      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-border bg-sidebar shadow-[-20px_0_50px_rgb(35_41_61_/_0.12)]">
+        <div className="flex items-start justify-between border-b border-border px-5 py-5 sm:px-6"><div><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Your account</p><h2 className="binnie-heading mt-1 text-xl font-bold text-foreground">Profile & preferences</h2></div><button onClick={onClose} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close"><X className="h-4 w-4" /></button></div>
+        <div className="border-b border-border px-5 py-3 sm:px-6"><div className="flex gap-1 rounded-xl bg-muted/50 p-1">{[{ id: "profile" as const, label: "Profile" }, { id: "preferences" as const, label: "Preferences" }, { id: "settings" as const, label: "Settings" }].map(item => <button key={item.id} onClick={() => setSection(item.id)} className={cn("flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors", section === item.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{item.label}</button>)}</div></div>
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          <div className="mb-6 flex items-center gap-3"><Avatar name={draft.displayName || "Account"} size="lg" /><div><p className="text-sm font-semibold text-foreground">{draft.displayName || "Account"}</p><p className="text-[12px] text-muted-foreground">{profileRoleLabel(draft.role)}</p></div></div>
+          {section === "profile" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Name<input value={draft.displayName} onChange={event => update({ displayName: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground" /></label><div><p className="text-[11px] font-medium text-muted-foreground">Username</p><p className="mt-1.5 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-[13px] text-foreground">{draft.username || "No Binnie account"}</p><p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">An Owner can change account usernames from People &amp; access.</p></div><div><p className="text-[11px] font-medium text-muted-foreground">Contact email</p><p className="mt-1.5 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-[13px] text-foreground">{draft.email || "No contact email"}</p><p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">Contact email is optional and is not used to sign in.</p></div><div><p className="text-[11px] font-medium text-muted-foreground">Account status</p><p className="mt-1.5 text-[13px] text-foreground">{profileRoleLabel(draft.accountStatus)}</p></div><div><p className="text-[11px] font-medium text-muted-foreground">Workspaces</p><div className="mt-1.5 space-y-1.5">{draft.workspaces.map(workspace => <p key={workspace.organizationId} className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-[12px] text-foreground">{workspace.organization} <span className="text-muted-foreground">· {profileRoleLabel(workspace.accessLevel)}</span></p>)}</div></div><a href="/people/access" className="inline-flex rounded-lg bg-primary/10 px-3 py-2 text-[11px] font-medium text-primary">People &amp; access</a></div>}
+          {section === "preferences" && <div className="space-y-4"><label className="block text-[11px] font-medium text-muted-foreground">Timezone<select value={draft.timezone} onChange={event => update({ timezone: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>Asia/Jakarta</option><option>Asia/Singapore</option><option>Europe/London</option><option>America/New_York</option></select></label><label className="block text-[11px] font-medium text-muted-foreground">Preferred date format<select value={draft.dateFormat} onChange={event => update({ dateFormat: event.target.value })} className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-foreground"><option>12 Aug 2026</option><option>Aug 12, 2026</option><option>2026-08-12</option></select></label></div>}
+          {section === "settings" && <section><div className="mb-4"><p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Appearance</p><h3 className="binnie-heading mt-1 text-lg font-bold text-foreground">Workspace Theme</h3><p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">Choose the atmosphere that feels best to work in.</p></div><div className="space-y-2.5">{WORKSPACE_THEME_OPTIONS.map(option => { const isSelected = draftTheme === option.id; return <button key={option.id} onClick={() => setDraftTheme(option.id)} className={cn("w-full rounded-2xl border p-3 text-left transition-colors", isSelected ? "border-primary/35 bg-secondary/50 shadow-sm" : "border-border bg-card hover:border-primary/25 hover:bg-muted/35")} aria-pressed={isSelected}><div className={cn("mb-3 rounded-xl border border-white/70 p-2.5", option.preview)}><div className="rounded-lg bg-[var(--preview-background)] p-2"><div className="flex h-9 items-center gap-2 rounded-md bg-[var(--preview-surface)] px-2 shadow-sm"><span className="h-4 w-4 rounded bg-[var(--preview-primary)]" /><span className="h-2 flex-1 rounded-full bg-[var(--preview-secondary)]" /><span className="h-3 w-3 rounded-full bg-[var(--preview-accent)]" /></div></div></div><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-foreground">{option.label}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{option.description}</p></div>{isSelected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="h-3 w-3" /></span>}</div></button>; })}</div>{onResetDemoData && <div className="mt-8 rounded-2xl border border-overdue/20 bg-overdue/[0.045] p-4"><p className="text-[10px] font-medium uppercase tracking-[0.1em] text-overdue">Development tools</p><p className="mt-2 text-[12px] font-medium text-foreground">Reset Demo Data</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">This is the only action that intentionally rebuilds the development workspace. It requires the exact confirmation phrase.</p><button onClick={() => void resetDemoData()} disabled={resettingDemo} className="mt-3 rounded-xl border border-overdue/25 bg-card px-3 py-2 text-[11px] font-medium text-overdue hover:bg-overdue/10 disabled:opacity-50">{resettingDemo ? "Resetting…" : "Reset Demo Data"}</button></div>}</section>}
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-4 sm:px-6"><button onClick={onSignOut} disabled={saving} className="rounded-lg px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50">Sign Out</button><div className="flex items-center gap-3">{saveError && <p role="alert" className="max-w-48 text-right text-[11px] text-overdue">{saveError}</p>}{saved && <p role="status" className="text-[11px] font-medium text-success">✓ Changes saved</p>}<button onClick={() => void save()} disabled={saving} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50">{saving ? "Saving…" : "Save changes"}</button></div></div>
+      </aside>
+    </div>
+  );
+}
+
+function Sidebar({ view, onNav, profile, onProfileClick, collapsed = false, onToggleCollapse, className, onNavigate }: { view: NavView; onNav: (v: NavView) => void; profile: UserProfile; onProfileClick: () => void; collapsed?: boolean; onToggleCollapse?: () => void; className?: string; onNavigate?: () => void }) {
+  const currentUserId = profile.directoryId || DEFAULT_CURRENT_USER_ID;
+  const attention = getAttentionWork(TASKS, currentUserId);
+  const liveBadges: Partial<Record<NavView, number>> = {
+    today: getTasksForToday(TASKS, currentUserId).length,
+    attention: attention.allNow.length,
+    people: PEOPLE_DIRECTORY.filter(person => getPersonAccountability(person.name).waitingOnThem > 0).length,
+  };
+  const hasDirectoryAccess = PEOPLE_DIRECTORY.some(person => person.active);
+  const hasOrganizationAccess = profile.workspaces.length > 0;
+  const hasProjectAccess = CANONICAL_PROJECTS.length > 0;
+  const navGroups = NAV_GROUPS.map(group => ({
+    ...group,
+    items: group.items
+      .filter(item => item.id !== "people" || hasDirectoryAccess)
+      .filter(item => item.id !== "organizations" || hasOrganizationAccess)
+      .filter(item => item.id !== "projects" || hasProjectAccess)
+      .map(item => ({ ...item, badge: liveBadges[item.id] ?? ("badge" in item ? item.badge : undefined) })),
+  })).filter(group => group.items.length > 0);
+  const activeView = getPrimarySidebarView(view);
+  const choose = (target: NavView) => {
+    onNav(target);
+    onNavigate?.();
+  };
 
   return (
-    <aside className="w-[220px] flex-shrink-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
-      <div className="px-5 py-5 border-b border-sidebar-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <p className="text-[13px] font-bold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Command</p>
-            <p className="text-[10px] font-mono text-muted-foreground -mt-0.5">Work OS</p>
-          </div>
+    <aside className={cn("flex h-dvh flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200", collapsed ? "w-[4.75rem]" : "w-[17rem]", className)}>
+      <div className={cn("border-b border-sidebar-border", collapsed ? "flex flex-col items-center gap-2 px-3 py-4" : "flex items-center justify-between px-5 py-5")}>
+        <BinnieMark compact={collapsed} />
+        <div className="flex items-center gap-1">
+          <button onClick={() => choose("search")} aria-label="Search your workspace" title={collapsed ? "Search" : undefined} className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"><Search className="h-4 w-4" /></button>
+          {onToggleCollapse && <button onClick={onToggleCollapse} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground">{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>}
         </div>
       </div>
-      <nav className="flex-1 overflow-y-auto py-3 px-2">
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} className={gi > 0 ? "mt-4" : ""}>
-            {group.label && (
-              <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest px-3 mb-1.5">{group.label}</p>
+      <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
+        {navGroups.map((group, gi) => (
+          <div key={gi} className={cn(gi > 0 && (collapsed ? "mt-3" : "mt-5"))}>
+            {!collapsed && group.label && (
+              <p className="mb-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{group.label}</p>
             )}
             {group.items.map((item: { id: NavView; label: string; icon: ReactNode; badge?: number; urgent?: boolean; highlight?: boolean }) => {
               const isActive = activeView === item.id;
               return (
-                <button key={item.id} onClick={() => onNav(item.id)}
+                <button key={item.id} onClick={() => choose(item.id)}
+                  title={collapsed ? item.label : undefined}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-all mb-0.5",
-                    isActive ? "bg-sidebar-accent text-foreground font-medium" : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
-                    item.highlight && !isActive && "text-primary/80"
+                    "group relative mb-0.5 flex rounded-xl text-[13px] transition-all duration-200",
+                    collapsed ? "mx-auto h-10 w-10 items-center justify-center" : "w-full items-center gap-2.5 px-3 py-2.5",
+                    isActive ? "binnie-sidebar-active bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent/65 hover:text-foreground",
+                    item.highlight && !isActive && "text-primary"
                   )}>
-                  <span className={cn("flex-shrink-0", isActive ? "text-primary" : "opacity-60")}>{item.icon}</span>
-                  <span className="flex-1 text-left">{item.label}</span>
+                  <span className={cn("flex-shrink-0", isActive ? "text-primary" : "opacity-65")}>{item.icon}</span>
+                  {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className={cn("text-[10px] font-mono px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                      item.urgent ? "bg-red-400/15 text-red-400" : isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground")}>
+                    <span className={cn("rounded-full text-center text-[10px] font-medium", collapsed ? "absolute -right-1 -top-1 min-w-4 px-1 py-0.5" : "min-w-[19px] px-1.5 py-0.5",
+                      item.urgent ? "bg-overdue/10 text-overdue" : isActive ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
                       {item.badge}
                     </span>
                   )}
+                  {collapsed && <span role="tooltip" className="pointer-events-none absolute left-[calc(100%+0.65rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground opacity-0 shadow-[0_5px_16px_rgb(35_41_61_/_0.10)] transition-opacity group-hover:opacity-100">{item.label}</span>}
                 </button>
               );
             })}
           </div>
         ))}
-      </nav>
-      <div className="px-3 py-3 border-t border-sidebar-border space-y-1">
-        {(["Villa Khayangan", "Apotik", "Personal"] as OrgName[]).map(org => {
-          const c = ORG_COLORS[org];
-          return (
-            <button key={org} onClick={() => onNav("organizations")}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-sidebar-accent/50 transition-colors">
-              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", c.dot)} />
-              <span className="text-[12px] text-sidebar-foreground truncate">{org}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="px-3 py-3 border-t border-sidebar-border">
-        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/50 transition-colors cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-amber-400/20 flex items-center justify-center text-[11px] font-bold text-amber-400">BO</div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-foreground truncate">Bos</p>
-            <p className="text-[10px] font-mono text-muted-foreground">Owner</p>
+        {!collapsed && taskStoreUsesServer && CANONICAL_SAVED_VIEWS.length > 0 && (
+          <div className="mt-5 border-t border-sidebar-border px-2 pt-4">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Saved views</p>
+            {CANONICAL_SAVED_VIEWS.slice(0, 5).map(savedView => (
+              <div key={savedView.id} className="group flex items-center rounded-xl hover:bg-sidebar-accent/65">
+                <button onClick={() => { choose("all-tasks"); window.setTimeout(() => window.dispatchEvent(new CustomEvent("binnie:apply-saved-view", { detail: { filters: savedView.filters } })), 0); }} className="min-w-0 flex-1 truncate px-3 py-2 text-left text-[12px] text-sidebar-foreground">{savedView.name}</button>
+                <button onClick={() => window.dispatchEvent(new CustomEvent("binnie:delete-saved-view", { detail: { viewId: savedView.id } }))} aria-label={`Delete ${savedView.name}`} className="mr-1 rounded-lg p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-overdue/10 hover:text-overdue group-hover:opacity-100"><X className="h-3 w-3" /></button>
+              </div>
+            ))}
           </div>
-          <Settings className="w-3.5 h-3.5 text-muted-foreground" />
-        </div>
+        )}
+      </nav>
+      <div className={cn("border-t border-sidebar-border py-4", collapsed ? "px-2" : "px-4")}>
+        <button onClick={onProfileClick} title={collapsed ? "Profile & settings" : undefined} className={cn("group relative flex rounded-xl text-left transition-colors hover:bg-sidebar-accent/60", collapsed ? "mx-auto h-10 w-10 items-center justify-center" : "w-full items-center gap-2.5 px-2 py-2")}>
+          <Avatar name={profile.displayName || "Account"} size="sm" />
+          {!collapsed && <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-medium text-foreground truncate">{profile.displayName || "Account"}</p>
+            <p className="text-[10px] text-muted-foreground">{profileRoleLabel(profile.role)}</p>
+          </div>}
+          {!collapsed && <Settings className="w-3.5 h-3.5 text-muted-foreground" />}
+          {collapsed && <span role="tooltip" className="pointer-events-none absolute left-[calc(100%+0.65rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground opacity-0 shadow-[0_5px_16px_rgb(35_41_61_/_0.10)] transition-opacity group-hover:opacity-100">Profile & settings</span>}
+        </button>
       </div>
     </aside>
   );
@@ -2408,59 +7445,513 @@ function Sidebar({ view, onNav }: { view: NavView; onNav: (v: NavView) => void }
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-export default function CommandApp() {
-  const [view, setView] = useState<NavView>("home");
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+function SharedWorkspaceRequired() {
+  return <main className="flex min-h-dvh items-center justify-center bg-background p-5"><section className="w-full max-w-lg rounded-[1.75rem] border border-border bg-card p-6 shadow-[0_18px_54px_rgb(35_41_61_/_0.10)] sm:p-8"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Database className="h-5 w-5" /></div><p className="mt-5 text-[10px] font-medium uppercase tracking-[0.12em] text-primary">Shared workspace setup</p><h1 className="binnie-heading mt-2 text-2xl font-bold text-foreground">Connect Binnie&apos;s workspace.</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">Binnie keeps one shared record for every task and project. Add a PostgreSQL connection before creating work, so status, ownership, history, and project progress survive refreshes and stay in sync for everyone.</p><div className="mt-5 rounded-2xl bg-muted/45 p-4"><p className="text-[11px] font-medium text-foreground">Local setup</p><ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] leading-5 text-muted-foreground"><li>Copy <code className="rounded bg-card px-1.5 py-0.5 text-foreground">.env.example</code> to <code className="rounded bg-card px-1.5 py-0.5 text-foreground">.env</code> and set <code className="rounded bg-card px-1.5 py-0.5 text-foreground">DATABASE_URL</code>.</li><li>Start PostgreSQL (the included <code className="rounded bg-card px-1.5 py-0.5 text-foreground">docker-compose.yml</code> is ready for this).</li><li>Run <code className="rounded bg-card px-1.5 py-0.5 text-foreground">npm run db:deploy</code> then <code className="rounded bg-card px-1.5 py-0.5 text-foreground">npm run db:seed</code>, and restart the app.</li></ol></div><p className="mt-4 text-[11px] text-muted-foreground">Binnie has not created any temporary local projects or tasks while this connection is unavailable.</p></section></main>;
+}
+
+function attentionTabFromValue(value: string | null): AttentionTab {
+  return value === "followup" || value === "waiting" || value === "delegated" || value === "review" || value === "overdue" ? value : "all";
+}
+
+function peopleHubTabFromValue(value: string | null): PeopleHubTab {
+  return value === "teams" || value === "workload" ? value : "people";
+}
+
+function attentionFiltersFromParams(params: URLSearchParams): AttentionFilterState {
+  const waitingKinds = (params.get("attentionWaiting") || "").split(",").filter((value): value is WaitingFilterKey => value === "others" || value === "me" || value === "blocked" || value === "external");
+  return {
+    search: params.get("attentionSearch") || "",
+    organizationId: params.get("attentionOrg") || "",
+    principalId: params.get("attentionPrincipal") || "",
+    waitingKinds: Array.from(new Set(waitingKinds)),
+    followUpDueOnly: params.get("attentionFollowUp") === "1",
+  };
+}
+
+function readNavigationLocation() {
+  if (typeof window === "undefined") return { view: "home" as NavView, attentionTab: "all" as AttentionTab, attentionFilters: EMPTY_ATTENTION_FILTERS, peopleTab: "people" as PeopleHubTab, projectsMode: "projects" as ProjectsHubMode, taskId: undefined as string | undefined };
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get("page");
+  const legacyAttentionTab = attentionTabFromValue(page);
+  const view: NavView = legacyAttentionTab !== "all" ? "attention"
+    : page === "attention" ? "attention"
+    : page === "people" ? "people"
+      : page === "workload" ? "people"
+      : page === "tasks" ? "all-tasks"
+        : page === "smart-inbox" ? "inbox"
+          : page === "this-week" ? "this-week"
+            : page === "today" ? "today"
+              : page === "organizations" ? "organizations"
+                : page === "org-detail" ? "org-detail"
+                    : page === "projects" || page === "templates" ? "projects"
+                    : page === "project-detail" ? "project-detail"
+                      : page === "person-detail" ? "person-detail"
+                        : page === "search" ? "search"
+                          : "home";
+  return {
+    view,
+    attentionTab: legacyAttentionTab !== "all" ? legacyAttentionTab : attentionTabFromValue(params.get("attention")),
+    attentionFilters: attentionFiltersFromParams(params),
+    peopleTab: page === "workload" ? "workload" : peopleHubTabFromValue(params.get("peopleTab")),
+    projectsMode: page === "templates" || params.get("projectsMode") === "templates" ? "templates" as const : "projects" as const,
+    taskId: params.get("task") || undefined,
+  };
+}
+
+export default function BinnieApp({ initialSnapshot }: { initialSnapshot?: WorkspaceSnapshotDTO }) {
+  const router = useRouter();
+  const taskStoreRevision = useTaskStoreVersion();
+  const [view, setView] = useState<NavView>(() => readNavigationLocation().view);
+  const [attentionTab, setAttentionTab] = useState<AttentionTab>(() => readNavigationLocation().attentionTab);
+  const [attentionFilters, setAttentionFilters] = useState<AttentionFilterState>(() => readNavigationLocation().attentionFilters);
+  const [peopleHubTab, setPeopleHubTab] = useState<PeopleHubTab>(() => readNavigationLocation().peopleTab);
+  const [projectsHubMode, setProjectsHubMode] = useState<ProjectsHubMode>(() => readNavigationLocation().projectsMode);
+  const [selectedTask, setSelectedTaskState] = useState<Task | null>(null);
+  const [drawerHistory, setDrawerHistory] = useState<string[]>([]);
+  const selectedTaskRequest = useRef(0);
   const [selectedOrg, setSelectedOrg] = useState<OrgName | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [projectCaptureContext, setProjectCaptureContext] = useState<ProjectDTO | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() => initialSnapshot?.profile.theme || "soft");
+  const [profile, setProfile] = useState<UserProfile>(() => initialSnapshot ? canonicalProfileToUserProfile(initialSnapshot.profile) : { displayName: "", role: "employee", email: "", timezone: "Asia/Jakarta", dateFormat: "12 Aug 2026", teamIds: [], taskListColumns: [], accountStatus: "ACTIVE", workspaces: [], pendingAccessRequestCount: 0 });
+  // Keep the server snapshot authoritative through Fast Refresh; no demo data
+  // is rendered while this client projection is being synchronized.
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
+  const migratedLegacyPreferences = useRef(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [accountMessage, setAccountMessage] = useState("");
+  const [legacyTasksToImport, setLegacyTasksToImport] = useState<Task[] | null>(null);
+  const [importingLegacyTasks, setImportingLegacyTasks] = useState(false);
+
+  useEffect(() => {
+    if (initialSnapshot) {
+      const timer = window.setTimeout(() => {
+      hydrateCanonicalTaskStore(initialSnapshot);
+      setProfile(canonicalProfileToUserProfile(initialSnapshot.profile));
+      setWorkspaceTheme(initialSnapshot.profile.theme);
+      document.documentElement.dataset.theme = initialSnapshot.profile.theme;
+      setWorkspaceHydrated(true);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [initialSnapshot]);
+  void taskStoreRevision;
+
+  useEffect(() => {
+    if (!initialSnapshot) return;
+    const timer = window.setTimeout(() => {
+      try {
+        const local = JSON.parse(window.localStorage.getItem(BINNIE_TASK_STORE_STORAGE_KEY) || "null") as { tasks?: Task[] } | null;
+        if (local?.tasks?.length) setLegacyTasksToImport(local.tasks);
+      } catch {
+        // Browser-local work is left untouched when it cannot be read safely.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialSnapshot]);
+
+  useEffect(() => {
+    if (!initialSnapshot) return;
+    let cancelled = false;
+    const refreshIfChanged = async () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      try {
+        const response = await fetch("/api/workspace/revision", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json() as { revision?: number };
+        if (typeof data.revision === "number" && data.revision > taskStoreServerRevision) router.refresh();
+      } catch {
+        // Offline work remains visible; the next successful poll refreshes it.
+      }
+    };
+    const interval = window.setInterval(refreshIfChanged, 3000);
+    window.addEventListener("focus", refreshIfChanged);
+    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener("focus", refreshIfChanged); };
+  }, [initialSnapshot, router]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    const restoreNavigation = () => {
+      const location = readNavigationLocation();
+      setView(location.view);
+      setAttentionTab(location.attentionTab);
+      setAttentionFilters(location.attentionFilters);
+      setPeopleHubTab(location.peopleTab);
+      setProjectsHubMode(location.projectsMode);
+      setDrawerHistory([]);
+      const taskId = location.taskId;
+      if (taskId) {
+        void openTaskById(taskId, { historyMode: "none" });
+      } else {
+        selectedTaskRequest.current += 1;
+        setSelectedTaskState(null);
+      }
+    };
+    window.addEventListener("popstate", restoreNavigation);
+    return () => window.removeEventListener("popstate", restoreNavigation);
+  // Browser history intentionally restores the URL-selected task through the
+  // current canonical fetch helper without re-registering this listener.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const preferenceTimer = window.setTimeout(() => {
+      if (getStoredPreference(BINNIE_SIDEBAR_COLLAPSED_STORAGE_KEY, LEGACY_LUMA_STORAGE_KEYS.sidebarCollapsed) === "true") setSidebarCollapsed(true);
+    }, 0);
+    return () => window.clearTimeout(preferenceTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!initialSnapshot || initialSnapshot.profile.storageVersion !== 0 || migratedLegacyPreferences.current) return;
+    migratedLegacyPreferences.current = true;
+    const savedTheme = getStoredPreference(BINNIE_WORKSPACE_THEME_STORAGE_KEY, LEGACY_LUMA_STORAGE_KEYS.workspaceTheme);
+    const theme: WorkspaceTheme = savedTheme === "grounded" ? "clear" : savedTheme === "clear" || savedTheme === "dark" ? savedTheme : initialSnapshot.profile.theme;
+    if (savedTheme === "grounded") window.localStorage.setItem(BINNIE_WORKSPACE_THEME_STORAGE_KEY, "clear");
+    if (theme === initialSnapshot.profile.theme) return;
+    void (async () => {
+      const result = await updateProfileAction({ ...initialSnapshot.profile, theme });
+      if (!result.ok) console.error("Could not migrate saved Binnie theme", result.message);
+    })();
+  }, [initialSnapshot]);
+
+  function toggleSidebar() {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    window.localStorage.setItem(BINNIE_SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
+  }
+
+  async function saveProfile(nextProfile: UserProfile, nextTheme: WorkspaceTheme) {
+    const result = await updateProfileAction({
+      displayName: nextProfile.displayName,
+      timezone: nextProfile.timezone,
+      dateFormat: nextProfile.dateFormat,
+      theme: nextTheme,
+    });
+    if (!result.ok) {
+      console.error("Could not persist Binnie profile", result.message);
+      throw new Error(result.message || "Couldn't save changes. Please try again.");
+    }
+    const savedProfile = canonicalProfileToUserProfile(result.data);
+    setProfile(savedProfile);
+    setWorkspaceTheme(result.data.theme);
+    document.documentElement.dataset.theme = result.data.theme;
+    const directoryPerson = PEOPLE_DIRECTORY.find(person => person.id === savedProfile.directoryId);
+    if (directoryPerson) replaceDirectoryPerson(directoryPerson.id, person => ({ ...person, name: savedProfile.displayName }));
+    setAccountMessage("✓ Changes saved");
+    window.setTimeout(() => setAccountMessage(""), 2400);
+    router.refresh();
+  }
+
+  async function resetDevelopmentDemoData() {
+    const result = await resetDemoDataAction({ confirmation: "RESET DEMO DATA" });
+    if (!result.ok) throw new Error(result.message || "Couldn't reset demo data. Please try again.");
+    setProfileOpen(false);
+    router.refresh();
+  }
+
+  async function signOut() {
+    await authClient.signOut();
+    setProfileOpen(false);
+    router.replace("/login");
+    router.refresh();
+  }
+
+  async function importLegacyTaskStore() {
+    if (!legacyTasksToImport?.length) return;
+    setImportingLegacyTasks(true);
+    const fingerprint = legacyTasksToImport.reduce((hash, task) => {
+      const source = `${task.id}:${task.updatedAt || task.createdAt || ""}`;
+      return source.split("").reduce((value, character) => Math.imul(31, value) + character.charCodeAt(0) | 0, hash);
+    }, 17);
+    const tasks = legacyTasksToImport.filter(task => task.title.trim()).map(task => {
+      const organizationId = task.organizationId || remoteOrganizationIds.get(task.org);
+      const leadDepartmentId = task.leadDepartmentId || (organizationId ? getRemoteDepartmentId(task.org, task.area) : undefined);
+      const involvedDepartmentIds = (task.involvedDepartmentIds || task.involvedAreas?.map(area => getRemoteDepartmentId(task.org, area)).filter((id): id is string => Boolean(id)) || []).filter(id => Boolean(id));
+      const assignmentIds = (task.assigneeIds || []).filter(id => PEOPLE_DIRECTORY.some(person => person.id === id));
+      // Older browser-only records sometimes expressed a date only as a label
+      // such as “Tomorrow”. Import it once into the canonical Task fields so
+      // it can never become an independent planner source after refresh.
+      const legacyPlannerDate = getCanonicalTaskPlannerDate(task, getWorkspaceCalendarDate());
+      return {
+        legacyLocalId: task.id,
+        title: task.title,
+        description: task.description || task.notes,
+        organizationId,
+        leadDepartmentId,
+        involvedDepartmentIds,
+        assignments: assignmentIds.map((principalId, index) => ({ principalId, role: index === 0 ? "primary_owner" as const : "collaborator" as const })),
+        nextAction: { kind: "ready" as const },
+        priority: task.priority,
+        startDate: task.startDate,
+        targetDate: task.targetDate,
+        deadlineDate: task.deadlineDate || (!task.startDate && !task.targetDate ? legacyPlannerDate : undefined),
+        followUpDate: task.followUpDate,
+        estimatedMinutes: task.estimatedMinutes || (task.estimatedHours ? Math.round(task.estimatedHours * 60) : undefined),
+        status: task.status === "review" ? "in_progress" as const : task.status,
+      };
+    });
+    const result = await importLocalTasksAction({ fingerprint: `local-${Math.abs(fingerprint)}`, tasks });
+    setImportingLegacyTasks(false);
+    if (!result.ok) return setAccountMessage(result.message);
+    // Browser-local work has been safely migrated into PostgreSQL. Remove the
+    // retired source only after the server action confirms success so views can
+    // never merge it with canonical work on a later refresh.
+    window.localStorage.removeItem(BINNIE_TASK_STORE_STORAGE_KEY);
+    setLegacyTasksToImport(null);
+    setAccountMessage(`Imported ${result.data.importedCount} local ${result.data.importedCount === 1 ? "task" : "tasks"}`);
+    router.refresh();
+  }
+
+  function writeNavigationLocation(nextView: NavView, nextAttentionTab = attentionTab, nextPeopleTab = peopleHubTab, nextProjectsMode = projectsHubMode, nextAttentionFilters = attentionFilters, historyMode: "push" | "replace" = "push") {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const page = nextView === "all-tasks" ? "tasks" : nextView === "inbox" ? "smart-inbox" : nextView;
+    url.searchParams.set("page", page);
+    // Task workspace filters describe a single operational scope. They are
+    // intentionally not global navigation state: carrying an organization or
+    // monitoring filter from Tasks into Today and back made My Work look empty
+    // even when the same canonical tasks were actionable today.
+    if (nextView !== "all-tasks") {
+      ["view", "scope", "person", "team", "q", "organization", "area", "project", "assignedTo", "assignedTeam", "assignedBy", "owned", "priority", "status", "date", "hasFiles"].forEach((param) => url.searchParams.delete(param));
+    }
+    if (nextView === "attention") {
+      url.searchParams.set("attention", nextAttentionTab);
+      if (nextAttentionFilters.search) url.searchParams.set("attentionSearch", nextAttentionFilters.search); else url.searchParams.delete("attentionSearch");
+      if (nextAttentionFilters.organizationId) url.searchParams.set("attentionOrg", nextAttentionFilters.organizationId); else url.searchParams.delete("attentionOrg");
+      if (nextAttentionFilters.principalId) url.searchParams.set("attentionPrincipal", nextAttentionFilters.principalId); else url.searchParams.delete("attentionPrincipal");
+      if (nextAttentionFilters.waitingKinds.length) url.searchParams.set("attentionWaiting", nextAttentionFilters.waitingKinds.join(",")); else url.searchParams.delete("attentionWaiting");
+      if (nextAttentionFilters.followUpDueOnly) url.searchParams.set("attentionFollowUp", "1"); else url.searchParams.delete("attentionFollowUp");
+    } else {
+      ["attention", "attentionSearch", "attentionOrg", "attentionPrincipal", "attentionWaiting", "attentionFollowUp"].forEach(param => url.searchParams.delete(param));
+    }
+    if (nextView === "people") url.searchParams.set("peopleTab", nextPeopleTab); else url.searchParams.delete("peopleTab");
+    if (nextView === "projects" && nextProjectsMode === "templates") url.searchParams.set("projectsMode", "templates"); else url.searchParams.delete("projectsMode");
+    window.history[historyMode === "replace" ? "replaceState" : "pushState"](window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function writeTaskLocation(taskId: string | null, historyMode: "push" | "replace" = "push") {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (taskId) url.searchParams.set("task", taskId);
+    else url.searchParams.delete("task");
+    window.history[historyMode === "replace" ? "replaceState" : "pushState"](window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  async function openTaskById(taskId: string, options: { historyMode?: "push" | "replace" | "none" } = {}) {
+    const request = ++selectedTaskRequest.current;
+    const cachedTask = [...TASKS, ...ARCHIVED_TASKS].find(candidate => candidate.id === taskId);
+    if (cachedTask) setSelectedTaskState(cachedTask);
+    if (options.historyMode && options.historyMode !== "none") writeTaskLocation(taskId, options.historyMode);
+    if (!taskStoreUsesServer) return;
+
+    const result = await getTaskAction({ taskId });
+    if (request !== selectedTaskRequest.current) return;
+    if (!result.ok) {
+      if (!cachedTask) setSelectedTaskState(null);
+      return;
+    }
+    setSelectedTaskState(applyCanonicalTask(result.data, result.revision));
+  }
+
+  function setSelectedTask(task: Task | null) {
+    setDrawerHistory([]);
+    if (!task) {
+      selectedTaskRequest.current += 1;
+      setSelectedTaskState(null);
+      writeTaskLocation(null, "replace");
+      return;
+    }
+    void openTaskById(task.id, { historyMode: "push" });
+  }
+
+  function openTaskFromDrawer(taskId: string) {
+    if (!selectedTask || taskId === selectedTask.id) return;
+    setDrawerHistory(history => history.at(-1) === selectedTask.id ? history : [...history, selectedTask.id]);
+    void openTaskById(taskId, { historyMode: "push" });
+  }
+
+  function goBackInDrawer() {
+    if (!drawerHistory.length) return;
+    setDrawerHistory(history => history.slice(0, -1));
+    window.history.back();
+  }
+
+  useEffect(() => {
+    if (!workspaceHydrated) return;
+    const taskId = readNavigationLocation().taskId;
+    if (taskId && selectedTask?.id !== taskId) void openTaskById(taskId, { historyMode: "none" });
+  // Opening a deep link is intentionally a one-time hydration concern. Later
+  // selection changes are driven by drawer navigation or browser history.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceHydrated]);
+
+  function setAttentionLocation(tab: AttentionTab, nextAttentionFilters = attentionFilters) {
+    setView("attention");
+    setAttentionTab(tab);
+    setAttentionFilters(nextAttentionFilters);
+    setProjectsHubMode("projects");
+    writeNavigationLocation("attention", tab, peopleHubTab, "projects", nextAttentionFilters);
+  }
+
+  function updateAttentionFilters(patch: Partial<AttentionFilterState>) {
+    const nextAttentionFilters = { ...attentionFilters, ...patch };
+    setAttentionFilters(nextAttentionFilters);
+    writeNavigationLocation("attention", attentionTab, peopleHubTab, "projects", nextAttentionFilters, "replace");
+  }
+
+  function setPeopleLocation(tab: PeopleHubTab) {
+    const allowedTab = tab === "workload" && !canViewWorkload(profile) ? "people" : tab;
+    setView("people");
+    setPeopleHubTab(allowedTab);
+    setProjectsHubMode("projects");
+    writeNavigationLocation("people", attentionTab, allowedTab, "projects");
+  }
+
+  function setProjectsLocation(mode: ProjectsHubMode) {
+    setView("projects");
+    setProjectsHubMode(mode);
+    writeNavigationLocation("projects", attentionTab, peopleHubTab, mode);
+  }
 
   function navTo(v: NavView, opts?: { org?: OrgName; project?: string; person?: string }) {
+    const legacyAttentionTabs: Partial<Record<NavView, AttentionTab>> = { delegated: "delegated", waiting: "waiting", followup: "followup", review: "review", overdue: "overdue" };
+    if (legacyAttentionTabs[v]) {
+      setAttentionLocation(legacyAttentionTabs[v]!);
+      setSelectedTask(null);
+      return;
+    }
+    if (v === "workload") {
+      setPeopleLocation("workload");
+      setSelectedTask(null);
+      return;
+    }
+    if (v === "templates") {
+      setProjectsLocation("templates");
+      setSelectedTask(null);
+      return;
+    }
     setView(v);
+    if (v === "attention") setAttentionTab("all");
+    if (v === "people") setPeopleHubTab("people");
+    if (v === "projects") setProjectsHubMode("projects");
+    if (!(["org-detail", "person-detail", "project-detail"] as NavView[]).includes(v)) {
+      writeNavigationLocation(v, v === "attention" ? "all" : attentionTab, v === "people" ? "people" : peopleHubTab, v === "projects" ? "projects" : projectsHubMode);
+    }
     setSelectedTask(null);
     if (opts?.org !== undefined) setSelectedOrg(opts.org);
     if (opts?.project !== undefined) setSelectedProject(opts.project);
     if (opts?.person !== undefined) setSelectedPerson(opts.person);
+    if (v !== "inbox") setProjectCaptureContext(null);
+  }
+
+  function openPersonTaskList(personId: string) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "list");
+    params.set("scope", "people");
+    params.set("person", personId);
+    params.delete("team");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    navTo("all-tasks");
+  }
+
+  function openTeamTaskList(teamId: string) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "list");
+    params.set("scope", "team");
+    params.set("team", teamId);
+    params.delete("person");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    navTo("all-tasks");
   }
 
   function renderView() {
     switch (view) {
-      case "home": return <HomeView onTaskClick={setSelectedTask} />;
+      case "home": return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "there"} />;
       case "today": return <TodayView onTaskClick={setSelectedTask} />;
       case "this-week": return <ThisWeekView onTaskClick={setSelectedTask} />;
-      case "inbox": return <InboxView />;
-      case "delegated": return <DelegatedView onTaskClick={setSelectedTask} />;
+      case "inbox": return <InboxView projectContext={projectCaptureContext || undefined} onOpenTask={setSelectedTask} />;
+      case "delegated": return <DelegatedView onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onPrincipalClick={principal => principal.type === "team" ? openTeamTaskList(principal.id) : openPersonTaskList(principal.id)} />;
       case "waiting": return <WaitingView onTaskClick={setSelectedTask} />;
-      case "review": return <ReviewView onTaskClick={setSelectedTask} />;
+      case "review": return <><>{profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8 lg:px-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Needs My Review</span> · {profile.pendingAccessRequestCount} member access request{profile.pendingAccessRequestCount === 1 ? "" : "s"}</span><span className="font-medium text-primary">Review access →</span></a></div>}</><ReviewView onTaskClick={setSelectedTask} /></>;
       case "overdue": return <OverdueView onTaskClick={setSelectedTask} />;
-      case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} />;
-      case "people": return <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
+      case "attention": return <>{attentionTab === "review" && profile.pendingAccessRequestCount > 0 && <div className="mx-auto max-w-4xl px-5 pt-5 sm:px-8 sm:pt-8 lg:px-10 lg:pt-10"><a href="/people/access" className="flex items-center justify-between rounded-xl border border-review/25 bg-review/[0.05] px-4 py-3 text-[12px] text-foreground"><span><span className="font-semibold">Access requests</span> · {profile.pendingAccessRequestCount} awaiting review</span><span className="font-medium text-primary">Review access →</span></a></div>}<AttentionView tab={attentionTab} filters={attentionFilters} profile={profile} onTabChange={setAttentionLocation} onFiltersChange={updateAttentionFilters} onTaskClick={setSelectedTask} onPrincipalClick={principal => principal.type === "team" ? openTeamTaskList(principal.id) : openPersonTaskList(principal.id)} /></>;
+      case "all-tasks": return <AllTasksView onTaskClick={setSelectedTask} onNewTask={() => navTo("inbox")} profile={profile} />;
+      case "people": return <PeopleHub tab={peopleHubTab} onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
+      case "workload": return <PeopleHub tab="workload" onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
       case "person-detail": return selectedPerson
-        ? <PersonDetailView personName={selectedPerson} onBack={() => setView("people")} onTaskClick={setSelectedTask} />
-        : <PeopleView onPersonClick={name => navTo("person-detail", { person: name })} />;
+        ? <PersonDetailView personName={selectedPerson} onBack={() => setPeopleLocation("people")} onTaskClick={setSelectedTask} onFollowUp={() => navTo("followup")} onViewTasks={principalId => {
+          const principal = PEOPLE_DIRECTORY.find(candidate => candidate.id === principalId);
+          if (principal?.type === "team") openTeamTaskList(principalId);
+          else openPersonTaskList(principalId);
+        }} onOpenAttention={principalId => setAttentionLocation("all", { ...attentionFilters, principalId })} />
+        : <PeopleHub tab={peopleHubTab} onTabChange={setPeopleLocation} onPersonClick={name => navTo("person-detail", { person: name })} onTaskClick={setSelectedTask} profile={profile} />;
       case "followup": return <FollowUpView onTaskClick={setSelectedTask} />;
       case "organizations": return <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
       case "org-detail": return selectedOrg
-        ? <OrgDetailView orgName={selectedOrg} onBack={() => setView("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} />
+        ? <OrgDetailView orgName={selectedOrg} onBack={() => navTo("organizations")} onTaskClick={setSelectedTask} onProjectClick={id => navTo("project-detail", { project: id })} onNavigate={navTo} onPersonClick={person => navTo("person-detail", { person })} onOpenAttention={organizationId => setAttentionLocation("all", { ...attentionFilters, organizationId })} />
         : <OrganizationsView onOrgClick={org => navTo("org-detail", { org })} />;
-      case "projects": return <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
+      case "projects": return projectsHubMode === "templates"
+        ? <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} onBack={() => setProjectsLocation("projects")} />
+        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} onManageTemplates={() => setProjectsLocation("templates")} />;
+      case "templates": return <CanonicalTemplatesView onProjectClick={id => navTo("project-detail", { project: id })} onBack={() => setProjectsLocation("projects")} />;
       case "project-detail": return selectedProject
-        ? <ProjectDetailView projectId={selectedProject} onBack={() => setView("projects")} onTaskClick={setSelectedTask} />
-        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} />;
+        ? <ProjectDetailView key={selectedProject} projectId={selectedProject} onBack={() => setProjectsLocation("projects")} onTaskClick={setSelectedTask} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} />
+        : <ProjectsView onProjectClick={id => navTo("project-detail", { project: id })} onAddWork={project => { setProjectCaptureContext(project); navTo("inbox"); }} onManageTemplates={() => setProjectsLocation("templates")} />;
       case "search": return <SearchView onTaskClick={setSelectedTask} />;
-      default: return <HomeView onTaskClick={setSelectedTask} />;
+      default: return <HomeView onTaskClick={setSelectedTask} onNavigate={navTo} onProjectClick={project => navTo("project-detail", { project })} onOrgClick={org => navTo("org-detail", { org })} userName={profile.displayName || "there"} />;
     }
   }
 
-  const isFullHeight = view === "all-tasks";
+  // Never drop back to browser-local project/task creation. That would create a
+  // second source of truth and make the shared-work promises unreliable.
+  if (!initialSnapshot) return <SharedWorkspaceRequired />;
+  if (!workspaceHydrated) return <main className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Loading your saved workspace…</main>;
 
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
-      <Sidebar view={view} onNav={v => navTo(v)} />
-      <main className={cn("flex-1 overflow-hidden", isFullHeight ? "flex flex-col" : "overflow-y-auto")}>
-        {renderView()}
-      </main>
-      {selectedTask && <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />}
+    <CurrentUserContext.Provider value={profile.directoryId}>
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+      <Sidebar className="hidden lg:flex" view={view} onNav={v => navTo(v)} profile={profile} onProfileClick={() => setProfileOpen(true)} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-border bg-sidebar/90 px-4 backdrop-blur-sm lg:hidden">
+          <button aria-label="Open navigation" onClick={() => setMobileMenuOpen(true)} className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><Menu className="h-5 w-5" /></button>
+          <BinnieMark compact />
+          <button aria-label="Search your workspace" onClick={() => navTo("search")} className="rounded-xl p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><Search className="h-5 w-5" /></button>
+        </header>
+        {legacyTasksToImport && <div className="mx-4 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-info/20 bg-info/[0.055] px-3 py-2 text-[11px] text-muted-foreground"><span className="flex-1"><span className="font-medium text-foreground">Local work found.</span> Import {legacyTasksToImport.length} browser-local {legacyTasksToImport.length === 1 ? "task" : "tasks"} into this shared workspace?</span><button onClick={() => void importLegacyTaskStore()} disabled={importingLegacyTasks} className="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-medium text-primary-foreground disabled:opacity-50">{importingLegacyTasks ? "Importing…" : "Import"}</button><button onClick={() => setLegacyTasksToImport(null)} className="rounded-lg px-2 py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-card">Not now</button></div>}
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          {renderView()}
+        </main>
+      </div>
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button aria-label="Close navigation" onClick={() => setMobileMenuOpen(false)} className="absolute inset-0 bg-[#293047]/15 backdrop-blur-[1px]" />
+          <Sidebar className="relative z-10 !flex shadow-[16px_0_40px_rgb(38_48_71_/_0.12)]" view={view} onNav={v => navTo(v)} profile={profile} onProfileClick={() => { setMobileMenuOpen(false); setProfileOpen(true); }} onNavigate={() => setMobileMenuOpen(false)} />
+        </div>
+      )}
+      {selectedTask && <TaskDetailDrawer
+        key={selectedTask.id}
+        task={selectedTask}
+        onClose={() => setSelectedTask(null)}
+        onOpenTask={openTaskFromDrawer}
+        onBack={drawerHistory.length ? goBackInDrawer : undefined}
+        previousTaskId={drawerHistory.at(-1)}
+        onOpenOrganization={(organization) => { setSelectedTask(null); navTo("org-detail", { org: organization }); }}
+        onOpenPrincipal={(principal) => { setSelectedTask(null); if (principal.type === "team") openTeamTaskList(principal.id); else openPersonTaskList(principal.id); }}
+      />}
+      {profileOpen && <ProfilePanel profile={profile} theme={workspaceTheme} onSave={saveProfile} onResetDemoData={process.env.NODE_ENV === "development" ? resetDevelopmentDemoData : undefined} onClose={() => setProfileOpen(false)} onSignOut={() => void signOut()} />}
+      {accountMessage && <div role="status" className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl border border-success/20 bg-card px-3.5 py-2 text-[12px] font-medium text-success shadow-[0_8px_22px_rgb(35_41_61_/_0.10)]">{accountMessage}</div>}
     </div>
+    </CurrentUserContext.Provider>
   );
 }
